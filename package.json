@@ -1,0 +1,27 @@
+{
+  "name": "pantry-registration-api-node",
+  "version": "1.0.0",
+  "description": "Pantry Registration API Node Service",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "nest start",
+    "build": "nest build",
+    "start:dev": "nest start --watch",
+    "lint": "eslint . --ext .ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "^9.0.0",
+    "@nestjs/core": "^9.0.0",
+    "@nestjs/platform-express": "^9.0.0",
+    "reflect-metadata": "^0.1.13",
+    "rxjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^9.0.0",
+    "@nestjs/schematics": "^9.0.0",
+    "@nestjs/testing": "^9.0.0",
+    "@types/node": "^18.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^4.7.0"
+  }
+}
