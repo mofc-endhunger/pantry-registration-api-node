@@ -27,8 +27,8 @@ export class AuthService {
     // Find user by email or identification_code
     const user = await this.userRepository.findOne({
       where: [
-        { email: loginDto.username },
-        { identification_code: loginDto.username },
+  { email: loginDto.email },
+  { identification_code: loginDto.email },
       ],
     });
     if (!user) {
@@ -40,7 +40,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
     // Issue JWT
-    const payload = { username: user.email, sub: user.id };
+  const payload = { email: user.email, sub: user.id };
     const access_token = this.jwtService.sign(payload);
     return { access_token };
   }
@@ -49,8 +49,8 @@ export class AuthService {
     // Check for duplicate email or identification_code
     const existing = await this.userRepository.findOne({
       where: [
-        { email: registerDto.username },
-        { identification_code: registerDto.username },
+  { email: registerDto.email },
+  { identification_code: registerDto.email },
       ],
     });
     if (existing) {
@@ -61,8 +61,8 @@ export class AuthService {
     const password_digest = await bcrypt.hash(registerDto.password, saltRounds);
     // Create user
     const user = this.userRepository.create({
-      email: registerDto.username,
-      identification_code: registerDto.username,
+  email: registerDto.email,
+  identification_code: registerDto.email,
       user_type: registerDto.user_type || 'customer',
       password_digest,
     });
@@ -70,7 +70,7 @@ export class AuthService {
   }
 
   async requestPasswordReset(dto: RequestPasswordResetDto) {
-    const user = await this.userRepository.findOne({ where: { email: dto.email } });
+  const user = await this.userRepository.findOne({ where: { email: dto.email } });
     if (!user) {
       return { message: 'If the email exists, a reset link will be sent.' };
     }

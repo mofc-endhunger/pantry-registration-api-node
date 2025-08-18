@@ -13,6 +13,7 @@ exports.CredentialDto = void 0;
 const class_validator_1 = require("class-validator");
 class CredentialDto {
 }
+exports.CredentialDto = CredentialDto;
 __decorate([
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -38,5 +39,4 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CredentialDto.prototype, "expires_at", void 0);
-exports.CredentialDto = CredentialDto;
 //# sourceMappingURL=credential.dto.js.map

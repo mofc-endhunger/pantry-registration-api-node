@@ -14,6 +14,7 @@ const typeorm_1 = require("typeorm");
 const user_entity_1 = require("./user.entity");
 let Identity = class Identity {
 };
+exports.Identity = Identity;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)(),
     __metadata("design:type", Number)
@@ -46,8 +47,7 @@ __decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.identities),
     __metadata("design:type", user_entity_1.User)
 ], Identity.prototype, "user", void 0);
-Identity = __decorate([
+exports.Identity = Identity = __decorate([
     (0, typeorm_1.Entity)('identities')
 ], Identity);
-exports.Identity = Identity;
 //# sourceMappingURL=identity.entity.js.map

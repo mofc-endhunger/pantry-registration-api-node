@@ -13,6 +13,7 @@ exports.FacebookAuthCallbackDto = void 0;
 const class_validator_1 = require("class-validator");
 class FacebookAuthCallbackDto {
 }
+exports.FacebookAuthCallbackDto = FacebookAuthCallbackDto;
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -28,5 +29,4 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], FacebookAuthCallbackDto.prototype, "accessToken", void 0);
-exports.FacebookAuthCallbackDto = FacebookAuthCallbackDto;
 //# sourceMappingURL=facebook-auth-callback.dto.js.map

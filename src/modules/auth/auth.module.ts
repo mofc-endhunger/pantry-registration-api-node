@@ -7,6 +7,9 @@ import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { jwtConstants } from './constants';
 import { MailerService } from './mailer.service';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { User } from '../../entities/user.entity';
+import { PasswordResetToken } from '../../entities/password-reset-token.entity';
 
 @Module({
   imports: [
@@ -15,6 +18,7 @@ import { MailerService } from './mailer.service';
       secret: jwtConstants.secret,
       signOptions: { expiresIn: jwtConstants.expiresIn },
     }),
+    TypeOrmModule.forFeature([User, PasswordResetToken]),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtAuthGuard, MailerService],

@@ -4,44 +4,44 @@ import { User } from './user.entity';
 @Entity('user_details')
 export class UserDetail {
   @PrimaryGeneratedColumn()
-  id: number;
+  id!: number;
 
   @Column({ type: 'bigint' })
-  user_id: number;
+  user_id!: number;
 
   @Column()
-  name: string;
+  name!: string;
 
   @Column({ nullable: true })
-  email: string;
+  email!: string;
 
   @Column({ nullable: true })
-  first_name: string;
+  first_name!: string;
 
   @Column({ nullable: true })
-  last_name: string;
+  last_name!: string;
 
   @Column({ nullable: true })
-  location: string;
+  location!: string;
 
   @Column({ nullable: true })
-  description: string;
+  description!: string;
 
   @Column({ nullable: true })
-  image: string;
+  image!: string;
 
   @Column({ nullable: true })
-  phone: string;
+  phone!: string;
 
   @Column({ nullable: true })
-  urls: string;
+  urls!: string;
 
   @CreateDateColumn({ type: 'timestamp' })
-  created_at: Date;
+  created_at!: Date;
 
   @UpdateDateColumn({ type: 'timestamp' })
-  updated_at: Date;
+  updated_at!: Date;
 
   @ManyToOne(() => User, (user) => user.user_detail)
-  user: User;
+  user!: User;
 }

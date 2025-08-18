@@ -3,11 +3,11 @@ import { IsString, IsOptional, IsInt, IsNotEmpty } from 'class-validator';
 export class UserDetailDto {
   @IsInt()
   @IsNotEmpty()
-  user_id: number;
+  user_id!: number;
 
   @IsString()
   @IsNotEmpty()
-  name: string;
+  name!: string;
 
   @IsString()
   @IsOptional()

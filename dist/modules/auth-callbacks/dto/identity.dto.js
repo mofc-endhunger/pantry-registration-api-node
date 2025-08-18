@@ -13,6 +13,7 @@ exports.IdentityDto = void 0;
 const class_validator_1 = require("class-validator");
 class IdentityDto {
 }
+exports.IdentityDto = IdentityDto;
 __decorate([
     (0, class_validator_1.IsInt)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -33,5 +34,4 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], IdentityDto.prototype, "auth_hash", void 0);
-exports.IdentityDto = IdentityDto;
 //# sourceMappingURL=identity.dto.js.map

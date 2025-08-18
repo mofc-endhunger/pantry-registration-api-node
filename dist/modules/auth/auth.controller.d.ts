@@ -7,9 +7,9 @@ export declare class AuthController {
     private readonly authService;
     constructor(authService: AuthService);
     login(loginDto: LoginDto): Promise<{
-        access_token: any;
+        access_token: string;
     }>;
-    register(registerDto: RegisterDto): Promise<any>;
+    register(registerDto: RegisterDto): Promise<import("../../entities/user.entity").User>;
     requestPasswordReset(dto: RequestPasswordResetDto): Promise<{
         message: string;
     }>;

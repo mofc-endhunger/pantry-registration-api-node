@@ -13,6 +13,7 @@ exports.CreateGuestAuthenticationDto = void 0;
 const class_validator_1 = require("class-validator");
 class CreateGuestAuthenticationDto {
 }
+exports.CreateGuestAuthenticationDto = CreateGuestAuthenticationDto;
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -23,5 +24,4 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreateGuestAuthenticationDto.prototype, "email", void 0);
-exports.CreateGuestAuthenticationDto = CreateGuestAuthenticationDto;
 //# sourceMappingURL=create-guest-authentication.dto.js.map

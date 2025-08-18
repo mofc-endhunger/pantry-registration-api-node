@@ -13,11 +13,12 @@ exports.RegisterDto = void 0;
 const class_validator_1 = require("class-validator");
 class RegisterDto {
 }
+exports.RegisterDto = RegisterDto;
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
-], RegisterDto.prototype, "username", void 0);
+], RegisterDto.prototype, "email", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -28,5 +29,4 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], RegisterDto.prototype, "user_type", void 0);
-exports.RegisterDto = RegisterDto;
 //# sourceMappingURL=register.dto.js.map

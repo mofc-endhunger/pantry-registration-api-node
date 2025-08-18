@@ -1,5 +1,5 @@
 export declare class CreateUserDto {
-    user_type: string;
+    user_type: 'guest' | 'customer';
     identification_code: string;
     first_name?: string;
     middle_name?: string;
@@ -7,7 +7,7 @@ export declare class CreateUserDto {
     suffix?: string;
     gender?: string;
     phone?: string;
-    email?: string;
+    email: string;
     address_line_1?: string;
     address_line_2?: string;
     city?: string;

@@ -1,8 +1,18 @@
+import { IsString, IsOptional } from 'class-validator';
+
 export class CreateAuthCallbackDto {
-  // Placeholder for callback data
-  // Add fields as needed for the callback payload
-  provider: string;
+  @IsString()
+  provider!: string;
+
+  @IsString()
+  @IsOptional()
   code?: string;
+
+  @IsString()
+  @IsOptional()
   state?: string;
+
+  @IsString()
+  @IsOptional()
   accessToken?: string;
 }

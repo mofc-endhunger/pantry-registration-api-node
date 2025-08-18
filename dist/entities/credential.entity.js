@@ -14,6 +14,7 @@ const typeorm_1 = require("typeorm");
 const user_entity_1 = require("./user.entity");
 let Credential = class Credential {
 };
+exports.Credential = Credential;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)(),
     __metadata("design:type", Number)
@@ -47,11 +48,10 @@ __decorate([
     __metadata("design:type", Date)
 ], Credential.prototype, "updated_at", void 0);
 __decorate([
-    (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.credential),
+    (0, typeorm_1.ManyToOne)(() => user_entity_1.User),
     __metadata("design:type", user_entity_1.User)
 ], Credential.prototype, "user", void 0);
-Credential = __decorate([
+exports.Credential = Credential = __decorate([
     (0, typeorm_1.Entity)('credentials')
 ], Credential);
-exports.Credential = Credential;
 //# sourceMappingURL=credential.entity.js.map

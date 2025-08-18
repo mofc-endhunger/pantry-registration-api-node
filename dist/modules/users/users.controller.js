@@ -35,6 +35,7 @@ let UsersController = class UsersController {
         return this.usersService.update(id, updateUserDto);
     }
 };
+exports.UsersController = UsersController;
 __decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)()),
@@ -64,10 +65,9 @@ __decorate([
     __metadata("design:paramtypes", [Number, update_user_dto_1.UpdateUserDto]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "update", null);
-UsersController = __decorate([
+exports.UsersController = UsersController = __decorate([
     (0, common_1.Controller)('users'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __metadata("design:paramtypes", [users_service_1.UsersService])
 ], UsersController);
-exports.UsersController = UsersController;
 //# sourceMappingURL=users.controller.js.map

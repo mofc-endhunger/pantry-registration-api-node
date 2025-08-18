@@ -12,8 +12,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.User = void 0;
 const typeorm_1 = require("typeorm");
 const user_detail_entity_1 = require("./user-detail.entity");
+const authentication_entity_1 = require("./authentication.entity");
+const identity_entity_1 = require("./identity.entity");
 let User = class User {
 };
+exports.User = User;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)(),
     __metadata("design:type", Number)
@@ -22,6 +25,10 @@ __decorate([
     (0, typeorm_1.Column)({ unique: true }),
     __metadata("design:type", String)
 ], User.prototype, "identification_code", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ unique: true, nullable: true }),
+    __metadata("design:type", String)
+], User.prototype, "email", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
@@ -44,6 +51,14 @@ __decorate([
     __metadata("design:type", user_detail_entity_1.UserDetail)
 ], User.prototype, "user_detail", void 0);
 __decorate([
+    (0, typeorm_1.OneToMany)(() => authentication_entity_1.Authentication, (auth) => auth.user),
+    __metadata("design:type", Array)
+], User.prototype, "authentications", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => identity_entity_1.Identity, (identity) => identity.user),
+    __metadata("design:type", Array)
+], User.prototype, "identities", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)({ type: 'timestamp' }),
     __metadata("design:type", Date)
 ], User.prototype, "created_at", void 0);
@@ -51,8 +66,7 @@ __decorate([
     (0, typeorm_1.UpdateDateColumn)({ type: 'timestamp' }),
     __metadata("design:type", Date)
 ], User.prototype, "updated_at", void 0);
-User = __decorate([
+exports.User = User = __decorate([
     (0, typeorm_1.Entity)('users')
 ], User);
-exports.User = User;
 //# sourceMappingURL=user.entity.js.map

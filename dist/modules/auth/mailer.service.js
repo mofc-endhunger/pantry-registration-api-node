@@ -35,9 +35,9 @@ let MailerService = class MailerService {
         });
     }
 };
-MailerService = __decorate([
+exports.MailerService = MailerService;
+exports.MailerService = MailerService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [])
 ], MailerService);
-exports.MailerService = MailerService;
 //# sourceMappingURL=mailer.service.js.map

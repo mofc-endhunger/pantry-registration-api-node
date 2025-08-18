@@ -14,9 +14,9 @@ export declare class AuthService {
     private readonly jwtService;
     constructor(userRepository: Repository<User>, resetTokenRepository: Repository<PasswordResetToken>, mailerService: MailerService, jwtService: JwtService);
     login(loginDto: LoginDto): Promise<{
-        access_token: any;
+        access_token: string;
     }>;
-    register(registerDto: RegisterDto): Promise<any>;
+    register(registerDto: RegisterDto): Promise<User>;
     requestPasswordReset(dto: RequestPasswordResetDto): Promise<{
         message: string;
     }>;

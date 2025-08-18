@@ -24,6 +24,7 @@ let AuthCallbacksController = class AuthCallbacksController {
         return this.authCallbacksService.facebookCallback(facebookAuthCallbackDto);
     }
 };
+exports.AuthCallbacksController = AuthCallbacksController;
 __decorate([
     (0, common_1.Post)('facebook'),
     __param(0, (0, common_1.Body)()),
@@ -31,9 +32,8 @@ __decorate([
     __metadata("design:paramtypes", [facebook_auth_callback_dto_1.FacebookAuthCallbackDto]),
     __metadata("design:returntype", Promise)
 ], AuthCallbacksController.prototype, "facebookCallback", null);
-AuthCallbacksController = __decorate([
+exports.AuthCallbacksController = AuthCallbacksController = __decorate([
     (0, common_1.Controller)('auth-callbacks'),
     __metadata("design:paramtypes", [auth_callbacks_service_1.AuthCallbacksService])
 ], AuthCallbacksController);
-exports.AuthCallbacksController = AuthCallbacksController;
 //# sourceMappingURL=auth-callbacks.controller.js.map

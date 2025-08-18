@@ -14,6 +14,7 @@ const typeorm_1 = require("typeorm");
 const user_entity_1 = require("./user.entity");
 let Authentication = class Authentication {
 };
+exports.Authentication = Authentication;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)(),
     __metadata("design:type", Number)
@@ -42,8 +43,7 @@ __decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User, (user) => user.authentications),
     __metadata("design:type", user_entity_1.User)
 ], Authentication.prototype, "user", void 0);
-Authentication = __decorate([
+exports.Authentication = Authentication = __decorate([
     (0, typeorm_1.Entity)('authentications')
 ], Authentication);
-exports.Authentication = Authentication;
 //# sourceMappingURL=authentication.entity.js.map

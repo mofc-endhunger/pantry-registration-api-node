@@ -4,20 +4,20 @@ import { User } from './user.entity';
 @Entity('password_reset_tokens')
 export class PasswordResetToken {
   @PrimaryGeneratedColumn()
-  id: number;
+  id!: number;
 
   @Column({ type: 'bigint' })
-  user_id: number;
+  user_id!: number;
 
   @Column({ unique: true })
-  token: string;
+  token!: string;
 
   @Column({ type: 'timestamp' })
-  expires_at: Date;
+  expires_at!: Date;
 
   @CreateDateColumn({ type: 'timestamp' })
-  created_at: Date;
+  created_at!: Date;
 
   @ManyToOne(() => User)
-  user: User;
+  user!: User;
 }

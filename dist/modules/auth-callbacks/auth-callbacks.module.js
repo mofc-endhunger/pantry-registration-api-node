@@ -12,11 +12,11 @@ const auth_callbacks_controller_1 = require("./auth-callbacks.controller");
 const auth_callbacks_service_1 = require("./auth-callbacks.service");
 let AuthCallbacksModule = class AuthCallbacksModule {
 };
-AuthCallbacksModule = __decorate([
+exports.AuthCallbacksModule = AuthCallbacksModule;
+exports.AuthCallbacksModule = AuthCallbacksModule = __decorate([
     (0, common_1.Module)({
         controllers: [auth_callbacks_controller_1.AuthCallbacksController],
         providers: [auth_callbacks_service_1.AuthCallbacksService],
     })
 ], AuthCallbacksModule);
-exports.AuthCallbacksModule = AuthCallbacksModule;
 //# sourceMappingURL=auth-callbacks.module.js.map

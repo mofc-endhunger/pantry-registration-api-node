@@ -1,35 +1,45 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, OneToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { UserDetail } from './user-detail.entity';
+import { Authentication } from './authentication.entity';
+import { Identity } from './identity.entity';
 
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn()
-  id: number;
+  id!: number;
 
   @Column({ unique: true })
-  identification_code: string;
+  identification_code!: string;
+
+
+  @Column({ unique: true, nullable: true })
+  email!: string;
 
   @Column({ nullable: true })
-  phone: string;
+  phone!: string;
 
   @Column({ nullable: true })
-  credential_id: number;
+  credential_id!: number;
 
   @Column({ nullable: true })
-  password_digest: string;
+  password_digest!: string;
 
   @Column({ type: 'enum', enum: ['guest', 'customer'] })
-  user_type: 'guest' | 'customer';
+  user_type!: 'guest' | 'customer';
 
   @OneToOne(() => UserDetail, (detail) => detail.user)
   @JoinColumn()
-  user_detail: UserDetail;
+  user_detail!: UserDetail;
+
+  @OneToMany(() => Authentication, (auth) => auth.user)
+  authentications!: Authentication[];
+
+  @OneToMany(() => Identity, (identity) => identity.user)
+  identities!: Identity[];
 
   @CreateDateColumn({ type: 'timestamp' })
-  created_at: Date;
+  created_at!: Date;
 
   @UpdateDateColumn({ type: 'timestamp' })
-  updated_at: Date;
-
-  // TODO: Add relations for identities, authentications, reservations, credential
+  updated_at!: Date;
 }

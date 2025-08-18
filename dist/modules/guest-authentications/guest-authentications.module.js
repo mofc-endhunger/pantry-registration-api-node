@@ -12,11 +12,11 @@ const guest_authentications_controller_1 = require("./guest-authentications.cont
 const guest_authentications_service_1 = require("./guest-authentications.service");
 let GuestAuthenticationsModule = class GuestAuthenticationsModule {
 };
-GuestAuthenticationsModule = __decorate([
+exports.GuestAuthenticationsModule = GuestAuthenticationsModule;
+exports.GuestAuthenticationsModule = GuestAuthenticationsModule = __decorate([
     (0, common_1.Module)({
         controllers: [guest_authentications_controller_1.GuestAuthenticationsController],
         providers: [guest_authentications_service_1.GuestAuthenticationsService],
     })
 ], GuestAuthenticationsModule);
-exports.GuestAuthenticationsModule = GuestAuthenticationsModule;
 //# sourceMappingURL=guest-authentications.module.js.map

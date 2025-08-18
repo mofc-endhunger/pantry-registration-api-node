@@ -3,11 +3,11 @@ import { IsInt, IsString, IsOptional, IsBoolean, IsDateString, IsNotEmpty } from
 export class CredentialDto {
   @IsInt()
   @IsNotEmpty()
-  user_id: number;
+  user_id!: number;
 
   @IsString()
   @IsNotEmpty()
-  token: string;
+  token!: string;
 
   @IsString()
   @IsOptional()

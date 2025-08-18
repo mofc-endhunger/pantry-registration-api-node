@@ -4,29 +4,29 @@ import { User } from './user.entity';
 @Entity('credentials')
 export class Credential {
   @PrimaryGeneratedColumn()
-  id: number;
+  id!: number;
 
   @Column({ type: 'bigint', nullable: true })
-  user_id: number;
+  user_id!: number;
 
   @Column()
-  token: string;
+  token!: string;
 
   @Column({ nullable: true })
-  secret: string;
+  secret!: string;
 
   @Column({ nullable: true })
-  expires: boolean;
+  expires!: boolean;
 
   @Column({ type: 'timestamp', nullable: true })
-  expires_at: Date;
+  expires_at!: Date;
 
   @CreateDateColumn({ type: 'timestamp' })
-  created_at: Date;
+  created_at!: Date;
 
   @UpdateDateColumn({ type: 'timestamp' })
-  updated_at: Date;
+  updated_at!: Date;
 
-  @ManyToOne(() => User, (user) => user.credential)
-  user: User;
+  @ManyToOne(() => User)
+  user!: User;
 }

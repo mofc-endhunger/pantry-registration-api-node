@@ -14,6 +14,7 @@ const typeorm_1 = require("typeorm");
 const user_entity_1 = require("./user.entity");
 let PasswordResetToken = class PasswordResetToken {
 };
+exports.PasswordResetToken = PasswordResetToken;
 __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)(),
     __metadata("design:type", Number)
@@ -38,8 +39,7 @@ __decorate([
     (0, typeorm_1.ManyToOne)(() => user_entity_1.User),
     __metadata("design:type", user_entity_1.User)
 ], PasswordResetToken.prototype, "user", void 0);
-PasswordResetToken = __decorate([
+exports.PasswordResetToken = PasswordResetToken = __decorate([
     (0, typeorm_1.Entity)('password_reset_tokens')
 ], PasswordResetToken);
-exports.PasswordResetToken = PasswordResetToken;
 //# sourceMappingURL=password-reset-token.entity.js.map

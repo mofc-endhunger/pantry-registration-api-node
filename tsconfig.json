@@ -11,7 +11,8 @@
     "outDir": "./dist",
     "baseUrl": "./",
     "incremental": true,
-    "strict": true
+  "strict": true,
+  "lib": ["esnext", "esnext.disposable", "dom"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

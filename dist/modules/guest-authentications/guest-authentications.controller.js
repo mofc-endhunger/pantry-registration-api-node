@@ -24,6 +24,7 @@ let GuestAuthenticationsController = class GuestAuthenticationsController {
         return this.guestAuthenticationsService.createGuest(createGuestAuthenticationDto);
     }
 };
+exports.GuestAuthenticationsController = GuestAuthenticationsController;
 __decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)()),
@@ -31,9 +32,8 @@ __decorate([
     __metadata("design:paramtypes", [create_guest_authentication_dto_1.CreateGuestAuthenticationDto]),
     __metadata("design:returntype", Promise)
 ], GuestAuthenticationsController.prototype, "create", null);
-GuestAuthenticationsController = __decorate([
+exports.GuestAuthenticationsController = GuestAuthenticationsController = __decorate([
     (0, common_1.Controller)('guest-authentications'),
     __metadata("design:paramtypes", [guest_authentications_service_1.GuestAuthenticationsService])
 ], GuestAuthenticationsController);
-exports.GuestAuthenticationsController = GuestAuthenticationsController;
 //# sourceMappingURL=guest-authentications.controller.js.map

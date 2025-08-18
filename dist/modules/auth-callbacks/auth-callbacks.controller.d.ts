@@ -3,8 +3,5 @@ import { FacebookAuthCallbackDto } from './dto/facebook-auth-callback.dto';
 export declare class AuthCallbacksController {
     private readonly authCallbacksService;
     constructor(authCallbacksService: AuthCallbacksService);
-    facebookCallback(facebookAuthCallbackDto: FacebookAuthCallbackDto): Promise<{
-        message: string;
-        facebookDto: FacebookAuthCallbackDto;
-    }>;
+    facebookCallback(facebookAuthCallbackDto: FacebookAuthCallbackDto): Promise<import("../../entities/authentication.entity").Authentication>;
 }

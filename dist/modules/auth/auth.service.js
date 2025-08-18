@@ -11,7 +11,6 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
-var _a, _b, _c;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthService = void 0;
 const common_1 = require("@nestjs/common");
@@ -33,8 +32,8 @@ let AuthService = class AuthService {
     async login(loginDto) {
         const user = await this.userRepository.findOne({
             where: [
-                { email: loginDto.username },
-                { identification_code: loginDto.username },
+                { email: loginDto.email },
+                { identification_code: loginDto.email },
             ],
         });
         if (!user) {
@@ -44,15 +43,15 @@ let AuthService = class AuthService {
         if (!valid) {
             throw new common_1.UnauthorizedException('Invalid credentials');
         }
-        const payload = { username: user.email, sub: user.id };
+        const payload = { email: user.email, sub: user.id };
         const access_token = this.jwtService.sign(payload);
         return { access_token };
     }
     async register(registerDto) {
         const existing = await this.userRepository.findOne({
             where: [
-                { email: registerDto.username },
-                { identification_code: registerDto.username },
+                { email: registerDto.email },
+                { identification_code: registerDto.email },
             ],
         });
         if (existing) {
@@ -61,8 +60,8 @@ let AuthService = class AuthService {
         const saltRounds = 12;
         const password_digest = await bcrypt.hash(registerDto.password, saltRounds);
         const user = this.userRepository.create({
-            email: registerDto.username,
-            identification_code: registerDto.username,
+            email: registerDto.email,
+            identification_code: registerDto.email,
             user_type: registerDto.user_type || 'customer',
             password_digest,
         });
@@ -95,11 +94,14 @@ let AuthService = class AuthService {
         return { message: 'Password reset successful' };
     }
 };
-AuthService = __decorate([
+exports.AuthService = AuthService;
+exports.AuthService = AuthService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __param(1, (0, typeorm_1.InjectRepository)(password_reset_token_entity_1.PasswordResetToken)),
-    __metadata("design:paramtypes", [typeof (_a = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _a : Object, typeof (_b = typeof typeorm_2.Repository !== "undefined" && typeorm_2.Repository) === "function" ? _b : Object, mailer_service_1.MailerService, typeof (_c = typeof jwt_1.JwtService !== "undefined" && jwt_1.JwtService) === "function" ? _c : Object])
+    __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
+        mailer_service_1.MailerService,
+        jwt_1.JwtService])
 ], AuthService);
-exports.AuthService = AuthService;
 //# sourceMappingURL=auth.service.js.map

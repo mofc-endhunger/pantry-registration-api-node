@@ -13,6 +13,7 @@ exports.ResetPasswordDto = void 0;
 const class_validator_1 = require("class-validator");
 class ResetPasswordDto {
 }
+exports.ResetPasswordDto = ResetPasswordDto;
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsNotEmpty)(),
@@ -23,5 +24,4 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], ResetPasswordDto.prototype, "newPassword", void 0);
-exports.ResetPasswordDto = ResetPasswordDto;
 //# sourceMappingURL=reset-password.dto.js.map

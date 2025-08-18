@@ -3,11 +3,11 @@ import { IsString, IsOptional, IsBoolean, IsInt, IsDateString, IsNotEmpty } from
 export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
-  user_type: string;
+  user_type!: 'guest' | 'customer';
 
   @IsString()
   @IsNotEmpty()
-  identification_code: string;
+  identification_code!: string;
 
   @IsString()
   @IsOptional()
@@ -35,7 +35,7 @@ export class CreateUserDto {
 
   @IsString()
   @IsOptional()
-  email?: string;
+  email!: string;
 
   @IsString()
   @IsOptional()
