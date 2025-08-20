@@ -8,8 +8,10 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
 const typeorm_1 = require("@nestjs/typeorm");
 const auth_module_1 = require("./modules/auth/auth.module");
+const database_config_1 = require("./config/database.config");
 const user_entity_1 = require("./entities/user.entity");
 const user_detail_entity_1 = require("./entities/user-detail.entity");
 const authentication_entity_1 = require("./entities/authentication.entity");
@@ -22,16 +24,21 @@ exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forRoot({
-                type: 'postgres',
-                host: process.env.DB_HOST || 'localhost',
-                port: +(process.env.DB_PORT || 5432),
-                username: process.env.DB_USER || 'postgres',
-                password: process.env.DB_PASS || 'postgres',
-                database: process.env.DB_NAME || 'pantry_registration',
-                entities: [user_entity_1.User, user_detail_entity_1.UserDetail, authentication_entity_1.Authentication, identity_entity_1.Identity, credential_entity_1.Credential, password_reset_token_entity_1.PasswordResetToken],
-                synchronize: false,
-                autoLoadEntities: true,
+            config_1.ConfigModule.forRoot({ isGlobal: true, load: [database_config_1.default] }),
+            typeorm_1.TypeOrmModule.forRootAsync({
+                imports: [config_1.ConfigModule],
+                inject: [config_1.ConfigService],
+                useFactory: (configService) => ({
+                    type: 'mysql',
+                    host: configService.get('database.host'),
+                    port: configService.get('database.port'),
+                    username: configService.get('database.username'),
+                    password: configService.get('database.password'),
+                    database: configService.get('database.database'),
+                    entities: [user_entity_1.User, user_detail_entity_1.UserDetail, authentication_entity_1.Authentication, identity_entity_1.Identity, credential_entity_1.Credential, password_reset_token_entity_1.PasswordResetToken],
+                    synchronize: false,
+                    autoLoadEntities: true,
+                }),
             }),
             auth_module_1.AuthModule,
         ],

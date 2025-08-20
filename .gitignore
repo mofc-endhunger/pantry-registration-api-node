@@ -1,0 +1,10 @@
+.agents
+.claude
+.env
+.env.local
+
+dist/
+coverage/
+node_modules/
+
+CLAUDE.md
