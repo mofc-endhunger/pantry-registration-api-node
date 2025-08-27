@@ -7,7 +7,6 @@ export declare class User {
     email: string;
     phone: string;
     credential_id: number;
-    password_digest: string;
     user_type: 'guest' | 'customer';
     user_detail: UserDetail;
     authentications: Authentication[];

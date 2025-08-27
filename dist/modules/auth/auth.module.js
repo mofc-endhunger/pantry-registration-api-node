@@ -19,6 +19,8 @@ const mailer_service_1 = require("./mailer.service");
 const typeorm_1 = require("@nestjs/typeorm");
 const user_entity_1 = require("../../entities/user.entity");
 const password_reset_token_entity_1 = require("../../entities/password-reset-token.entity");
+const authentication_entity_1 = require("../../entities/authentication.entity");
+const credential_entity_1 = require("../../entities/credential.entity");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -30,7 +32,7 @@ exports.AuthModule = AuthModule = __decorate([
                 secret: constants_1.jwtConstants.secret,
                 signOptions: { expiresIn: constants_1.jwtConstants.expiresIn },
             }),
-            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, password_reset_token_entity_1.PasswordResetToken]),
+            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, password_reset_token_entity_1.PasswordResetToken, authentication_entity_1.Authentication, credential_entity_1.Credential]),
         ],
         controllers: [auth_controller_1.AuthController],
         providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy, jwt_auth_guard_1.JwtAuthGuard, mailer_service_1.MailerService],

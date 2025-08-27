@@ -38,16 +38,12 @@ __decorate([
     __metadata("design:type", Number)
 ], User.prototype, "credential_id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
-    __metadata("design:type", String)
-], User.prototype, "password_digest", void 0);
-__decorate([
     (0, typeorm_1.Column)({ type: 'enum', enum: ['guest', 'customer'] }),
     __metadata("design:type", String)
 ], User.prototype, "user_type", void 0);
 __decorate([
     (0, typeorm_1.OneToOne)(() => user_detail_entity_1.UserDetail, (detail) => detail.user),
-    (0, typeorm_1.JoinColumn)(),
+    (0, typeorm_1.JoinColumn)({ name: 'user_detail_id' }),
     __metadata("design:type", user_detail_entity_1.UserDetail)
 ], User.prototype, "user_detail", void 0);
 __decorate([

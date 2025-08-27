@@ -1,11 +1,29 @@
 version: '3.8'
+
 services:
-  api:
-    build: .
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pantry-finder-api
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=${PORT:-3000}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT:-3306}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_DATABASE=${DB_DATABASE}
     volumes:
-      - .:/usr/src/app
-    command: npm run start:prod
+      - ./src:/usr/src/app/src
+      - ./test:/usr/src/app/test
+      - ./node_modules:/usr/src/app/node_modules
+    command: npm run start:dev
+    networks:
+      - pantry-network
+
+networks:
+  pantry-network:
+    driver: bridge
