@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
 import { User } from './entities/user.entity';
 import { UserDetail } from './entities/user-detail.entity';
 import { Authentication } from './entities/authentication.entity';
@@ -27,7 +28,8 @@ import { PasswordResetToken } from './entities/password-reset-token.entity';
         autoLoadEntities: true,
       }),
     }),
-    AuthModule,
+  AuthModule,
+  UsersModule,
   ],
 })
 export class AppModule {}

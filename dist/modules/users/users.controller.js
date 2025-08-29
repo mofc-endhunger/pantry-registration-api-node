@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersController = void 0;
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
 const users_service_1 = require("./users.service");
 const create_user_dto_1 = require("./dto/create-user.dto");
 const update_user_dto_1 = require("./dto/update-user.dto");
@@ -21,6 +22,12 @@ const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 let UsersController = class UsersController {
     constructor(usersService) {
         this.usersService = usersService;
+    }
+    async show(req) {
+        console.log('req.user in controller:', req.user);
+        if (!req.user)
+            throw new common_1.HttpException('Unauthorized', common_1.HttpStatus.UNAUTHORIZED);
+        return req.user;
     }
     async create(createUserDto) {
         return this.usersService.create(createUserDto);
@@ -31,13 +38,27 @@ let UsersController = class UsersController {
     async findByIdentificationCode(identification_code) {
         return this.usersService.findByIdentificationCode(identification_code);
     }
-    async update(id, updateUserDto) {
-        return this.usersService.update(id, updateUserDto);
+    async update(req, updateUserDto) {
+        if (!req.user)
+            throw new common_1.HttpException('Unauthorized', common_1.HttpStatus.UNAUTHORIZED);
+        return this.usersService.update(req.user.id, updateUserDto);
     }
 };
 exports.UsersController = UsersController;
 __decorate([
+    (0, common_1.Get)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Get current user profile' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Current user profile' }),
+    (0, swagger_1.ApiUnauthorizedResponse)({ description: 'Unauthorized' }),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "show", null);
+__decorate([
     (0, common_1.Post)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Create a new user' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Created user' }),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [create_user_dto_1.CreateUserDto]),
@@ -45,28 +66,37 @@ __decorate([
 ], UsersController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user by id' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'User by id' }),
     __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Number]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "findById", null);
 __decorate([
-    (0, common_1.Get)(),
-    __param(0, (0, common_1.Query)('identification_code')),
+    (0, common_1.Get)('identification/:identification_code'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get user by identification code' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'User by identification code' }),
+    __param(0, (0, common_1.Param)('identification_code')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "findByIdentificationCode", null);
 __decorate([
-    (0, common_1.Patch)(':id'),
-    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    (0, common_1.Patch)(),
+    (0, swagger_1.ApiOperation)({ summary: 'Update current user profile' }),
+    (0, swagger_1.ApiOkResponse)({ description: 'Updated user profile' }),
+    (0, swagger_1.ApiUnauthorizedResponse)({ description: 'Unauthorized' }),
+    __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, update_user_dto_1.UpdateUserDto]),
+    __metadata("design:paramtypes", [Object, update_user_dto_1.UpdateUserDto]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "update", null);
 exports.UsersController = UsersController = __decorate([
-    (0, common_1.Controller)('users'),
+    (0, swagger_1.ApiTags)('user'),
+    (0, swagger_1.ApiBearerAuth)(),
+    (0, common_1.Controller)('api/user'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __metadata("design:paramtypes", [users_service_1.UsersService])
 ], UsersController);

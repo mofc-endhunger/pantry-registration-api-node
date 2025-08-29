@@ -19,10 +19,12 @@ const typeorm_2 = require("typeorm");
 const user_entity_1 = require("../../entities/user.entity");
 const authentication_entity_1 = require("../../entities/authentication.entity");
 const crypto_1 = require("crypto");
+const jwt_1 = require("@nestjs/jwt");
 let GuestAuthenticationsService = class GuestAuthenticationsService {
-    constructor(userRepo, authRepo) {
+    constructor(userRepo, authRepo, jwtService) {
         this.userRepo = userRepo;
         this.authRepo = authRepo;
+        this.jwtService = jwtService;
     }
     async createGuest(createGuestDto) {
         let identification_code;
@@ -35,16 +37,20 @@ let GuestAuthenticationsService = class GuestAuthenticationsService {
             phone: createGuestDto.phone,
         });
         await this.userRepo.save(user);
-        const token = (0, crypto_1.randomBytes)(16).toString('hex');
+        const legacyToken = (0, crypto_1.randomBytes)(16).toString('hex');
         const expires_at = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
         const authentication = this.authRepo.create({
             user_id: user.id,
-            token,
+            token: legacyToken,
             expires_at,
             user,
         });
         await this.authRepo.save(authentication);
-        return authentication;
+        const payload = { sub: user.id, email: user.email };
+        const jwt = this.jwtService.sign(payload);
+        return {
+            token: jwt
+        };
     }
 };
 exports.GuestAuthenticationsService = GuestAuthenticationsService;
@@ -53,6 +59,7 @@ exports.GuestAuthenticationsService = GuestAuthenticationsService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __param(1, (0, typeorm_1.InjectRepository)(authentication_entity_1.Authentication)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        jwt_1.JwtService])
 ], GuestAuthenticationsService);
 //# sourceMappingURL=guest-authentications.service.js.map

@@ -34,6 +34,7 @@ let AuthService = class AuthService {
         this.credentialRepository = credentialRepository;
     }
     async registerGuest() {
+        var _a, _b, _c, _d;
         const guestUser = this.userRepository.create({
             user_type: 'guest',
             identification_code: `guest_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
@@ -48,14 +49,16 @@ let AuthService = class AuthService {
             user: guestUser,
         });
         await this.authenticationRepository.save(authentication);
+        const payload = { sub: guestUser.id, email: guestUser.email };
+        const jwt = this.jwtService.sign(payload);
         return {
             id: authentication.id,
             user_id: guestUser.id,
             token: authentication.token,
             expires_at: authentication.expires_at,
-            created_at: authentication.created_at,
-            updated_at: authentication.updated_at,
-            new_record: true,
+            created_at: ((_b = (_a = authentication.created_at) === null || _a === void 0 ? void 0 : _a.toISOString) === null || _b === void 0 ? void 0 : _b.call(_a)) || authentication.created_at,
+            updated_at: ((_d = (_c = authentication.updated_at) === null || _c === void 0 ? void 0 : _c.toISOString) === null || _d === void 0 ? void 0 : _d.call(_c)) || authentication.updated_at,
+            jwt,
         };
     }
     async login(loginDto) {

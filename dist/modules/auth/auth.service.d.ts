@@ -22,9 +22,9 @@ export declare class AuthService {
         user_id: number;
         token: string;
         expires_at: Date;
-        created_at: Date;
-        updated_at: Date;
-        new_record: boolean;
+        created_at: string | Date;
+        updated_at: string | Date;
+        jwt: string;
     }>;
     login(loginDto: LoginDto): Promise<{
         access_token: string;

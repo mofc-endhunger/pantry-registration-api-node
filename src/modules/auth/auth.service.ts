@@ -36,7 +36,7 @@ export class AuthService {
     });
     await this.userRepository.save(guestUser);
 
-    // Create authentication for the guest user
+    // Create authentication for the guest user (legacy token)
     const token = crypto.randomBytes(32).toString('hex');
     const expires_at = new Date(Date.now() + 1000 * 60 * 60 * 24); // 24 hours expiry
     const authentication = this.authenticationRepository.create({
@@ -47,14 +47,18 @@ export class AuthService {
     });
     await this.authenticationRepository.save(authentication);
 
+    // Issue JWT for guest user
+    const payload = { sub: guestUser.id, email: guestUser.email };
+    const jwt = this.jwtService.sign(payload);
+
     return {
       id: authentication.id,
       user_id: guestUser.id,
       token: authentication.token,
       expires_at: authentication.expires_at,
-      created_at: authentication.created_at,
-      updated_at: authentication.updated_at,
-      new_record: true,
+      created_at: authentication.created_at?.toISOString?.() || authentication.created_at,
+      updated_at: authentication.updated_at?.toISOString?.() || authentication.updated_at,
+      jwt,
     };
   }
 

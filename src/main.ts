@@ -14,6 +14,13 @@ async function bootstrap() {
     .setTitle('Pantry Registration API')
     .setDescription('API documentation for Pantry Registration')
     .setVersion('1.0')
+    .addBearerAuth({
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+      name: 'Authorization',
+      in: 'header',
+    }, 'JWT')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);

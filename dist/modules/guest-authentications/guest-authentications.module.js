@@ -10,11 +10,19 @@ exports.GuestAuthenticationsModule = void 0;
 const common_1 = require("@nestjs/common");
 const guest_authentications_controller_1 = require("./guest-authentications.controller");
 const guest_authentications_service_1 = require("./guest-authentications.service");
+const jwt_1 = require("@nestjs/jwt");
+const constants_1 = require("../auth/constants");
 let GuestAuthenticationsModule = class GuestAuthenticationsModule {
 };
 exports.GuestAuthenticationsModule = GuestAuthenticationsModule;
 exports.GuestAuthenticationsModule = GuestAuthenticationsModule = __decorate([
     (0, common_1.Module)({
+        imports: [
+            jwt_1.JwtModule.register({
+                secret: constants_1.jwtConstants.secret,
+                signOptions: { expiresIn: constants_1.jwtConstants.expiresIn },
+            }),
+        ],
         controllers: [guest_authentications_controller_1.GuestAuthenticationsController],
         providers: [guest_authentications_service_1.GuestAuthenticationsService],
     })
