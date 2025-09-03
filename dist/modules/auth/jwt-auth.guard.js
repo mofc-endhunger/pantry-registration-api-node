@@ -17,6 +17,18 @@ let JwtAuthGuard = class JwtAuthGuard extends (0, passport_1.AuthGuard)('jwt') {
         super();
         console.log('JwtAuthGuard instantiated');
     }
+    handleRequest(err, user, info, context) {
+        const req = context.switchToHttp().getRequest();
+        console.log('JwtAuthGuard.handleRequest:', {
+            err,
+            user,
+            info,
+            headers: req.headers,
+            authorization: req.headers['authorization'],
+            url: req.url
+        });
+        return super.handleRequest(err, user, info, context);
+    }
 };
 exports.JwtAuthGuard = JwtAuthGuard;
 exports.JwtAuthGuard = JwtAuthGuard = __decorate([

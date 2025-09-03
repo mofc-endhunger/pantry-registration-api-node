@@ -24,6 +24,12 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
     }
     async validate(payload) {
         console.log('JwtStrategy.validate called with payload:', payload);
+        if (!payload.sub) {
+            console.log('JwtStrategy.validate: payload.sub is missing');
+        }
+        if (!payload) {
+            console.log('JwtStrategy.validate: payload is undefined or null');
+        }
         return { id: payload.sub, email: payload.email };
     }
 };

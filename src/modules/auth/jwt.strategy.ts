@@ -16,6 +16,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     // Log for debugging
     console.log('JwtStrategy.validate called with payload:', payload);
+    if (!payload.sub) {
+      console.log('JwtStrategy.validate: payload.sub is missing');
+    }
+    // Add more detailed logging
+    if (!payload) {
+      console.log('JwtStrategy.validate: payload is undefined or null');
+    }
     return { id: payload.sub, email: payload.email };
   }
 }

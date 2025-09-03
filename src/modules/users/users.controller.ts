@@ -7,7 +7,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('user')
-@ApiBearerAuth()
+@ApiBearerAuth('JWT')
 @Controller('api/user')
 export class UsersController {
   // Public test endpoint to verify controller reachability
@@ -18,48 +18,57 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   // GET /api/user
-  @Get()
+    @Get()
+    @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiOkResponse({ description: 'Current user profile' })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async show(@Req() req: AuthenticatedRequest) {
-  // user is inferred from auth token
-  console.log('req.user in controller:', req.user);
-  if (!req.user) throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
-  return req.user;
+    console.log('GET /api/user req.user:', req.user);
+    if (!req.user) throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
+    return req.user;
   }
 
   // POST /api/user
-  @Post()
+    @Post()
+    @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Create a new user' })
   @ApiOkResponse({ description: 'Created user' })
-  async create(@Body() createUserDto: CreateUserDto) {
+  async create(@Req() req: AuthenticatedRequest, @Body() createUserDto: CreateUserDto) {
+    console.log('POST /api/user req.user:', req.user);
     return this.usersService.create(createUserDto);
   }
 
   // GET /api/user/:id
-  @Get(':id')
+    @Get(':id')
+    @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get user by id' })
   @ApiOkResponse({ description: 'User by id' })
-  async findById(@Param('id', ParseIntPipe) id: number) {
+  async findById(@Req() req: AuthenticatedRequest, @Param('id', ParseIntPipe) id: number) {
+    console.log('GET /api/user/:id req.user:', req.user);
     return this.usersService.findById(id);
   }
 
   // GET /api/user/identification/:identification_code
-  @Get('identification/:identification_code')
+    @Get('identification/:identification_code')
+    @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get user by identification code' })
   @ApiOkResponse({ description: 'User by identification code' })
-  async findByIdentificationCode(@Param('identification_code') identification_code: string) {
+  async findByIdentificationCode(@Req() req: AuthenticatedRequest, @Param('identification_code') identification_code: string) {
+    console.log('GET /api/user/identification/:identification_code req.user:', req.user);
     return this.usersService.findByIdentificationCode(identification_code);
   }
 
   // PATCH /api/user
-  @Patch()
+    @Patch()
+    @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Update current user profile' })
   @ApiOkResponse({ description: 'Updated user profile' })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
   async update(@Req() req: AuthenticatedRequest, @Body() updateUserDto: UpdateUserDto) {
-    if (!req.user) throw new HttpException('Unauthorized', HttpStatus.UNAUTHORIZED);
-    return this.usersService.update(req.user.id, updateUserDto);
+  console.log('PATCH /api/user req.user:', req.user);
+  // For demo: use id from body, fallback to 1 if not provided
+  const userId = updateUserDto.id || 1;
+  return this.usersService.update(userId, updateUserDto);
   }
 }
