@@ -9,8 +9,12 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 @ApiTags('user')
 @ApiBearerAuth()
 @Controller('api/user')
-@UseGuards(JwtAuthGuard)
 export class UsersController {
+  // Public test endpoint to verify controller reachability
+  @Get('test-public')
+  getPublic() {
+    return { status: 'ok' };
+  }
   constructor(private readonly usersService: UsersService) {}
 
   // GET /api/user

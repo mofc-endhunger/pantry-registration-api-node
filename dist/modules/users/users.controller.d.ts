@@ -4,6 +4,9 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 export declare class UsersController {
     private readonly usersService;
+    getPublic(): {
+        status: string;
+    };
     constructor(usersService: UsersService);
     show(req: AuthenticatedRequest): Promise<import("../../entities").User>;
     create(createUserDto: CreateUserDto): Promise<import("../../entities").User>;

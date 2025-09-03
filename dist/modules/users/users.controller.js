@@ -18,8 +18,10 @@ const swagger_1 = require("@nestjs/swagger");
 const users_service_1 = require("./users.service");
 const create_user_dto_1 = require("./dto/create-user.dto");
 const update_user_dto_1 = require("./dto/update-user.dto");
-const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 let UsersController = class UsersController {
+    getPublic() {
+        return { status: 'ok' };
+    }
     constructor(usersService) {
         this.usersService = usersService;
     }
@@ -45,6 +47,12 @@ let UsersController = class UsersController {
     }
 };
 exports.UsersController = UsersController;
+__decorate([
+    (0, common_1.Get)('test-public'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], UsersController.prototype, "getPublic", null);
 __decorate([
     (0, common_1.Get)(),
     (0, swagger_1.ApiOperation)({ summary: 'Get current user profile' }),
@@ -97,7 +105,6 @@ exports.UsersController = UsersController = __decorate([
     (0, swagger_1.ApiTags)('user'),
     (0, swagger_1.ApiBearerAuth)(),
     (0, common_1.Controller)('api/user'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __metadata("design:paramtypes", [users_service_1.UsersService])
 ], UsersController);
 //# sourceMappingURL=users.controller.js.map
