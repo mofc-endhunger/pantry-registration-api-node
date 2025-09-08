@@ -8,18 +8,17 @@ export declare class AuthController {
     private readonly authService;
     constructor(authService: AuthService);
     registerGuest(): Promise<{
-        id: number;
-        user_id: number;
-        token: string;
-        expires_at: Date;
-        created_at: string | Date;
-        updated_at: string | Date;
-        jwt: string;
+        guestId: string;
+        token: any;
+        type: string;
     }>;
     login(loginDto: LoginDto): Promise<{
         access_token: string;
     }>;
-    register(registerDto: RegisterDto): Promise<import("../../entities").User>;
+    register(registerDto: RegisterDto): Promise<import("../../entities").User | {
+        success: boolean;
+        message: string;
+    }>;
     requestPasswordReset(dto: RequestPasswordResetDto): Promise<{
         message: string;
     }>;

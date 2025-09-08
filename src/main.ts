@@ -1,3 +1,6 @@
+console.log('[main.ts] process.cwd():', process.cwd());
+import * as dotenv from 'dotenv';
+dotenv.config();
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';

@@ -8,6 +8,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { CognitoService } from './cognito.service';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PasswordResetToken } from '../../entities/password-reset-token.entity';
@@ -23,42 +24,29 @@ export class AuthService {
     private readonly resetTokenRepository: Repository<PasswordResetToken>,
     private readonly mailerService: MailerService,
     private readonly jwtService: JwtService,
-  @InjectRepository(Authentication)
-  private readonly authenticationRepository: Repository<Authentication>,
-  @InjectRepository(Credential)
-  private readonly credentialRepository: Repository<Credential>,
+    @InjectRepository(Authentication)
+    private readonly authenticationRepository: Repository<Authentication>,
+    @InjectRepository(Credential)
+    private readonly credentialRepository: Repository<Credential>,
+  private readonly cognitoService: CognitoService,
   ) {}
   async registerGuest() {
-    // Create a new guest user
-    const guestUser = this.userRepository.create({
-      user_type: 'guest',
-      identification_code: `guest_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
-    });
-    await this.userRepository.save(guestUser);
-
-    // Create authentication for the guest user (legacy token)
-    const token = crypto.randomBytes(32).toString('hex');
-    const expires_at = new Date(Date.now() + 1000 * 60 * 60 * 24); // 24 hours expiry
-    const authentication = this.authenticationRepository.create({
-      user_id: guestUser.id,
-      token,
-      expires_at,
-      user: guestUser,
-    });
-    await this.authenticationRepository.save(authentication);
-
-    // Issue JWT for guest user
-    const payload = { sub: guestUser.id, email: guestUser.email };
-    const jwt = this.jwtService.sign(payload);
-
+    // Generate a unique guest ID
+    const guestId = `guest_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    // Create a guest JWT payload
+    const payload = {
+      sub: guestId,
+      role: 'guest',
+      iat: Math.floor(Date.now() / 1000),
+    };
+    // Sign the JWT using the app's JWT secret
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '1h' });
+    // Return guest token and info
     return {
-      id: authentication.id,
-      user_id: guestUser.id,
-      token: authentication.token,
-      expires_at: authentication.expires_at,
-      created_at: authentication.created_at?.toISOString?.() || authentication.created_at,
-      updated_at: authentication.updated_at?.toISOString?.() || authentication.updated_at,
-      jwt,
+      guestId,
+      token,
+      type: 'guest',
     };
   }
 
@@ -100,23 +88,26 @@ export class AuthService {
     if (existing) {
       throw new BadRequestException('User already exists');
     }
-    // Hash password with bcrypt for legacy compatibility
-    const saltRounds = 12; // Default for bcrypt-ruby
-    const passwordHash = await bcrypt.hash(registerDto.password, saltRounds);
-    // Create user
-    const user = this.userRepository.create({
-      email: registerDto.email,
-      identification_code: registerDto.email,
-      user_type: registerDto.user_type || 'customer',
-    });
-    const savedUser = await this.userRepository.save(user);
-    // Create credential
-    const credential = this.credentialRepository.create({
-      user_id: savedUser.id,
-      secret: passwordHash,
-    });
-    await this.credentialRepository.save(credential);
-    return savedUser;
+    // If password is provided, hash and create user
+    if (registerDto.password) {
+      const saltRounds = 12;
+      const passwordHash = await bcrypt.hash(registerDto.password, saltRounds);
+      const user = this.userRepository.create({
+        email: registerDto.email,
+        identification_code: registerDto.email,
+        user_type: registerDto.user_type || 'customer',
+      });
+      const savedUser = await this.userRepository.save(user);
+      // Create credential
+      const credential = this.credentialRepository.create({
+        user_id: savedUser.id,
+        secret: passwordHash,
+      });
+      await this.credentialRepository.save(credential);
+      return savedUser;
+    }
+    // If no password, treat as appointment registration (no user creation)
+    return { success: true, message: 'Appointment registered, no user created.' };
   }
 
   async requestPasswordReset(dto: RequestPasswordResetDto) {

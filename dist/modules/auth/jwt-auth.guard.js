@@ -27,6 +27,9 @@ let JwtAuthGuard = class JwtAuthGuard extends (0, passport_1.AuthGuard)('jwt') {
             authorization: req.headers['authorization'],
             url: req.url
         });
+        if (user && user.role === 'guest') {
+            return user;
+        }
         return super.handleRequest(err, user, info, context);
     }
 };

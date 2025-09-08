@@ -16,6 +16,8 @@ const jwt_strategy_1 = require("./jwt.strategy");
 const jwt_auth_guard_1 = require("./jwt-auth.guard");
 const constants_1 = require("./constants");
 const mailer_service_1 = require("./mailer.service");
+const cognito_service_1 = require("./cognito.service");
+const cognito_controller_1 = require("./cognito.controller");
 const typeorm_1 = require("@nestjs/typeorm");
 const user_entity_1 = require("../../entities/user.entity");
 const password_reset_token_entity_1 = require("../../entities/password-reset-token.entity");
@@ -34,8 +36,8 @@ exports.AuthModule = AuthModule = __decorate([
             }),
             typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, password_reset_token_entity_1.PasswordResetToken, authentication_entity_1.Authentication, credential_entity_1.Credential]),
         ],
-        controllers: [auth_controller_1.AuthController],
-        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy, jwt_auth_guard_1.JwtAuthGuard, mailer_service_1.MailerService],
+        controllers: [auth_controller_1.AuthController, cognito_controller_1.CognitoController],
+        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy, jwt_auth_guard_1.JwtAuthGuard, mailer_service_1.MailerService, cognito_service_1.CognitoService],
         exports: [jwt_auth_guard_1.JwtAuthGuard],
     })
 ], AuthModule);

@@ -18,6 +18,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
 			authorization: req.headers['authorization'],
 			url: req.url
 		});
-		return super.handleRequest(err, user, info, context);
+			// Allow guest JWTs
+			if (user && user.role === 'guest') {
+				return user;
+			}
+			return super.handleRequest(err, user, info, context);
 	}
 }

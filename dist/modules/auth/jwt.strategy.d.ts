@@ -4,7 +4,12 @@ export declare class JwtStrategy extends JwtStrategy_base {
     constructor();
     validate(payload: any): Promise<{
         id: any;
+        role: string;
+        email?: undefined;
+    } | {
+        id: any;
         email: any;
-    }>;
+        role?: undefined;
+    } | null>;
 }
 export {};

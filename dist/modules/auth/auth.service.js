@@ -19,46 +19,35 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("../../entities/user.entity");
 const authentication_entity_1 = require("../../entities/authentication.entity");
+const cognito_service_1 = require("./cognito.service");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const password_reset_token_entity_1 = require("../../entities/password-reset-token.entity");
 const mailer_service_1 = require("./mailer.service");
 const jwt_1 = require("@nestjs/jwt");
 let AuthService = class AuthService {
-    constructor(userRepository, resetTokenRepository, mailerService, jwtService, authenticationRepository, credentialRepository) {
+    constructor(userRepository, resetTokenRepository, mailerService, jwtService, authenticationRepository, credentialRepository, cognitoService) {
         this.userRepository = userRepository;
         this.resetTokenRepository = resetTokenRepository;
         this.mailerService = mailerService;
         this.jwtService = jwtService;
         this.authenticationRepository = authenticationRepository;
         this.credentialRepository = credentialRepository;
+        this.cognitoService = cognitoService;
     }
     async registerGuest() {
-        var _a, _b, _c, _d;
-        const guestUser = this.userRepository.create({
-            user_type: 'guest',
-            identification_code: `guest_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
-        });
-        await this.userRepository.save(guestUser);
-        const token = crypto.randomBytes(32).toString('hex');
-        const expires_at = new Date(Date.now() + 1000 * 60 * 60 * 24);
-        const authentication = this.authenticationRepository.create({
-            user_id: guestUser.id,
-            token,
-            expires_at,
-            user: guestUser,
-        });
-        await this.authenticationRepository.save(authentication);
-        const payload = { sub: guestUser.id, email: guestUser.email };
-        const jwt = this.jwtService.sign(payload);
+        const guestId = `guest_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+        const payload = {
+            sub: guestId,
+            role: 'guest',
+            iat: Math.floor(Date.now() / 1000),
+        };
+        const jwt = require('jsonwebtoken');
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '1h' });
         return {
-            id: authentication.id,
-            user_id: guestUser.id,
-            token: authentication.token,
-            expires_at: authentication.expires_at,
-            created_at: ((_b = (_a = authentication.created_at) === null || _a === void 0 ? void 0 : _a.toISOString) === null || _b === void 0 ? void 0 : _b.call(_a)) || authentication.created_at,
-            updated_at: ((_d = (_c = authentication.updated_at) === null || _c === void 0 ? void 0 : _c.toISOString) === null || _d === void 0 ? void 0 : _d.call(_c)) || authentication.updated_at,
-            jwt,
+            guestId,
+            token,
+            type: 'guest',
         };
     }
     async login(loginDto) {
@@ -93,20 +82,23 @@ let AuthService = class AuthService {
         if (existing) {
             throw new common_1.BadRequestException('User already exists');
         }
-        const saltRounds = 12;
-        const passwordHash = await bcrypt.hash(registerDto.password, saltRounds);
-        const user = this.userRepository.create({
-            email: registerDto.email,
-            identification_code: registerDto.email,
-            user_type: registerDto.user_type || 'customer',
-        });
-        const savedUser = await this.userRepository.save(user);
-        const credential = this.credentialRepository.create({
-            user_id: savedUser.id,
-            secret: passwordHash,
-        });
-        await this.credentialRepository.save(credential);
-        return savedUser;
+        if (registerDto.password) {
+            const saltRounds = 12;
+            const passwordHash = await bcrypt.hash(registerDto.password, saltRounds);
+            const user = this.userRepository.create({
+                email: registerDto.email,
+                identification_code: registerDto.email,
+                user_type: registerDto.user_type || 'customer',
+            });
+            const savedUser = await this.userRepository.save(user);
+            const credential = this.credentialRepository.create({
+                user_id: savedUser.id,
+                secret: passwordHash,
+            });
+            await this.credentialRepository.save(credential);
+            return savedUser;
+        }
+        return { success: true, message: 'Appointment registered, no user created.' };
     }
     async requestPasswordReset(dto) {
         const user = await this.userRepository.findOne({ where: { email: dto.email } });
@@ -155,6 +147,7 @@ exports.AuthService = AuthService = __decorate([
         mailer_service_1.MailerService,
         jwt_1.JwtService,
         typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        cognito_service_1.CognitoService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map
