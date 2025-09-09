@@ -1,9 +1,12 @@
+import * as dns from 'dns';
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 console.log('[main.ts] process.cwd():', process.cwd());
 import * as dotenv from 'dotenv';
 dotenv.config();
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
