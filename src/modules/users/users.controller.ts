@@ -1,4 +1,5 @@
 import { Controller, Get, Patch, Post, Body, Param, ParseIntPipe, Query, UseGuards, Req, HttpException, HttpStatus } from '@nestjs/common';
+import * as dns from 'dns';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { AuthenticatedRequest } from '../../types/authenticated-request';
 import { UsersService } from './users.service';
@@ -14,6 +15,16 @@ export class UsersController {
   @Get('test-public')
   getPublic() {
     return { status: 'ok' };
+  }
+  // DNS test endpoint
+  @Get('dns-test')
+  @ApiOperation({ summary: 'Test DNS resolution for Cognito endpoint' })
+  async dnsTest() {
+    return new Promise((resolve) => {
+      dns.lookup('cognito-idp-us-east-2.amazonaws.com', (err, address) => {
+        resolve({ err: err ? err.message : null, address });
+      });
+    });
   }
   constructor(private readonly usersService: UsersService) {}
 
