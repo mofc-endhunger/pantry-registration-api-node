@@ -21,7 +21,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Test DNS resolution for Cognito endpoint' })
   async dnsTest() {
     return new Promise((resolve) => {
-      dns.lookup('cognito-idp-us-east-2.amazonaws.com', (err, address) => {
+      dns.lookup('cognito-idp.us-east-2.amazonaws.com', (err, address) => {
         resolve({ err: err ? err.message : null, address });
       });
     });

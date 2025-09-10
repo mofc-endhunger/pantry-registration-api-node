@@ -8,7 +8,7 @@ import * as dns from 'dns';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  private cognitoIssuer = `https://cognito-idp-${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}`;
+  private cognitoIssuer = `https://cognito-idp.${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}`;
   private jwksUri = `${this.cognitoIssuer}/.well-known/jwks.json`;
   private jwks = jwksClient({ jwksUri: this.jwksUri });
 
