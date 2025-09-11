@@ -10,6 +10,11 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Enable CORS for frontend integration
+  app.enableCors({
+    origin: 'http://localhost:3001',
+    credentials: true,
+  });
 
   // Log DB_DATABASE from ConfigService after config is loaded
   const configService = app.get(require('@nestjs/config').ConfigService);
