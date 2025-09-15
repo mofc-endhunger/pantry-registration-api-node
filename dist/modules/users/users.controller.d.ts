@@ -7,6 +7,7 @@ export declare class UsersController {
     getPublic(): {
         status: string;
     };
+    dnsTest(): Promise<unknown>;
     constructor(usersService: UsersService);
     show(req: AuthenticatedRequest): Promise<import("../../entities").User>;
     create(req: AuthenticatedRequest, createUserDto: CreateUserDto): Promise<import("../../entities").User>;

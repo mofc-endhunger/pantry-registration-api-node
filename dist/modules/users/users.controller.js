@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersController = void 0;
 const common_1 = require("@nestjs/common");
+const dns = require("dns");
 const swagger_1 = require("@nestjs/swagger");
 const users_service_1 = require("./users.service");
 const create_user_dto_1 = require("./dto/create-user.dto");
@@ -22,6 +23,13 @@ const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 let UsersController = class UsersController {
     getPublic() {
         return { status: 'ok' };
+    }
+    async dnsTest() {
+        return new Promise((resolve) => {
+            dns.lookup('cognito-idp.us-east-2.amazonaws.com', (err, address) => {
+                resolve({ err: err ? err.message : null, address });
+            });
+        });
     }
     constructor(usersService) {
         this.usersService = usersService;
@@ -57,6 +65,13 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], UsersController.prototype, "getPublic", null);
+__decorate([
+    (0, common_1.Get)('dns-test'),
+    (0, swagger_1.ApiOperation)({ summary: 'Test DNS resolution for Cognito endpoint' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "dnsTest", null);
 __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

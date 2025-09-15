@@ -9,6 +9,10 @@ import { Authentication } from './entities/authentication.entity';
 import { Identity } from './entities/identity.entity';
 import { Credential } from './entities/credential.entity';
 import { PasswordResetToken } from './entities/password-reset-token.entity';
+import { Household } from './entities/household.entity';
+import { HouseholdMember } from './entities/household-member.entity';
+import { HouseholdMemberAudit } from './entities/household-member-audit.entity';
+import { HouseholdsModule } from './modules/households/households.module';
 
 @Module({
   imports: [
@@ -23,13 +27,14 @@ import { PasswordResetToken } from './entities/password-reset-token.entity';
         username: configService.get<string>('DB_USERNAME'),
         password: configService.get<string>('DB_PASSWORD'),
         database: configService.get<string>('DB_DATABASE'),
-        entities: [User, UserDetail, Authentication, Identity, Credential, PasswordResetToken],
+        entities: [User, UserDetail, Authentication, Identity, Credential, PasswordResetToken, Household, HouseholdMember, HouseholdMemberAudit],
         synchronize: false,
         autoLoadEntities: true,
       }),
     }),
   AuthModule,
   UsersModule,
+  HouseholdsModule,
   ],
 })
 export class AppModule {}

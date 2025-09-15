@@ -1,5 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const dns = require("dns");
+dns.setServers(['8.8.8.8', '1.1.1.1']);
 console.log('[main.ts] process.cwd():', process.cwd());
 const dotenv = require("dotenv");
 dotenv.config();
@@ -8,6 +10,10 @@ const app_module_1 = require("./app.module");
 const swagger_1 = require("@nestjs/swagger");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    app.enableCors({
+        origin: 'http://localhost:3001',
+        credentials: true,
+    });
     const configService = app.get(require('@nestjs/config').ConfigService);
     console.log('DB_DATABASE from ConfigService:', configService.get('DB_DATABASE'));
     const config = new swagger_1.DocumentBuilder()
