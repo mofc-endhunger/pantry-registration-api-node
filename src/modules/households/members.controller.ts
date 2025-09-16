@@ -1,9 +1,10 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
 import { HouseholdsService } from './households.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { NonGuestGuard } from '../auth/non-guest.guard';
 import { UpsertMemberDto } from './dto/upsert-member.dto';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, NonGuestGuard)
 @Controller('households/:householdId/members')
 export class MembersController {
   constructor(private readonly householdsService: HouseholdsService) {}

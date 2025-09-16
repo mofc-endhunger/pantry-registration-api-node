@@ -3,8 +3,9 @@ import { HouseholdsService } from './households.service';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { NonGuestGuard } from '../auth/non-guest.guard';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, NonGuestGuard)
 @Controller('households')
 export class HouseholdsController {
   constructor(private readonly householdsService: HouseholdsService) {}
