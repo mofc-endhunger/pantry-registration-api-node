@@ -10,5 +10,7 @@ export declare class GuestAuthenticationsService {
     constructor(userRepo: Repository<User>, authRepo: Repository<Authentication>, jwtService: JwtService);
     createGuest(createGuestDto: CreateGuestAuthenticationDto): Promise<{
         token: string;
+        expires_at: Date;
+        user_id: number;
     }>;
 }

@@ -25,7 +25,8 @@
 2. Standardize guest authentication response to return only the JWT as `token`.
 3. Complete and test all user creation, update, and retrieval endpoints.
 4. Add robust logging for authentication/authorization failures.
-5. Write and run end-to-end and integration tests.
-6. Document all endpoints and authentication flows.
-7. Code cleanup and refactor for clarity.
-8. Prepare for deployment with production-ready settings.
+5. Implement Household Management (entities, module, endpoints scaffolded; add e2e tests and docs).
+6. Write and run end-to-end and integration tests.
+7. Document all endpoints and authentication flows.
+8. Code cleanup and refactor for clarity.
+9. Prepare for deployment with production-ready settings.

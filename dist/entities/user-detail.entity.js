@@ -60,11 +60,11 @@ __decorate([
     __metadata("design:type", String)
 ], UserDetail.prototype, "urls", void 0);
 __decorate([
-    (0, typeorm_1.CreateDateColumn)({ type: 'timestamp' }),
+    (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], UserDetail.prototype, "created_at", void 0);
 __decorate([
-    (0, typeorm_1.UpdateDateColumn)({ type: 'timestamp' }),
+    (0, typeorm_1.UpdateDateColumn)(),
     __metadata("design:type", Date)
 ], UserDetail.prototype, "updated_at", void 0);
 __decorate([

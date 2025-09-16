@@ -58,10 +58,10 @@ export class HouseholdMember {
   @Column({ default: true })
   is_active!: boolean;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn()
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn()
   updated_at!: Date;
 }
 

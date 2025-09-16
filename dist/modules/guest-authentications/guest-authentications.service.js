@@ -49,7 +49,9 @@ let GuestAuthenticationsService = class GuestAuthenticationsService {
         const payload = { sub: user.id, email: user.email };
         const jwt = this.jwtService.sign(payload);
         return {
-            token: jwt
+            token: jwt,
+            expires_at,
+            user_id: user.id,
         };
     }
 };

@@ -28,11 +28,11 @@ __decorate([
     __metadata("design:type", String)
 ], PasswordResetToken.prototype, "token", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'timestamp' }),
+    (0, typeorm_1.Column)({ type: 'datetime' }),
     __metadata("design:type", Date)
 ], PasswordResetToken.prototype, "expires_at", void 0);
 __decorate([
-    (0, typeorm_1.CreateDateColumn)({ type: 'timestamp' }),
+    (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], PasswordResetToken.prototype, "created_at", void 0);
 __decorate([

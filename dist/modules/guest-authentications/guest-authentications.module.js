@@ -11,6 +11,9 @@ const common_1 = require("@nestjs/common");
 const guest_authentications_controller_1 = require("./guest-authentications.controller");
 const guest_authentications_service_1 = require("./guest-authentications.service");
 const jwt_1 = require("@nestjs/jwt");
+const typeorm_1 = require("@nestjs/typeorm");
+const user_entity_1 = require("../../entities/user.entity");
+const authentication_entity_1 = require("../../entities/authentication.entity");
 const constants_1 = require("../auth/constants");
 let GuestAuthenticationsModule = class GuestAuthenticationsModule {
 };
@@ -18,6 +21,7 @@ exports.GuestAuthenticationsModule = GuestAuthenticationsModule;
 exports.GuestAuthenticationsModule = GuestAuthenticationsModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            typeorm_1.TypeOrmModule.forFeature([user_entity_1.User, authentication_entity_1.Authentication]),
             jwt_1.JwtModule.register({
                 secret: constants_1.jwtConstants.secret,
                 signOptions: { expiresIn: constants_1.jwtConstants.expiresIn },

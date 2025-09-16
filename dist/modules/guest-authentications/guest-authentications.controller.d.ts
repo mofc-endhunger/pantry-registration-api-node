@@ -5,5 +5,7 @@ export declare class GuestAuthenticationsController {
     constructor(guestAuthenticationsService: GuestAuthenticationsService);
     create(createGuestAuthenticationDto: CreateGuestAuthenticationDto): Promise<{
         token: string;
+        expires_at: Date;
+        user_id: number;
     }>;
 }

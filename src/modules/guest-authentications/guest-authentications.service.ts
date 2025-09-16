@@ -45,9 +45,11 @@ export class GuestAuthenticationsService {
     const payload = { sub: user.id, email: user.email };
     const jwt = this.jwtService.sign(payload);
 
-    // Return only the JWT as the token field for authentication
+    // Return compatibility fields expected by legacy tests
     return {
-      token: jwt
+      token: jwt,
+      expires_at,
+      user_id: user.id,
     };
   }
 }

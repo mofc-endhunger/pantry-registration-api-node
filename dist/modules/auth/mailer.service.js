@@ -14,15 +14,20 @@ const common_1 = require("@nestjs/common");
 const nodemailer = require("nodemailer");
 let MailerService = class MailerService {
     constructor() {
-        this.transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.example.com',
-            port: +(process.env.SMTP_PORT || 587),
-            secure: false,
-            auth: {
-                user: process.env.SMTP_USER || 'user@example.com',
-                pass: process.env.SMTP_PASS || 'password',
-            },
-        });
+        if (process.env.NODE_ENV === 'test') {
+            this.transporter = nodemailer.createTransport({ jsonTransport: true });
+        }
+        else {
+            this.transporter = nodemailer.createTransport({
+                host: process.env.SMTP_HOST || 'smtp.example.com',
+                port: +(process.env.SMTP_PORT || 587),
+                secure: false,
+                auth: {
+                    user: process.env.SMTP_USER || 'user@example.com',
+                    pass: process.env.SMTP_PASS || 'password',
+                },
+            });
+        }
     }
     async sendResetEmail(to, token) {
         const resetUrl = `${process.env.PASSWORD_RESET_URL || 'http://localhost:3000/reset-password'}?token=${token}`;

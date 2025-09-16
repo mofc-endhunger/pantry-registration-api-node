@@ -20,7 +20,7 @@ export class HouseholdMemberAudit {
   @Column({ type: 'json', nullable: true })
   changes?: any; // { before, after }
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn()
   created_at!: Date;
 }
 

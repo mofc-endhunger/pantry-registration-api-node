@@ -10,11 +10,16 @@ exports.AuthCallbacksModule = void 0;
 const common_1 = require("@nestjs/common");
 const auth_callbacks_controller_1 = require("./auth-callbacks.controller");
 const auth_callbacks_service_1 = require("./auth-callbacks.service");
+const typeorm_1 = require("@nestjs/typeorm");
+const identity_entity_1 = require("../../entities/identity.entity");
+const user_entity_1 = require("../../entities/user.entity");
+const authentication_entity_1 = require("../../entities/authentication.entity");
 let AuthCallbacksModule = class AuthCallbacksModule {
 };
 exports.AuthCallbacksModule = AuthCallbacksModule;
 exports.AuthCallbacksModule = AuthCallbacksModule = __decorate([
     (0, common_1.Module)({
+        imports: [typeorm_1.TypeOrmModule.forFeature([identity_entity_1.Identity, user_entity_1.User, authentication_entity_1.Authentication])],
         controllers: [auth_callbacks_controller_1.AuthCallbacksController],
         providers: [auth_callbacks_service_1.AuthCallbacksService],
     })

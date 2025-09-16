@@ -22,7 +22,7 @@ export class User {
   credential_id!: number;
 
 
-  @Column({ type: 'enum', enum: ['guest', 'customer'] })
+  @Column({ type: 'simple-enum', enum: ['guest', 'customer'] })
   user_type!: 'guest' | 'customer';
 
   @OneToOne(() => UserDetail, (detail) => detail.user)
@@ -35,9 +35,9 @@ export class User {
   @OneToMany(() => Identity, (identity) => identity.user)
   identities!: Identity[];
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn()
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn()
   updated_at!: Date;
 }

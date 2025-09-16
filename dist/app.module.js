@@ -18,6 +18,12 @@ const authentication_entity_1 = require("./entities/authentication.entity");
 const identity_entity_1 = require("./entities/identity.entity");
 const credential_entity_1 = require("./entities/credential.entity");
 const password_reset_token_entity_1 = require("./entities/password-reset-token.entity");
+const household_entity_1 = require("./entities/household.entity");
+const household_member_entity_1 = require("./entities/household-member.entity");
+const household_member_audit_entity_1 = require("./entities/household-member-audit.entity");
+const households_module_1 = require("./modules/households/households.module");
+const guest_authentications_module_1 = require("./modules/guest-authentications/guest-authentications.module");
+const auth_callbacks_module_1 = require("./modules/auth-callbacks/auth-callbacks.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -28,20 +34,35 @@ exports.AppModule = AppModule = __decorate([
             typeorm_1.TypeOrmModule.forRootAsync({
                 imports: [config_1.ConfigModule],
                 inject: [config_1.ConfigService],
-                useFactory: (configService) => ({
-                    type: 'mysql',
-                    host: configService.get('DB_HOST'),
-                    port: Number(configService.get('DB_PORT')),
-                    username: configService.get('DB_USERNAME'),
-                    password: configService.get('DB_PASSWORD'),
-                    database: configService.get('DB_DATABASE'),
-                    entities: [user_entity_1.User, user_detail_entity_1.UserDetail, authentication_entity_1.Authentication, identity_entity_1.Identity, credential_entity_1.Credential, password_reset_token_entity_1.PasswordResetToken],
-                    synchronize: false,
-                    autoLoadEntities: true,
-                }),
+                useFactory: (configService) => {
+                    if (process.env.NODE_ENV === 'test') {
+                        return {
+                            type: 'sqlite',
+                            database: ':memory:',
+                            entities: [user_entity_1.User, user_detail_entity_1.UserDetail, authentication_entity_1.Authentication, identity_entity_1.Identity, credential_entity_1.Credential, password_reset_token_entity_1.PasswordResetToken, household_entity_1.Household, household_member_entity_1.HouseholdMember, household_member_audit_entity_1.HouseholdMemberAudit],
+                            synchronize: true,
+                            dropSchema: true,
+                            autoLoadEntities: true,
+                        };
+                    }
+                    return {
+                        type: 'mysql',
+                        host: configService.get('DB_HOST'),
+                        port: Number(configService.get('DB_PORT')),
+                        username: configService.get('DB_USERNAME'),
+                        password: configService.get('DB_PASSWORD'),
+                        database: configService.get('DB_DATABASE'),
+                        entities: [user_entity_1.User, user_detail_entity_1.UserDetail, authentication_entity_1.Authentication, identity_entity_1.Identity, credential_entity_1.Credential, password_reset_token_entity_1.PasswordResetToken, household_entity_1.Household, household_member_entity_1.HouseholdMember, household_member_audit_entity_1.HouseholdMemberAudit],
+                        synchronize: false,
+                        autoLoadEntities: true,
+                    };
+                },
             }),
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
+            households_module_1.HouseholdsModule,
+            guest_authentications_module_1.GuestAuthenticationsModule,
+            auth_callbacks_module_1.AuthCallbacksModule,
         ],
     })
 ], AppModule);

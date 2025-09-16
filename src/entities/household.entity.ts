@@ -38,10 +38,10 @@ export class Household {
   @OneToMany(() => HouseholdMember, (member) => member.household)
   members!: HouseholdMember[];
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn()
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn()
   updated_at!: Date;
 }
 

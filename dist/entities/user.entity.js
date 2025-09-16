@@ -38,7 +38,7 @@ __decorate([
     __metadata("design:type", Number)
 ], User.prototype, "credential_id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'enum', enum: ['guest', 'customer'] }),
+    (0, typeorm_1.Column)({ type: 'simple-enum', enum: ['guest', 'customer'] }),
     __metadata("design:type", String)
 ], User.prototype, "user_type", void 0);
 __decorate([
@@ -55,11 +55,11 @@ __decorate([
     __metadata("design:type", Array)
 ], User.prototype, "identities", void 0);
 __decorate([
-    (0, typeorm_1.CreateDateColumn)({ type: 'timestamp' }),
+    (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], User.prototype, "created_at", void 0);
 __decorate([
-    (0, typeorm_1.UpdateDateColumn)({ type: 'timestamp' }),
+    (0, typeorm_1.UpdateDateColumn)(),
     __metadata("design:type", Date)
 ], User.prototype, "updated_at", void 0);
 exports.User = User = __decorate([

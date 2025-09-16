@@ -28,15 +28,15 @@ __decorate([
     __metadata("design:type", String)
 ], Authentication.prototype, "token", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'timestamp' }),
+    (0, typeorm_1.Column)({ type: 'datetime' }),
     __metadata("design:type", Date)
 ], Authentication.prototype, "expires_at", void 0);
 __decorate([
-    (0, typeorm_1.CreateDateColumn)({ type: 'timestamp' }),
+    (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], Authentication.prototype, "created_at", void 0);
 __decorate([
-    (0, typeorm_1.UpdateDateColumn)({ type: 'timestamp' }),
+    (0, typeorm_1.UpdateDateColumn)(),
     __metadata("design:type", Date)
 ], Authentication.prototype, "updated_at", void 0);
 __decorate([

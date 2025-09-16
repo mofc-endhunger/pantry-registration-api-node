@@ -8,7 +8,8 @@
     "build": "nest build",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
-    "lint": "eslint . --ext .ts"
+    "lint": "eslint . --ext .ts",
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.883.0",
@@ -47,6 +48,7 @@
     "@types/supertest": "^6.0.3",
     "eslint": "^8.0.0",
     "jest": "^30.0.5",
+    "sqlite3": "^5.1.7",
     "supertest": "^7.1.4",
     "ts-jest": "^29.4.1",
     "typescript": "^5.9.2"

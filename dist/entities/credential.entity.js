@@ -24,7 +24,7 @@ __decorate([
     __metadata("design:type", Number)
 ], Credential.prototype, "user_id", void 0);
 __decorate([
-    (0, typeorm_1.Column)(),
+    (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], Credential.prototype, "token", void 0);
 __decorate([
@@ -36,15 +36,15 @@ __decorate([
     __metadata("design:type", Boolean)
 ], Credential.prototype, "expires", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'timestamp', nullable: true }),
+    (0, typeorm_1.Column)({ type: 'datetime', nullable: true }),
     __metadata("design:type", Date)
 ], Credential.prototype, "expires_at", void 0);
 __decorate([
-    (0, typeorm_1.CreateDateColumn)({ type: 'timestamp' }),
+    (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], Credential.prototype, "created_at", void 0);
 __decorate([
-    (0, typeorm_1.UpdateDateColumn)({ type: 'timestamp' }),
+    (0, typeorm_1.UpdateDateColumn)(),
     __metadata("design:type", Date)
 ], Credential.prototype, "updated_at", void 0);
 __decorate([
