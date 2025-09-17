@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: development
     container_name: pantry-registration-api-node
     ports:
       - "3000:3000"
@@ -17,10 +18,9 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_DATABASE=${DB_DATABASE}
     volumes:
-      - ./src:/usr/src/app/src
-      - ./test:/usr/src/app/test
-      - ./node_modules:/usr/src/app/node_modules
-    command: npm run start:dev
+      - ./src:/app/src
+      - ./test:/app/test
+      - ./node_modules:/app/node_modules
     networks:
       - pantry-network
 

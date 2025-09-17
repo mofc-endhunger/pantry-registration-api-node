@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn, JoinColumn } from 'typeorm';
 import { User } from './user.entity';
 
 @Entity('authentications')
@@ -22,5 +22,6 @@ export class Authentication {
   updated_at!: Date;
 
   @ManyToOne(() => User, (user) => user.authentications)
+  @JoinColumn({ name: 'user_id' })
   user!: User;
 }

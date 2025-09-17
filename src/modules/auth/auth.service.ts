@@ -1,7 +1,9 @@
+import { Credential } from '../../entities/credential.entity';
 import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../../entities/user.entity';
+import { Authentication } from '../../entities/authentication.entity';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
@@ -21,21 +23,59 @@ export class AuthService {
     private readonly resetTokenRepository: Repository<PasswordResetToken>,
     private readonly mailerService: MailerService,
     private readonly jwtService: JwtService,
+  @InjectRepository(Authentication)
+  private readonly authenticationRepository: Repository<Authentication>,
+  @InjectRepository(Credential)
+  private readonly credentialRepository: Repository<Credential>,
   ) {}
+  async registerGuest() {
+    // Create a new guest user
+    const guestUser = this.userRepository.create({
+      user_type: 'guest',
+      identification_code: `guest_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+    });
+    await this.userRepository.save(guestUser);
+
+    // Create authentication for the guest user
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires_at = new Date(Date.now() + 1000 * 60 * 60 * 24); // 24 hours expiry
+    const authentication = this.authenticationRepository.create({
+      user_id: guestUser.id,
+      token,
+      expires_at,
+      user: guestUser,
+    });
+    await this.authenticationRepository.save(authentication);
+
+    return {
+      id: authentication.id,
+      user_id: guestUser.id,
+      token: authentication.token,
+      expires_at: authentication.expires_at,
+      created_at: authentication.created_at,
+      updated_at: authentication.updated_at,
+      new_record: true,
+    };
+  }
 
   async login(loginDto: LoginDto) {
     // Find user by email or identification_code
     const user = await this.userRepository.findOne({
       where: [
-  { email: loginDto.email },
-  { identification_code: loginDto.email },
+        { email: loginDto.email },
+        { identification_code: loginDto.email },
       ],
     });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
+    // Find credential for user
+    const credential = await this.credentialRepository.findOne({ where: { user_id: user.id } });
+    if (!credential || !credential.secret) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
     // Compare password with bcrypt
-    const valid = await bcrypt.compare(loginDto.password, user.password_digest);
+    const valid = await bcrypt.compare(loginDto.password, credential.secret);
     if (!valid) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -58,15 +98,21 @@ export class AuthService {
     }
     // Hash password with bcrypt for legacy compatibility
     const saltRounds = 12; // Default for bcrypt-ruby
-    const password_digest = await bcrypt.hash(registerDto.password, saltRounds);
+    const passwordHash = await bcrypt.hash(registerDto.password, saltRounds);
     // Create user
     const user = this.userRepository.create({
-  email: registerDto.email,
-  identification_code: registerDto.email,
+      email: registerDto.email,
+      identification_code: registerDto.email,
       user_type: registerDto.user_type || 'customer',
-      password_digest,
     });
-    return this.userRepository.save(user);
+    const savedUser = await this.userRepository.save(user);
+    // Create credential
+    const credential = this.credentialRepository.create({
+      user_id: savedUser.id,
+      secret: passwordHash,
+    });
+    await this.credentialRepository.save(credential);
+    return savedUser;
   }
 
   async requestPasswordReset(dto: RequestPasswordResetDto) {
@@ -94,9 +140,21 @@ export class AuthService {
     }
     // Hash new password
     const saltRounds = 12;
-    user.password_digest = await bcrypt.hash(dto.newPassword, saltRounds);
-    await this.userRepository.save(user);
+    const passwordHash = await bcrypt.hash(dto.newPassword, saltRounds);
+    // Update credential
+    let credential = await this.credentialRepository.findOne({ where: { user_id: user.id } });
+    if (!credential) {
+      credential = this.credentialRepository.create({ user_id: user.id });
+    }
+    credential.secret = passwordHash;
+    await this.credentialRepository.save(credential);
     await this.resetTokenRepository.delete({ id: resetToken.id });
     return { message: 'Password reset successful' };
+  }
+
+  async facebookAuth(dto: any) {
+    // TODO: Implement Facebook token verification and user lookup/creation
+    // dto: { userID, graphDomain, accessToken }
+    return { message: 'Facebook auth not yet implemented', received: dto };
   }
 }
