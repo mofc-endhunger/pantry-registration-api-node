@@ -5,6 +5,10 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Log DB_DATABASE from ConfigService after config is loaded
+  const configService = app.get(require('@nestjs/config').ConfigService);
+  console.log('DB_DATABASE from ConfigService:', configService.get('DB_DATABASE'));
+
   // Swagger setup
   const config = new DocumentBuilder()
     .setTitle('Pantry Registration API')

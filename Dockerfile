@@ -1,14 +1,23 @@
-# Dockerfile for pantry-registration-api-node
-FROM node:18-alpine
+# Use the official Node.js image as the base image
+FROM node:22
 
+# Set the working directory inside the container
 WORKDIR /usr/src/app
 
+# Copy package.json and package-lock.json to the working directory
 COPY package*.json ./
-RUN npm install --legacy-peer-deps
 
+# Install the application dependencies
+RUN npm install
+
+# Copy the rest of the application files
 COPY . .
 
+# Build the NestJS application
 RUN npm run build
 
+# Expose the application port
 EXPOSE 3000
-CMD ["npm", "run", "start:prod"]
+
+# Command to run the application
+CMD ["node", "dist/main"]

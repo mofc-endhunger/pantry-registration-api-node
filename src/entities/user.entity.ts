@@ -21,14 +21,12 @@ export class User {
   @Column({ nullable: true })
   credential_id!: number;
 
-  @Column({ nullable: true })
-  password_digest!: string;
 
   @Column({ type: 'enum', enum: ['guest', 'customer'] })
   user_type!: 'guest' | 'customer';
 
   @OneToOne(() => UserDetail, (detail) => detail.user)
-  @JoinColumn()
+  @JoinColumn({ name: 'user_detail_id' })
   user_detail!: UserDetail;
 
   @OneToMany(() => Authentication, (auth) => auth.user)
