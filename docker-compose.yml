@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: pantry-finder-api
+    container_name: pantry-registration-api-node
     ports:
       - "3000:3000"
     environment:

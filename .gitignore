@@ -8,5 +8,5 @@ coverage/
 node_modules/
 
 CLAUDE.md
-node_modules
-node_modules
+
+tasks/
