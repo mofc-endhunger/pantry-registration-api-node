@@ -9,7 +9,7 @@ export class Credential {
   @Column({ type: 'bigint', nullable: true })
   user_id!: number;
 
-  @Column()
+  @Column({ nullable: true })
   token!: string;
 
   @Column({ nullable: true })
@@ -18,13 +18,13 @@ export class Credential {
   @Column({ nullable: true })
   expires!: boolean;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'datetime', nullable: true })
   expires_at!: Date;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn()
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn()
   updated_at!: Date;
 
   @ManyToOne(() => User)

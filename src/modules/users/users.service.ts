@@ -13,7 +13,12 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const user = this.userRepository.create(createUserDto);
+    const now = new Date();
+    const user = this.userRepository.create({
+      ...createUserDto,
+      created_at: now,
+      updated_at: now,
+    });
     return this.userRepository.save(user);
   }
 
@@ -30,7 +35,9 @@ export class UsersService {
   }
 
   async update(id: number, updateUserDto: UpdateUserDto): Promise<User> {
-    await this.userRepository.update(id, updateUserDto);
-    return this.findById(id);
+  const now = new Date();
+  let user = await this.findById(id);
+  Object.assign(user, updateUserDto, { updated_at: now });
+  return this.userRepository.save(user);
   }
 }

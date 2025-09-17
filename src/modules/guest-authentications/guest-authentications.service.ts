@@ -5,12 +5,14 @@ import { CreateGuestAuthenticationDto } from './dto/create-guest-authentication.
 import { User } from '../../entities/user.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { randomBytes } from 'crypto';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class GuestAuthenticationsService {
   constructor(
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
+    private readonly jwtService: JwtService,
   ) {}
 
   async createGuest(createGuestDto: CreateGuestAuthenticationDto) {
@@ -28,17 +30,26 @@ export class GuestAuthenticationsService {
     });
     await this.userRepo.save(user);
 
-    // Create authentication token (random 32 chars)
-    const token = randomBytes(16).toString('hex');
+    // Create authentication token (random 32 chars, legacy)
+    const legacyToken = randomBytes(16).toString('hex');
     const expires_at = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000); // 14 days
     const authentication = this.authRepo.create({
       user_id: user.id,
-      token,
+      token: legacyToken,
       expires_at,
       user,
     });
     await this.authRepo.save(authentication);
 
-    return authentication;
+    // Create JWT for guest user
+    const payload = { sub: user.id, email: user.email };
+    const jwt = this.jwtService.sign(payload);
+
+    // Return compatibility fields expected by legacy tests
+    return {
+      token: jwt,
+      expires_at,
+      user_id: user.id,
+    };
   }
 }
