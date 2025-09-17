@@ -12,10 +12,10 @@ export class PasswordResetToken {
   @Column({ unique: true })
   token!: string;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamp' })
   expires_at!: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 
   @ManyToOne(() => User)

@@ -1,20 +1,9 @@
-import * as dns from 'dns';
-dns.setServers(['8.8.8.8', '1.1.1.1']);
-console.log('[main.ts] process.cwd():', process.cwd());
-import * as dotenv from 'dotenv';
-dotenv.config();
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
-
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  // Enable CORS for frontend integration
-  app.enableCors({
-    origin: 'http://localhost:3001',
-    credentials: true,
-  });
 
   // Log DB_DATABASE from ConfigService after config is loaded
   const configService = app.get(require('@nestjs/config').ConfigService);
@@ -25,13 +14,6 @@ async function bootstrap() {
     .setTitle('Pantry Registration API')
     .setDescription('API documentation for Pantry Registration')
     .setVersion('1.0')
-    .addBearerAuth({
-      type: 'http',
-      scheme: 'bearer',
-      bearerFormat: 'JWT',
-      name: 'Authorization',
-      in: 'header',
-    }, 'JWT')
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);

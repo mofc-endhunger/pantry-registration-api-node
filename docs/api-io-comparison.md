@@ -13,7 +13,7 @@ This document compares the endpoints, input, output, and business logic between 
 | **/api/user** (PATCH/PUT)        | **Input:** { "user": { ...fields... } }<br>**Output:** User object or errors                              | **Input:** { ...fields... }<br>**Output:** User object or errors                                          |
 | **/api/guest_authentications**   | **POST**<br>**Input:** None<br>**Output:** { "id", "user_id", "token", ... }                              | **POST**<br>**Input:** { "phone"?, "email"? }<br>**Output:** Guest auth object (token, user_id, etc.)     |
 | **/auth_callbacks/facebook**     | **POST**<br>**Input:** { "userID", "graphDomain", "accessToken" }<br>**Output:** Auth object or {} (401)  | **POST**<br>**Input:** { "userID", "graphDomain", "accessToken" }<br>**Output:** Auth object (token, etc.)|
-| **/api/households** (GET/POST)   | **GET:** `/households/:id`<br>**Output:** Household object<br>**POST:** { "household": { ... } }          | **GET:** `/households/:id`, `/households` (mine)<br>**POST:** `/households`<br>**Members:** `/households/:id/members` (GET/POST/PATCH/DELETE) |
+| **/api/households** (GET/POST)   | **GET:** `/households/:id`<br>**Output:** Household object<br>**POST:** { "household": { ... } }          | _(Not yet implemented in new system)_                                                                     |
 | **/auth/login**                  | _(Not explicit in legacy)_                                                                                | **POST**<br>**Input:** { "email", "password" }<br>**Output:** { "access_token": "..." }                   |
 | **/auth/register**               | _(Not explicit in legacy)_                                                                                | **POST**<br>**Input:** { "email", "password", "user_type" }<br>**Output:** User object                    |
 | **/auth/request-password-reset** | _(Not explicit in legacy)_                                                                                | **POST**<br>**Input:** { "email" }<br>**Output:** { "message": "..." }                                    |
@@ -138,5 +138,5 @@ This document compares the endpoints, input, output, and business logic between 
 
 ## Gaps & Enhancements
 - New system covers all legacy flows and adds modern authentication features.
-- Households endpoints implemented; counts derived from active member DOB.
-- Audit trail added for household/member changes.
+- Some endpoints (e.g., households) are not yet implemented in the new system.
+- All new endpoints and IO are documented above for team review.

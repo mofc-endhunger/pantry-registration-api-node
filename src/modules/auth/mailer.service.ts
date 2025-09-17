@@ -6,19 +6,15 @@ export class MailerService {
   private transporter;
 
   constructor() {
-    if (process.env.NODE_ENV === 'test') {
-      this.transporter = nodemailer.createTransport({ jsonTransport: true });
-    } else {
-      this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.example.com',
-        port: +(process.env.SMTP_PORT || 587),
-        secure: false,
-        auth: {
-          user: process.env.SMTP_USER || 'user@example.com',
-          pass: process.env.SMTP_PASS || 'password',
-        },
-      });
-    }
+    this.transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.example.com',
+      port: +(process.env.SMTP_PORT || 587),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER || 'user@example.com',
+        pass: process.env.SMTP_PASS || 'password',
+      },
+    });
   }
 
   async sendResetEmail(to: string, token: string) {
