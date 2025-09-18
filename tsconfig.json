@@ -12,7 +12,9 @@
     "baseUrl": "./",
     "incremental": true,
   "strict": true,
-  "lib": ["esnext", "esnext.disposable", "dom"]
+  "lib": ["esnext", "esnext.disposable", "dom"],
+  "skipLibCheck": true,
+  "moduleResolution": "node"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

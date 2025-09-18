@@ -41,7 +41,7 @@ import { AuthCallbacksModule } from './modules/auth-callbacks/auth-callbacks.mod
           password: configService.get<string>('DB_PASSWORD'),
           database: configService.get<string>('DB_DATABASE'),
           entities: [User, UserDetail, Authentication, Identity, Credential, PasswordResetToken, Household, HouseholdMember, HouseholdMemberAudit],
-          synchronize: false,
+          synchronize: (configService.get<string>('DB_SYNC') === 'true'),
           autoLoadEntities: true,
         };
       },

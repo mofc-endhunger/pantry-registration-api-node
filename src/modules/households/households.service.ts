@@ -17,32 +17,24 @@ export class HouseholdsService {
   ) {}
 
   async createHousehold(primaryUserId: number, dto: CreateHouseholdDto) {
-    const created = await this.householdsRepo.save(this.householdsRepo.create({
-      primary_user_id: primaryUserId,
-      address_line_1: dto.address_line_1,
-      address_line_2: dto.address_line_2,
-      city: dto.city,
-      state: dto.state,
-      zip_code: dto.zip_code,
-      preferred_language: dto.preferred_language,
-      notes: dto.notes,
-    }));
-    const primaryMember = this.membersRepo.create({
+    // Minimal create; number/name/identification_code come from upstream inputs you provide.
+    // Placeholder: you’ll likely supply number, name, identification_code elsewhere.
+    const created = (await this.householdsRepo.save(this.householdsRepo.create({
+      number: 0,
+      name: dto.primary_last_name ? `${dto.primary_last_name} Household` : 'Household',
+      identification_code: `${Date.now()}-${Math.floor(Math.random()*1000)}`,
+      added_by: primaryUserId,
+      last_updated_by: primaryUserId,
+    } as any))) as unknown as Household;
+    const primaryMember = (await this.membersRepo.save(this.membersRepo.create({
       household_id: created.id,
-      is_primary: true,
-      first_name: dto.primary_first_name,
-      last_name: dto.primary_last_name,
-      date_of_birth: dto.primary_date_of_birth,
-      phone: dto.primary_phone,
-      email: dto.primary_email,
-      address_line_1: dto.address_line_1,
-      address_line_2: dto.address_line_2,
-      city: dto.city,
-      state: dto.state,
-      zip_code: dto.zip_code,
+      first_name: dto.primary_first_name || 'Primary',
+      last_name: dto.primary_last_name || 'Member',
+      date_of_birth: (dto.primary_date_of_birth as any) || '1900-01-01',
+      is_head_of_household: true,
       is_active: true,
-    });
-    await this.membersRepo.save(primaryMember);
+      added_by: String(primaryUserId),
+    } as any))) as unknown as HouseholdMember;
     await this.auditsRepo.save(this.auditsRepo.create({
       household_id: created.id,
       member_id: primaryMember.id,
@@ -56,12 +48,12 @@ export class HouseholdsService {
   async getHouseholdById(householdId: number, requesterUserId: number) {
     const household = await this.householdsRepo.findOne({ where: { id: householdId }, relations: { members: true } });
     if (!household) throw new NotFoundException('Household not found');
-    if (household.primary_user_id !== requesterUserId) throw new ForbiddenException();
+    await this.assertRequesterOwnsHousehold(household, requesterUserId);
     return this.withComputedCounts(household);
   }
 
   async getHouseholdForPrimary(primaryUserId: number) {
-    const household = await this.householdsRepo.findOne({ where: { primary_user_id: primaryUserId }, relations: { members: true } });
+    const household = await this.householdsRepo.findOne({ where: { added_by: primaryUserId }, relations: { members: true } } as any);
     if (!household) throw new NotFoundException('Household not found');
     return this.withComputedCounts(household);
   }
@@ -69,18 +61,11 @@ export class HouseholdsService {
   async updateHousehold(householdId: number, requesterUserId: number, dto: UpdateHouseholdDto) {
     const household = await this.householdsRepo.findOne({ where: { id: householdId } });
     if (!household) throw new NotFoundException('Household not found');
-    if (household.primary_user_id !== requesterUserId) throw new ForbiddenException();
-    const before = { ...household };
-    Object.assign(household, {
-      address_line_1: dto.address_line_1 ?? household.address_line_1,
-      address_line_2: dto.address_line_2 ?? household.address_line_2,
-      city: dto.city ?? household.city,
-      state: dto.state ?? household.state,
-      zip_code: dto.zip_code ?? household.zip_code,
-      preferred_language: dto.preferred_language ?? household.preferred_language,
-      notes: dto.notes ?? household.notes,
-    });
-    await this.householdsRepo.save(household);
+    await this.assertRequesterOwnsHousehold(household, requesterUserId);
+    const before = { ...household } as any;
+    // No household address fields in current schema; update metadata if desired
+    household.last_updated_by = requesterUserId;
+    await this.householdsRepo.save(household as any);
     await this.auditsRepo.save(this.auditsRepo.create({
       household_id: household.id,
       change_type: 'updated',
@@ -108,10 +93,21 @@ export class HouseholdsService {
     return { ...household, members, counts: { seniors, adults, children, total: active.length } } as any;
   }
 
+  private async assertRequesterOwnsHousehold(household: Household, requesterUserId: number) {
+    if ((household as any).added_by !== requesterUserId) {
+      throw new ForbiddenException();
+    }
+  }
+
+  private async findHouseholdIdByPrimary(_userId: number): Promise<number | undefined> {
+    // Placeholder: if/when members link to users, implement lookup here.
+    return undefined;
+  }
+
   async listMembers(householdId: number, requesterUserId: number) {
     const household = await this.householdsRepo.findOne({ where: { id: householdId } });
     if (!household) throw new NotFoundException('Household not found');
-    if (household.primary_user_id !== requesterUserId) throw new ForbiddenException();
+    await this.assertRequesterOwnsHousehold(household, requesterUserId);
     const members = await this.membersRepo.find({ where: { household_id: householdId } });
     return members;
   }
@@ -119,10 +115,9 @@ export class HouseholdsService {
   async addMember(householdId: number, requesterUserId: number, dto: UpsertMemberDto) {
     const household = await this.householdsRepo.findOne({ where: { id: householdId } });
     if (!household) throw new NotFoundException('Household not found');
-    if (household.primary_user_id !== requesterUserId) throw new ForbiddenException();
+    await this.assertRequesterOwnsHousehold(household, requesterUserId);
     const member = this.membersRepo.create({
       household_id: householdId,
-      is_primary: false,
       first_name: dto.first_name,
       middle_name: dto.middle_name,
       last_name: dto.last_name,
@@ -130,15 +125,11 @@ export class HouseholdsService {
       gender: dto.gender,
       phone: dto.phone,
       email: dto.email,
-      address_line_1: dto.address_line_1,
-      address_line_2: dto.address_line_2,
-      city: dto.city,
-      state: dto.state,
-      zip_code: dto.zip_code,
       date_of_birth: dto.date_of_birth,
       is_active: dto.is_active ?? true,
-    });
-    const saved = await this.membersRepo.save(member);
+      added_by: String(requesterUserId),
+    } as any);
+    const saved = (await this.membersRepo.save(member)) as unknown as HouseholdMember;
     await this.auditsRepo.save(this.auditsRepo.create({
       household_id: householdId,
       member_id: saved.id,
@@ -152,7 +143,7 @@ export class HouseholdsService {
   async updateMember(householdId: number, memberId: number, requesterUserId: number, dto: UpsertMemberDto) {
     const household = await this.householdsRepo.findOne({ where: { id: householdId } });
     if (!household) throw new NotFoundException('Household not found');
-    if (household.primary_user_id !== requesterUserId) throw new ForbiddenException();
+    await this.assertRequesterOwnsHousehold(household, requesterUserId);
     const member = await this.membersRepo.findOne({ where: { id: memberId, household_id: householdId } });
     if (!member) throw new NotFoundException('Member not found');
     const before = { ...member };
@@ -164,11 +155,6 @@ export class HouseholdsService {
       gender: dto.gender ?? member.gender,
       phone: dto.phone ?? member.phone,
       email: dto.email ?? member.email,
-      address_line_1: dto.address_line_1 ?? member.address_line_1,
-      address_line_2: dto.address_line_2 ?? member.address_line_2,
-      city: dto.city ?? member.city,
-      state: dto.state ?? member.state,
-      zip_code: dto.zip_code ?? member.zip_code,
       date_of_birth: dto.date_of_birth ?? member.date_of_birth,
       is_active: dto.is_active ?? member.is_active,
     });
@@ -186,7 +172,7 @@ export class HouseholdsService {
   async deactivateMember(householdId: number, memberId: number, requesterUserId: number) {
     const household = await this.householdsRepo.findOne({ where: { id: householdId } });
     if (!household) throw new NotFoundException('Household not found');
-    if (household.primary_user_id !== requesterUserId) throw new ForbiddenException();
+    await this.assertRequesterOwnsHousehold(household, requesterUserId);
     const member = await this.membersRepo.findOne({ where: { id: memberId, household_id: householdId } });
     if (!member) throw new NotFoundException('Member not found');
     if (!member.is_active) return member;

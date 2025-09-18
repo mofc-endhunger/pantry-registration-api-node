@@ -32,9 +32,14 @@ async function bootstrap() {
       name: 'Authorization',
       in: 'header',
     }, 'JWT')
+    .addSecurityRequirements('JWT')
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  });
 
   await app.listen(3000);
 }

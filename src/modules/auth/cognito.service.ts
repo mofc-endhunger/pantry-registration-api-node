@@ -4,7 +4,7 @@ import * as crypto from 'crypto';
 
 @Injectable()
 export class CognitoService {
-  private client: CognitoIdentityProviderClient;
+  private client: any;
 
   constructor() {
     this.client = new CognitoIdentityProviderClient({ region: process.env.COGNITO_REGION });

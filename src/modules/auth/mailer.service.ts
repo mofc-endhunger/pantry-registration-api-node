@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 
 @Injectable()
 export class MailerService {
-  private transporter;
+  private transporter: Transporter;
 
   constructor() {
     if (process.env.NODE_ENV === 'test') {

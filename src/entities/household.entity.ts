@@ -1,39 +1,31 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 import { HouseholdMember } from './household-member.entity';
-import { User } from './user.entity';
 
 @Entity('households')
 export class Household {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column({ type: 'bigint', nullable: true })
-  primary_user_id?: number;
+  @Column({ type: 'int' })
+  number!: number;
 
-  @ManyToOne(() => User, { nullable: true })
-  @JoinColumn({ name: 'primary_user_id' })
-  primary_user?: User;
+  @Column({ type: 'varchar', length: 255 })
+  name!: string;
 
-  @Column({ nullable: true })
-  address_line_1?: string;
+  @Column({ type: 'varchar', length: 255, unique: true })
+  identification_code!: string;
 
-  @Column({ nullable: true })
-  address_line_2?: string;
+  @Column({ type: 'int' })
+  added_by!: number;
 
-  @Column({ nullable: true })
-  city?: string;
+  @Column({ type: 'int' })
+  last_updated_by!: number;
 
-  @Column({ nullable: true })
-  state?: string;
+  @Column({ type: 'int', nullable: true })
+  deleted_by?: number | null;
 
-  @Column({ nullable: true })
-  zip_code?: string;
-
-  @Column({ nullable: true })
-  preferred_language?: string;
-
-  @Column({ nullable: true })
-  notes?: string;
+  @Column({ type: 'datetime', nullable: true })
+  deleted_on?: Date | null;
 
   @OneToMany(() => HouseholdMember, (member) => member.household)
   members!: HouseholdMember[];
