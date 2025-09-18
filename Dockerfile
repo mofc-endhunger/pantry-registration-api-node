@@ -10,7 +10,7 @@ COPY package*.json ./
 FROM base AS development
 
 # Install all dependencies (including devDependencies)
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 # Copy application code
 COPY . .
@@ -25,7 +25,7 @@ CMD ["npm", "run", "start:dev"]
 FROM base AS builder
 
 # Install all dependencies (needed for build)
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 # Copy application code
 COPY . .
@@ -49,7 +49,7 @@ RUN addgroup -g 1001 -S nodejs && \
 COPY package*.json ./
 
 # Install only production dependencies (skip prepare script for husky)
-RUN npm ci --omit=dev --ignore-scripts && \
+RUN npm install --omit=dev --ignore-scripts --legacy-peer-deps && \
     npm cache clean --force
 
 # Copy built application from builder stage
