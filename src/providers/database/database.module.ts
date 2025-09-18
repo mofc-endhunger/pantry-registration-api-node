@@ -1,24 +1,31 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import databaseConfig from '../../config/database.config';
 import * as entities from '../../entities';
 
 @Module({
   imports: [
-  // ConfigModule.forRoot({ isGlobal: true }) should only be called in app.module.ts
+    // Load env-based config
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [databaseConfig],
+    }),
+
+    // Register DB connection dynamically
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'mysql',
-        host: configService.get<string>('DB_HOST'),
-        port: Number(configService.get<string>('DB_PORT')),
-        username: configService.get<string>('DB_USERNAME'),
-        password: configService.get<string>('DB_PASSWORD'),
-        database: configService.get<string>('DB_DATABASE'),
-        entities: Object.values(entities),
-        synchronize: false,
-        autoLoadEntities: true,
+        host: configService.get<string>('database.host'),
+        port: configService.get<number>('database.port'),
+        username: configService.get<string>('database.username'),
+        password: configService.get<string>('database.password'),
+        database: configService.get<string>('database.database'),
+        entities: Object.values(entities), // Explicitly register all entities
+        synchronize: false, // NEVER enable - will modify database schema!
+        logging: process.env.NODE_ENV === 'development', // Only log in development
       }),
     }),
   ],

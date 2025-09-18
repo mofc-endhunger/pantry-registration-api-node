@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
 describe('AuthController (e2e)', () => {
@@ -25,7 +25,7 @@ describe('AuthController (e2e)', () => {
       .send({
         email: 'testuser@example.com',
         password: 'TestPassword123',
-        phone: '5551234567'
+        phone: '5551234567',
       })
       .expect(201);
     expect(res.body).toHaveProperty('id');
@@ -33,31 +33,27 @@ describe('AuthController (e2e)', () => {
   });
 
   it('/auth/login (POST) logs in a user', async () => {
-    await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({
-        email: 'loginuser@example.com',
-        password: 'TestPassword123',
-        phone: '5551234567'
-      });
+    await request(app.getHttpServer()).post('/auth/register').send({
+      email: 'loginuser@example.com',
+      password: 'TestPassword123',
+      phone: '5551234567',
+    });
     const res = await request(app.getHttpServer())
       .post('/auth/login')
       .send({
         email: 'loginuser@example.com',
-        password: 'TestPassword123'
+        password: 'TestPassword123',
       })
       .expect(201);
     expect(res.body).toHaveProperty('access_token');
   });
 
   it('/auth/request-password-reset (POST) requests a password reset', async () => {
-    await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({
-        email: 'resetuser@example.com',
-        password: 'TestPassword123',
-        phone: '5551234567'
-      });
+    await request(app.getHttpServer()).post('/auth/register').send({
+      email: 'resetuser@example.com',
+      password: 'TestPassword123',
+      phone: '5551234567',
+    });
     const res = await request(app.getHttpServer())
       .post('/auth/request-password-reset')
       .send({ email: 'resetuser@example.com' })
