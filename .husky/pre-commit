@@ -1,0 +1,7 @@
+# Run lint-staged for staged files
+npx lint-staged
+
+# Run tests to ensure everything still works
+npm test
+
+echo "✅ All pre-commit checks passed!"
