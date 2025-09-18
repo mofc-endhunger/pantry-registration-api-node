@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
       target: development
-    container_name: pantry-registration-api-node
+    container_name: pantry-registration-api
     ports:
       - "3000:3000"
     environment:
