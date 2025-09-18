@@ -126,6 +126,7 @@ export class HouseholdsService {
       phone: dto.phone,
       email: dto.email,
       date_of_birth: dto.date_of_birth,
+      is_head_of_household: dto.is_head_of_household ?? false,
       is_active: dto.is_active ?? true,
       added_by: String(requesterUserId),
     } as any);
@@ -156,6 +157,7 @@ export class HouseholdsService {
       phone: dto.phone ?? member.phone,
       email: dto.email ?? member.email,
       date_of_birth: dto.date_of_birth ?? member.date_of_birth,
+      is_head_of_household: dto.is_head_of_household ?? member.is_head_of_household,
       is_active: dto.is_active ?? member.is_active,
     });
     const saved = await this.membersRepo.save(member);
