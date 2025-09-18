@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
 describe('AuthCallbacksController (e2e)', () => {
@@ -25,7 +25,7 @@ describe('AuthCallbacksController (e2e)', () => {
       .send({
         userID: 'fb_test_user_1',
         graphDomain: 'facebook',
-        accessToken: 'fake_token_123'
+        accessToken: 'fake_token_123',
       })
       .expect(201);
     expect(res.body).toHaveProperty('token');
