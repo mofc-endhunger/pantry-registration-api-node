@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
-import { HouseholdMemberAudit } from '../../entities/household-member-audit.entity';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
 import { UpsertMemberDto } from './dto/upsert-member.dto';
@@ -13,7 +12,6 @@ export class HouseholdsService {
   constructor(
     @InjectRepository(Household) private readonly householdsRepo: Repository<Household>,
     @InjectRepository(HouseholdMember) private readonly membersRepo: Repository<HouseholdMember>,
-    @InjectRepository(HouseholdMemberAudit) private readonly auditsRepo: Repository<HouseholdMemberAudit>,
   ) {}
 
   async createHousehold(primaryUserId: number, dto: CreateHouseholdDto) {
@@ -35,13 +33,6 @@ export class HouseholdsService {
       is_active: true,
       added_by: String(primaryUserId),
     } as any))) as unknown as HouseholdMember;
-    await this.auditsRepo.save(this.auditsRepo.create({
-      household_id: created.id,
-      member_id: primaryMember.id,
-      change_type: 'created',
-      changed_by_user_id: primaryUserId,
-      changes: { after: { household: created, primary_member: primaryMember } },
-    }));
     return this.getHouseholdById(created.id, primaryUserId);
   }
 
@@ -62,16 +53,9 @@ export class HouseholdsService {
     const household = await this.householdsRepo.findOne({ where: { id: householdId } });
     if (!household) throw new NotFoundException('Household not found');
     await this.assertRequesterOwnsHousehold(household, requesterUserId);
-    const before = { ...household } as any;
     // No household address fields in current schema; update metadata if desired
     household.last_updated_by = requesterUserId;
     await this.householdsRepo.save(household as any);
-    await this.auditsRepo.save(this.auditsRepo.create({
-      household_id: household.id,
-      change_type: 'updated',
-      changed_by_user_id: requesterUserId,
-      changes: { before, after: household },
-    }));
     return this.getHouseholdById(household.id, requesterUserId);
   }
 
@@ -129,15 +113,7 @@ export class HouseholdsService {
       is_active: dto.is_active ?? true,
       added_by: String(requesterUserId),
     } as any);
-    const saved = (await this.membersRepo.save(member)) as unknown as HouseholdMember;
-    await this.auditsRepo.save(this.auditsRepo.create({
-      household_id: householdId,
-      member_id: saved.id,
-      change_type: 'created',
-      changed_by_user_id: requesterUserId,
-      changes: { after: saved },
-    }));
-    return saved;
+    return (await this.membersRepo.save(member)) as unknown as HouseholdMember;
   }
 
   async updateMember(householdId: number, memberId: number, requesterUserId: number, dto: UpsertMemberDto) {
@@ -146,7 +122,6 @@ export class HouseholdsService {
     await this.assertRequesterOwnsHousehold(household, requesterUserId);
     const member = await this.membersRepo.findOne({ where: { id: memberId, household_id: householdId } });
     if (!member) throw new NotFoundException('Member not found');
-    const before = { ...member };
     Object.assign(member, {
       first_name: dto.first_name ?? member.first_name,
       middle_name: dto.middle_name ?? member.middle_name,
@@ -158,15 +133,7 @@ export class HouseholdsService {
       is_head_of_household: dto.is_head_of_household ?? member.is_head_of_household,
       is_active: dto.is_active ?? member.is_active,
     });
-    const saved = await this.membersRepo.save(member);
-    await this.auditsRepo.save(this.auditsRepo.create({
-      household_id: householdId,
-      member_id: saved.id,
-      change_type: 'updated',
-      changed_by_user_id: requesterUserId,
-      changes: { before, after: saved },
-    }));
-    return saved;
+    return await this.membersRepo.save(member);
   }
 
   async deactivateMember(householdId: number, memberId: number, requesterUserId: number) {
@@ -177,15 +144,7 @@ export class HouseholdsService {
     if (!member) throw new NotFoundException('Member not found');
     if (!member.is_active) return member;
     member.is_active = false;
-    const saved = await this.membersRepo.save(member);
-    await this.auditsRepo.save(this.auditsRepo.create({
-      household_id: householdId,
-      member_id: memberId,
-      change_type: 'deactivated',
-      changed_by_user_id: requesterUserId,
-      changes: { before: { is_active: true }, after: { is_active: false } },
-    }));
-    return saved;
+    return await this.membersRepo.save(member);
   }
 }
 
