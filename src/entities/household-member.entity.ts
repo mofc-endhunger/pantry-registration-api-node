@@ -28,32 +28,7 @@ export class HouseholdMember {
   @Column({ type: 'varchar', length: 255 })
   last_name!: string;
 
-  @Column({ nullable: true })
-  suffix?: string;
-
-  @Column({ nullable: true })
-  gender?: string;
-
-  @Column({ nullable: true })
-  phone?: string;
-
-  @Column({ nullable: true })
-  email?: string;
-
-  @Column({ nullable: true })
-  address_line_1?: string;
-
-  @Column({ nullable: true })
-  address_line_2?: string;
-
-  @Column({ nullable: true })
-  city?: string;
-
-  @Column({ nullable: true })
-  state?: string;
-
-  @Column({ nullable: true })
-  zip_code?: string;
+  // Note: phone/email are not present in the current MySQL schema
 
   @Column({ type: 'date' })
   date_of_birth!: string;
