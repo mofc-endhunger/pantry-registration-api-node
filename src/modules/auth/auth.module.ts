@@ -7,8 +7,6 @@ import { JwtStrategy } from './jwt.strategy';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { jwtConstants } from './constants';
 import { MailerService } from './mailer.service';
-import { CognitoService } from './cognito.service';
-import { CognitoController } from './cognito.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../../entities/user.entity';
 import { PasswordResetToken } from '../../entities/password-reset-token.entity';
@@ -22,10 +20,10 @@ import { Credential } from '../../entities/credential.entity';
       secret: jwtConstants.secret,
       signOptions: { expiresIn: jwtConstants.expiresIn },
     }),
-  TypeOrmModule.forFeature([User, PasswordResetToken, Authentication, Credential]),
+    TypeOrmModule.forFeature([User, PasswordResetToken, Authentication, Credential]),
   ],
-  controllers: [AuthController, CognitoController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, MailerService, CognitoService],
+  controllers: [AuthController],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, MailerService],
   exports: [JwtAuthGuard],
 })
 export class AuthModule {}

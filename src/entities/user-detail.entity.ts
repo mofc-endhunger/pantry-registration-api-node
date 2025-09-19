@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { User } from './user.entity';
 
 @Entity('user_details')
@@ -36,10 +43,10 @@ export class UserDetail {
   @Column({ nullable: true })
   urls!: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 
   @ManyToOne(() => User, (user) => user.user_detail)

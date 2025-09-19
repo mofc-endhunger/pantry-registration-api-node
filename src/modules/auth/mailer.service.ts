@@ -7,19 +7,15 @@ export class MailerService {
   private transporter: Transporter;
 
   constructor() {
-    if (process.env.NODE_ENV === 'test') {
-      this.transporter = nodemailer.createTransport({ jsonTransport: true });
-    } else {
-      this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.example.com',
-        port: +(process.env.SMTP_PORT || 587),
-        secure: false,
-        auth: {
-          user: process.env.SMTP_USER || 'user@example.com',
-          pass: process.env.SMTP_PASS || 'password',
-        },
-      });
-    }
+    this.transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.example.com',
+      port: +(process.env.SMTP_PORT || 587),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER || 'user@example.com',
+        pass: process.env.SMTP_PASS || 'password',
+      },
+    });
   }
 
   async sendResetEmail(to: string, token: string) {
@@ -29,7 +25,7 @@ export class MailerService {
       to,
       subject: 'Password Reset Request',
       text: `You requested a password reset. Click the link to reset your password: ${resetUrl}`,
-      html: `<p>You requested a password reset.</p><p><a href="${resetUrl}">Reset your password</a></p>`
+      html: `<p>You requested a password reset.</p><p><a href="${resetUrl}">Reset your password</a></p>`,
     });
   }
 }

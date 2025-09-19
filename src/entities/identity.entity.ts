@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
+  JoinColumn,
+} from 'typeorm';
 import { User } from './user.entity';
 
 @Entity('identities')
@@ -18,10 +26,10 @@ export class Identity {
   @Column()
   auth_hash!: string;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 
   @ManyToOne(() => User, (user) => user.identities)

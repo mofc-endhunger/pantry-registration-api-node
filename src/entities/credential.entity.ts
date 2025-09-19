@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
+  JoinColumn,
+} from 'typeorm';
 import { User } from './user.entity';
 
 @Entity('credentials')
@@ -9,7 +17,7 @@ export class Credential {
   @Column({ type: 'bigint', nullable: true })
   user_id!: number;
 
-  @Column({ nullable: true })
+  @Column()
   token!: string;
 
   @Column({ nullable: true })
@@ -18,13 +26,13 @@ export class Credential {
   @Column({ nullable: true })
   expires!: boolean;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   expires_at!: Date;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 
   @ManyToOne(() => User)
