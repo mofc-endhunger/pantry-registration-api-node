@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, OneToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  OneToMany,
+  OneToOne,
+  JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { UserDetail } from './user-detail.entity';
 import { Authentication } from './authentication.entity';
 import { Identity } from './identity.entity';
@@ -11,7 +20,6 @@ export class User {
   @Column({ unique: true })
   identification_code!: string;
 
-
   @Column({ unique: true, nullable: true })
   email!: string;
 
@@ -20,7 +28,6 @@ export class User {
 
   @Column({ nullable: true })
   credential_id!: number;
-
 
   @Column({ type: 'enum', enum: ['guest', 'customer'] })
   user_type!: 'guest' | 'customer';

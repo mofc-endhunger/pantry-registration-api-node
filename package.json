@@ -17,6 +17,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.883.0",
     "@nestjs/common": "^11.1.6",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.6",
