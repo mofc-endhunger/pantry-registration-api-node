@@ -20,9 +20,7 @@ async function bootstrap() {
   });
 
   // Set global API prefix
-  app.setGlobalPrefix('api', {
-    exclude: ['docs'], // Exclude health checks and Swagger docs from prefix
-  });
+  app.setGlobalPrefix('api');
 
   // Enable global validation for all DTOs
   app.useGlobalPipes(
@@ -58,7 +56,7 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document, {
+  SwaggerModule.setup('api/docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
       tagsSorter: 'alpha',
