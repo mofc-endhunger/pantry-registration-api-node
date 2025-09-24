@@ -119,7 +119,9 @@ export class AuthService {
     const expires_at = new Date(Date.now() + 1000 * 60 * 60); // 1 hour expiry
     await this.resetTokenRepository.save({ user_id: user.id, token, expires_at, user });
     // Send email with token
-    await this.mailerService.sendResetEmail(user.email, token);
+    if (typeof user.email === 'string') {
+      await this.mailerService.sendResetEmail(user.email, token);
+    }
     return { message: 'If the email exists, a reset link will be sent.' };
   }
 

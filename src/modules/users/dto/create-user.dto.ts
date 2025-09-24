@@ -3,10 +3,6 @@ import { IsString, IsOptional, IsBoolean, IsInt, IsDateString, IsNotEmpty } from
 export class CreateUserDto {
   @IsString()
   @IsNotEmpty()
-  user_type!: 'guest' | 'customer';
-
-  @IsString()
-  @IsNotEmpty()
   identification_code!: string;
 
   @IsString()
@@ -32,10 +28,6 @@ export class CreateUserDto {
   @IsString()
   @IsOptional()
   phone?: string;
-
-  @IsString()
-  @IsOptional()
-  email!: string;
 
   @IsString()
   @IsOptional()
