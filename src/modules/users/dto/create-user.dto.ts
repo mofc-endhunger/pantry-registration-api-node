@@ -84,4 +84,8 @@ export class CreateUserDto {
   @IsInt()
   @IsOptional()
   user_detail_id?: number;
+
+  @IsInt()
+  @IsOptional()
+  household_id?: number;
 }

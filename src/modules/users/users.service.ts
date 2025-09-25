@@ -24,7 +24,7 @@ export class UsersService {
 
   async create(
     createUserDto: CreateUserDto & { email: string; cognito_uuid: string; user_type: string },
-  ): Promise<User> {
+  ): Promise<{ user: User; household_id: number }> {
     // Assign Cognito fields and user_type safely
     const user = this.userRepository.create({
       identification_code: createUserDto.identification_code,
@@ -99,7 +99,9 @@ export class UsersService {
       await addPlaceholders(createUserDto.children_in_household, 'Child');
     }
 
-    return savedUser;
+    // Remove cognito_uuid from the returned user object
+    const { cognito_uuid, ...userWithoutCognito } = savedUser as any;
+    return { user: userWithoutCognito, household_id: householdId };
   }
 
   async findById(id: number): Promise<User> {
