@@ -29,6 +29,7 @@
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
+    "jwks-rsa": "^3.2.0",
     "mysql": "^2.18.1",
     "mysql2": "^3.14.3",
     "nodemailer": "^7.0.5",

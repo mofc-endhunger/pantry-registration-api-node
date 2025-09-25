@@ -1,19 +1,49 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { jwtConstants } from './constants';
+import jwksRsa from 'jwks-rsa';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
+    const region = process.env.COGNITO_REGION;
+    const userPoolId = process.env.COGNITO_USER_POOL_ID;
+    const clientId = process.env.COGNITO_CLIENT_ID;
+    const issuer = `https://cognito-idp.${region}.amazonaws.com/${userPoolId}`;
+    const jwksUri = `${issuer}/.well-known/jwks.json`;
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: jwtConstants.secret,
-    });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      secretOrKeyProvider: jwksRsa.passportJwtSecret({
+        cache: true,
+        rateLimit: true,
+        jwksRequestsPerMinute: 10,
+        jwksUri,
+      }) as unknown as any,
+      issuer,
+      algorithms: ['RS256'],
+    } as unknown as any);
   }
 
-  validate(payload: { sub: string; email: string }): { userId: string; email: string } {
-    return { userId: payload.sub, email: payload.email };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  validate(payload: any) {
+    const clientId = process.env.COGNITO_CLIENT_ID;
+    const tokenUse = payload.token_use;
+    // For access tokens, Cognito sets client_id (no aud). For id tokens, use aud.
+    if (tokenUse === 'access') {
+      if (payload.client_id !== clientId) {
+        throw new UnauthorizedException('Invalid client for access token');
+      }
+    } else if (tokenUse === 'id') {
+      if (payload.aud !== clientId) {
+        throw new UnauthorizedException('Invalid audience for id token');
+      }
+    }
+    const id = payload.sub;
+    const email = payload.email;
+    const username = payload['cognito:username'] ?? payload.username;
+    return { id, userId: id, email, username, cognito: true };
   }
 }

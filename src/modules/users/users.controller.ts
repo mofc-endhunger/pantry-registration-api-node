@@ -36,14 +36,20 @@ export class UsersController {
     // Extract email, uuid, and user_type from JWT (req.user)
     const user = req.user as JwtUser | undefined;
     const email = user?.email ?? '';
-    const userId = user?.userId ?? '';
+    const userId = user?.userId ?? (user as any)?.id ?? '';
     const user_type = user?.user_type ?? 'registered';
     // Always use values from token, not body
-    const dto: CreateUserDto & { email: string; cognito_uuid: string; user_type: string } = {
+    const dto: CreateUserDto & {
+      email: string;
+      cognito_uuid: string;
+      user_type: string;
+      identification_code: string;
+    } = {
       ...createUserDto,
       email,
       cognito_uuid: userId,
       user_type,
+      identification_code: createUserDto.identification_code ?? userId,
     };
     return this.usersService.create(dto);
   }

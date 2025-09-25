@@ -9,6 +9,12 @@ import { UpsertMemberDto } from '../households/dto/upsert-member.dto';
 
 @Injectable()
 export class UsersService {
+  async findDbUserIdByCognitoUuid(cognitoUuid: string): Promise<number | null> {
+    const user = await this.userRepository.findOne({
+      where: { cognito_uuid: Buffer.from(cognitoUuid, 'hex') },
+    });
+    return user ? user.id : null;
+  }
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
@@ -51,8 +57,11 @@ export class UsersService {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const savedUser = (await this.userRepository.save(user)) as User;
 
+    // Always use savedUser.id for all downstream calls
+    const userId = savedUser.id;
+
     // Create household and add user as head_of_household
-    const household = await this.householdsService.createHousehold(savedUser.id, {
+    const household = await this.householdsService.createHousehold(userId, {
       primary_first_name: savedUser.first_name ?? undefined,
       primary_last_name: savedUser.last_name ?? undefined,
       primary_phone: savedUser.phone ?? undefined,
@@ -77,11 +86,7 @@ export class UsersService {
           last_name: label,
           is_active: true,
         };
-        await this.householdsService.addMember(
-          householdId,
-          typeof savedUser.id === 'number' ? savedUser.id : 0,
-          member,
-        );
+        await this.householdsService.addMember(householdId, userId, member);
       }
     };
     if (typeof createUserDto.seniors_in_household === 'number') {
