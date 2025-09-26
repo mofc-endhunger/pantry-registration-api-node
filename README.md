@@ -158,6 +158,7 @@ test/
 The API provides comprehensive authentication and user management endpoints:
 
 #### Authentication
+
 - `POST /auth/register` - Register new user
 - `POST /auth/login` - User login
 - `POST /auth/refresh` - Refresh JWT token
@@ -166,6 +167,7 @@ The API provides comprehensive authentication and user management endpoints:
 - `POST /auth/reset-password` - Complete password reset
 
 #### User Management
+
 - `GET /users/profile` - Get current user profile
 - `PUT /users/profile` - Update user profile
 - `GET /users/:id` - Get user by ID (admin)
@@ -173,6 +175,7 @@ The API provides comprehensive authentication and user management endpoints:
 - `DELETE /users/:id` - Delete user (admin)
 
 #### Guest Authentication
+
 - `POST /guest-auth/register` - Register as guest
 - `POST /guest-auth/convert` - Convert guest to full user
 
@@ -254,6 +257,7 @@ npm run test:e2e
 ### Test Organization
 
 Tests are organized alongside their respective modules:
+
 - Unit tests: `*.spec.ts` files next to source files
 - Integration tests: `*.integration.spec.ts`
 - E2E tests: `/test` directory
@@ -262,25 +266,25 @@ Tests are organized alongside their respective modules:
 
 ### Required Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `NODE_ENV` | Application environment | `development`, `production` |
-| `PORT` | Server port | `3000` |
-| `DB_HOST` | MySQL host | `localhost` or AWS RDS endpoint |
-| `DB_PORT` | MySQL port | `3306` |
-| `DB_USERNAME` | Database username | `admin` |
-| `DB_PASSWORD` | Database password | `secure_password` |
-| `DB_DATABASE` | Database name | `pantry_registration` |
+| Variable      | Description             | Example                         |
+| ------------- | ----------------------- | ------------------------------- |
+| `NODE_ENV`    | Application environment | `development`, `production`     |
+| `PORT`        | Server port             | `3000`                          |
+| `DB_HOST`     | MySQL host              | `localhost` or AWS RDS endpoint |
+| `DB_PORT`     | MySQL port              | `3306`                          |
+| `DB_USERNAME` | Database username       | `admin`                         |
+| `DB_PASSWORD` | Database password       | `secure_password`               |
+| `DB_DATABASE` | Database name           | `pantry_registration`           |
 
 ### Optional Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `JWT_SECRET` | Secret for JWT signing | Auto-generated |
-| `JWT_EXPIRATION` | Token expiration time | `1h` |
-| `REFRESH_TOKEN_EXPIRATION` | Refresh token expiration | `7d` |
-| `PASSWORD_RESET_EXPIRATION` | Password reset token expiration | `1h` |
-| `CORS_ORIGIN` | Allowed CORS origins | `*` |
+| Variable                    | Description                     | Default        |
+| --------------------------- | ------------------------------- | -------------- |
+| `JWT_SECRET`                | Secret for JWT signing          | Auto-generated |
+| `JWT_EXPIRATION`            | Token expiration time           | `1h`           |
+| `REFRESH_TOKEN_EXPIRATION`  | Refresh token expiration        | `7d`           |
+| `PASSWORD_RESET_EXPIRATION` | Password reset token expiration | `1h`           |
+| `CORS_ORIGIN`               | Allowed CORS origins            | `*`            |
 
 ## Troubleshooting
 
@@ -331,11 +335,13 @@ npm run start:dev
 ### AWS ECS/EKS Deployment
 
 1. Build Docker image:
+
 ```bash
 docker build -t pantry-registration-api .
 ```
 
 2. Tag and push to ECR:
+
 ```bash
 docker tag pantry-registration-api:latest <ecr-uri>:latest
 docker push <ecr-uri>:latest
@@ -363,6 +369,7 @@ The API provides health check endpoints for container orchestration:
 ### Commit Convention
 
 Follow conventional commits:
+
 - `feat:` New feature
 - `fix:` Bug fix
 - `docs:` Documentation changes
@@ -378,6 +385,7 @@ Follow conventional commits:
 ## Support
 
 For issues and questions:
+
 - Create an issue in the repository
 - Contact the development team
 - Check existing documentation and issues first

@@ -20,7 +20,7 @@ import { Credential } from '../../entities/credential.entity';
       secret: jwtConstants.secret,
       signOptions: { expiresIn: jwtConstants.expiresIn },
     }),
-  TypeOrmModule.forFeature([User, PasswordResetToken, Authentication, Credential]),
+    TypeOrmModule.forFeature([User, PasswordResetToken, Authentication, Credential]),
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtAuthGuard, MailerService],
