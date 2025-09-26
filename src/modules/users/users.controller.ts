@@ -64,7 +64,9 @@ export class UsersController {
     const dbUser = await this.usersService.findById(dbUserId);
     // Remove cognito_uuid from the returned user object
     const { cognito_uuid, ...userWithoutCognito } = dbUser as any;
-    return userWithoutCognito;
+    // Get household_id for the user
+    const householdId = await this.usersService.getHouseholdIdForUser(dbUserId);
+    return { ...userWithoutCognito, household_id: householdId };
   }
 
   @Get(':id')

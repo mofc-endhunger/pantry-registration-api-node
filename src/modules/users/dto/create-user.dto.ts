@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsBoolean, IsInt, IsDateString } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateUserDto {
   @IsString()
@@ -53,14 +54,17 @@ export class CreateUserDto {
   @IsOptional()
   license_plate?: string;
 
+  @Type(() => Number)
   @IsInt()
   @IsOptional()
   seniors_in_household?: number;
 
+  @Type(() => Number)
   @IsInt()
   @IsOptional()
   adults_in_household?: number;
 
+  @Type(() => Number)
   @IsInt()
   @IsOptional()
   children_in_household?: number;

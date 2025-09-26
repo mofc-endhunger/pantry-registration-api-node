@@ -29,6 +29,7 @@ export class HouseholdsService {
     const primaryMember = (await this.membersRepo.save(
       this.membersRepo.create({
         household_id: created.id,
+        user_id: primaryUserId, // Always set user_id for the real user
         first_name: dto.primary_first_name || 'Primary',
         last_name: dto.primary_last_name || 'Member',
         date_of_birth: (dto.primary_date_of_birth as any) || '1900-01-01',

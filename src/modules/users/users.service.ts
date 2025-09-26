@@ -9,6 +9,9 @@ import { UpsertMemberDto } from '../households/dto/upsert-member.dto';
 
 @Injectable()
 export class UsersService {
+  async getHouseholdIdForUser(userId: number): Promise<number | undefined> {
+    return this.householdsService.findHouseholdIdByUserId(userId);
+  }
   async findDbUserIdByCognitoUuid(cognitoUuid: string): Promise<number | null> {
     // Log the incoming value for debugging
     console.log('[findDbUserIdByCognitoUuid] Received cognitoUuid:', cognitoUuid);
@@ -51,11 +54,14 @@ export class UsersService {
   ): Promise<{ user: User; household_id: number }> {
     // Assign Cognito fields and user_type safely
     // Log the incoming Cognito UUID for verification
-    console.log('[UsersService.create] Raw cognito_uuid:', createUserDto.cognito_uuid);
-    const normalizedUuid = createUserDto.cognito_uuid?.replace(/-/g, '');
-    console.log('[UsersService.create] Normalized cognito_uuid:', normalizedUuid);
-    const bufferUuid = normalizedUuid ? Buffer.from(normalizedUuid, 'hex') : undefined;
-    console.log('[UsersService.create] Buffer cognito_uuid:', bufferUuid);
+    // Handle optional cognito_uuid
+    let bufferUuid: Buffer | undefined = undefined;
+    if (createUserDto.cognito_uuid && typeof createUserDto.cognito_uuid === 'string') {
+      const normalizedUuid = createUserDto.cognito_uuid.replace(/-/g, '');
+      if (/^[a-fA-F0-9]{32}$/.test(normalizedUuid)) {
+        bufferUuid = Buffer.from(normalizedUuid, 'hex');
+      }
+    }
     const user = this.userRepository.create({
       identification_code: createUserDto.identification_code,
       first_name: createUserDto.first_name,
