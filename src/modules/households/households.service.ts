@@ -101,9 +101,11 @@ export class HouseholdsService {
     }
   }
 
-  private async findHouseholdIdByPrimary(_userId: number): Promise<number | undefined> {
-    // Placeholder: if/when members link to users, implement lookup here.
-    return undefined;
+  async findHouseholdIdByUserId(userId: number): Promise<number | undefined> {
+    const member = await this.membersRepo.findOne({
+      where: { user_id: userId, is_head_of_household: true },
+    });
+    return member?.household_id ?? undefined;
   }
 
   async listMembers(householdId: number, requesterUserId: number) {

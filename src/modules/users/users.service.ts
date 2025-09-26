@@ -10,9 +10,33 @@ import { UpsertMemberDto } from '../households/dto/upsert-member.dto';
 @Injectable()
 export class UsersService {
   async findDbUserIdByCognitoUuid(cognitoUuid: string): Promise<number | null> {
+    // Log the incoming value for debugging
+    console.log('[findDbUserIdByCognitoUuid] Received cognitoUuid:', cognitoUuid);
+    if (!cognitoUuid || typeof cognitoUuid !== 'string' || cognitoUuid.trim() === '') {
+      console.error(
+        '[findDbUserIdByCognitoUuid] ERROR: cognitoUuid is empty or invalid:',
+        cognitoUuid,
+      );
+      throw new NotFoundException('Cognito UUID is missing or invalid');
+    }
+    // Remove dashes if present (standard UUID format)
+    const normalized = cognitoUuid.replace(/-/g, '');
+    if (!/^[a-fA-F0-9]{32}$/.test(normalized)) {
+      console.error(
+        '[findDbUserIdByCognitoUuid] ERROR: Normalized UUID is not 32 hex chars:',
+        normalized,
+      );
+      throw new NotFoundException('Cognito UUID format is invalid');
+    }
     const user = await this.userRepository.findOne({
-      where: { cognito_uuid: Buffer.from(cognitoUuid, 'hex') },
+      where: { cognito_uuid: Buffer.from(normalized, 'hex') },
     });
+    if (!user) {
+      console.error(
+        '[findDbUserIdByCognitoUuid] ERROR: No user found for cognito_uuid:',
+        normalized,
+      );
+    }
     return user ? user.id : null;
   }
   constructor(
@@ -26,6 +50,12 @@ export class UsersService {
     createUserDto: CreateUserDto & { email: string; cognito_uuid: string; user_type: string },
   ): Promise<{ user: User; household_id: number }> {
     // Assign Cognito fields and user_type safely
+    // Log the incoming Cognito UUID for verification
+    console.log('[UsersService.create] Raw cognito_uuid:', createUserDto.cognito_uuid);
+    const normalizedUuid = createUserDto.cognito_uuid?.replace(/-/g, '');
+    console.log('[UsersService.create] Normalized cognito_uuid:', normalizedUuid);
+    const bufferUuid = normalizedUuid ? Buffer.from(normalizedUuid, 'hex') : undefined;
+    console.log('[UsersService.create] Buffer cognito_uuid:', bufferUuid);
     const user = this.userRepository.create({
       identification_code: createUserDto.identification_code,
       first_name: createUserDto.first_name,
@@ -50,9 +80,7 @@ export class UsersService {
       user_detail_id: createUserDto.user_detail_id,
       user_type: createUserDto.user_type || 'registered',
       email: createUserDto.email,
-      cognito_uuid: createUserDto.cognito_uuid
-        ? Buffer.from(createUserDto.cognito_uuid, 'hex')
-        : undefined,
+      cognito_uuid: bufferUuid,
     });
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const savedUser = (await this.userRepository.save(user)) as User;
@@ -79,11 +107,28 @@ export class UsersService {
         : 0;
 
     // Add placeholder members if counts are set
-    const addPlaceholders = async (count: number, label: string) => {
+    const dateStringYearsAgo = (years: number): string => {
+      const d = new Date();
+      d.setFullYear(d.getFullYear() - years);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    const addPlaceholders = async (count: number, label: 'Senior' | 'Adult' | 'Child') => {
+      const dob =
+        label === 'Senior'
+          ? dateStringYearsAgo(70)
+          : label === 'Adult'
+            ? dateStringYearsAgo(30)
+            : dateStringYearsAgo(10);
       for (let i = 1; i <= count; i++) {
         const member: UpsertMemberDto = {
           first_name: `${label} ${i}`,
           last_name: label,
+          date_of_birth: dob,
+          is_head_of_household: false,
           is_active: true,
         };
         await this.householdsService.addMember(householdId, userId, member);

@@ -5,11 +5,12 @@ import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
 import { UsersService } from '../users/users.service';
 import type { Request } from 'express';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('households')
 @ApiBearerAuth('JWT-auth')
+@UseGuards(JwtAuthGuard)
 @Controller('households')
-// @UseGuards(JwtAuthGuard) // Uncomment to secure all endpoints
 export class HouseholdsController {
   constructor(
     private readonly householdsService: HouseholdsService,
@@ -21,7 +22,13 @@ export class HouseholdsController {
   @ApiResponse({ status: 201, description: 'Household created.' })
   async create(@Body() createHouseholdDto: CreateHouseholdDto, @Req() req: Request) {
     const user = req.user as any;
-    const cognitoUuid = user?.userId ?? user?.id ?? '';
+    const cognitoUuid = user?.id ?? user?.userId ?? '';
+    console.log(
+      '[HouseholdsController.create] Extracted cognitoUuid from JWT (user.id/userId):',
+      cognitoUuid,
+      'user:',
+      user,
+    );
     const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(cognitoUuid);
     if (!dbUserId) throw new Error('User not found');
     return this.householdsService.createHousehold(dbUserId, createHouseholdDto);
@@ -32,7 +39,13 @@ export class HouseholdsController {
   @ApiResponse({ status: 200, description: 'Household found.' })
   async findOne(@Param('id') id: string, @Req() req: Request) {
     const user = req.user as any;
-    const cognitoUuid = user?.userId ?? user?.id ?? '';
+    const cognitoUuid = user?.id ?? user?.userId ?? '';
+    console.log(
+      '[HouseholdsController.findOne] Extracted cognitoUuid from JWT (user.id/userId):',
+      cognitoUuid,
+      'user:',
+      user,
+    );
     const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(cognitoUuid);
     if (!dbUserId) throw new Error('User not found');
     return this.householdsService.getHouseholdById(+id, dbUserId);
@@ -47,7 +60,13 @@ export class HouseholdsController {
     @Req() req: Request,
   ) {
     const user = req.user as any;
-    const cognitoUuid = user?.userId ?? user?.id ?? '';
+    const cognitoUuid = user?.id ?? user?.userId ?? '';
+    console.log(
+      '[HouseholdsController.update] Extracted cognitoUuid from JWT (user.id/userId):',
+      cognitoUuid,
+      'user:',
+      user,
+    );
     const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(cognitoUuid);
     if (!dbUserId) throw new Error('User not found');
     return this.householdsService.updateHousehold(+id, dbUserId, updateHouseholdDto);
