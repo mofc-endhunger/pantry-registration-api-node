@@ -1,3 +1,4 @@
+// ...existing code...
 import {
   Controller,
   Get,
@@ -52,6 +53,18 @@ export class UsersController {
       identification_code: createUserDto.identification_code ?? userId,
     };
     return this.usersService.create(dto);
+  }
+
+  @Get('me')
+  async getCurrentUser(@Req() req: Request) {
+    const user = req.user as JwtUser | undefined;
+    const cognitoUuid = user?.userId ?? (user as any)?.id ?? '';
+    const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(cognitoUuid);
+    if (!dbUserId) throw new Error('User not found');
+    const dbUser = await this.usersService.findById(dbUserId);
+    // Remove cognito_uuid from the returned user object
+    const { cognito_uuid, ...userWithoutCognito } = dbUser as any;
+    return userWithoutCognito;
   }
 
   @Get(':id')
