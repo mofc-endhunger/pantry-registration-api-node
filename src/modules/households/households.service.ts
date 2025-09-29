@@ -61,12 +61,73 @@ export class HouseholdsService {
   }
 
   async updateHousehold(householdId: number, requesterUserId: number, dto: UpdateHouseholdDto) {
-    const household = await this.householdsRepo.findOne({ where: { id: householdId } });
+    const household = await this.householdsRepo.findOne({
+      where: { id: householdId },
+      relations: { members: true },
+    });
     if (!household) throw new NotFoundException('Household not found');
     await this.assertRequesterOwnsHousehold(household, requesterUserId);
-    // No household address fields in current schema; update metadata if desired
+
+    // Update household fields
+    household.number = dto.number;
+    household.name = dto.name;
+    household.identification_code = dto.identification_code;
     household.last_updated_by = requesterUserId;
+    household.deleted_by = dto.deleted_by ?? null;
+    household.deleted_on = dto.deleted_on ? new Date(dto.deleted_on) : null;
     await this.householdsRepo.save(household as any);
+
+    // Upsert members
+    if (Array.isArray(dto.members)) {
+      // Build a map of incoming member IDs
+      const incomingIds = dto.members.map((m) => m.id).filter(Boolean);
+      // Remove members not present in incoming
+      for (const member of household.members) {
+        if (!incomingIds.includes(member.id)) {
+          await this.membersRepo.remove(member);
+        }
+      }
+      // Upsert each member
+      for (const m of dto.members) {
+        let member = household.members.find((mem) => mem.id === m.id);
+        if (member) {
+          Object.assign(member, {
+            number: m.number ?? member.number,
+            first_name: m.first_name,
+            middle_name: m.middle_name,
+            last_name: m.last_name,
+            date_of_birth: m.date_of_birth,
+            is_head_of_household: !!m.is_head_of_household,
+            is_active: !!m.is_active,
+            added_by: m.added_by,
+            gender_id: m.gender_id ?? member.gender_id,
+            suffix_id: m.suffix_id ?? member.suffix_id,
+          });
+          await this.membersRepo.save(member);
+        } else {
+          // New member
+          const newMember = this.membersRepo.create({
+            household_id: householdId,
+            user_id: typeof m.user_id === 'string' ? parseInt(m.user_id, 10) : m.user_id,
+            number: m.number,
+            first_name: m.first_name,
+            middle_name: m.middle_name,
+            last_name: m.last_name,
+            date_of_birth: m.date_of_birth,
+            is_head_of_household: !!m.is_head_of_household,
+            is_active: !!m.is_active,
+            added_by: m.added_by,
+            gender_id: m.gender_id,
+            suffix_id: m.suffix_id,
+          });
+          await this.membersRepo.save(newMember);
+        }
+      }
+    }
+
+    // Counts are computed, but you could update related user/household fields if needed
+    // (No direct counts table in schema)
+
     return this.getHouseholdById(household.id, requesterUserId);
   }
 

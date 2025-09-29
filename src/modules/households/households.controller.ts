@@ -54,6 +54,49 @@ export class HouseholdsController {
   @Patch(':id')
   @ApiOperation({ summary: 'Update a household by ID' })
   @ApiResponse({ status: 200, description: 'Household updated.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Multi-table household update',
+    schema: {
+      example: {
+        id: 20,
+        number: 0,
+        name: 'Shvyrev Household',
+        identification_code: '1759153314799-801',
+        added_by: 1130520,
+        last_updated_by: 1130520,
+        deleted_by: null,
+        deleted_on: null,
+        members: [
+          {
+            id: 36,
+            household_id: 20,
+            user_id: '1130520',
+            number: null,
+            first_name: 'Alexander',
+            middle_name: null,
+            last_name: 'Shvyrev',
+            date_of_birth: '1900-01-01',
+            is_head_of_household: 1,
+            is_active: 1,
+            added_by: '1130520',
+            gender_id: null,
+            suffix_id: null,
+            created_at: null,
+            updated_at: null,
+          },
+        ],
+        created_at: null,
+        updated_at: null,
+        counts: {
+          seniors: 1,
+          adults: 1,
+          children: 0,
+          total: 1,
+        },
+      },
+    },
+  })
   async update(
     @Param('id') id: string,
     @Body() updateHouseholdDto: UpdateHouseholdDto,

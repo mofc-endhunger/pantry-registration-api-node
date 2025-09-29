@@ -9,6 +9,15 @@ import { UpsertMemberDto } from '../households/dto/upsert-member.dto';
 
 @Injectable()
 export class UsersService {
+  async softDeleteUser(userId: number): Promise<User> {
+    await this.userRepository.update(userId, { deleted_on: new Date() } as Partial<User>);
+    return this.findById(userId);
+  }
+
+  async restoreUser(userId: number): Promise<User> {
+    await this.userRepository.update(userId, { deleted_on: null } as Partial<User>);
+    return this.findById(userId);
+  }
   async getHouseholdIdForUser(userId: number): Promise<number | undefined> {
     return this.householdsService.findHouseholdIdByUserId(userId);
   }
@@ -62,33 +71,41 @@ export class UsersService {
         bufferUuid = Buffer.from(normalizedUuid, 'hex');
       }
     }
-    const user = this.userRepository.create({
-      identification_code: createUserDto.identification_code,
-      first_name: createUserDto.first_name,
-      middle_name: createUserDto.middle_name,
-      last_name: createUserDto.last_name,
-      suffix: createUserDto.suffix,
-      gender: createUserDto.gender,
-      phone: createUserDto.phone,
-      address_line_1: createUserDto.address_line_1,
-      address_line_2: createUserDto.address_line_2,
-      city: createUserDto.city,
-      state: createUserDto.state,
-      zip_code: createUserDto.zip_code,
-      license_plate: createUserDto.license_plate,
-      seniors_in_household: createUserDto.seniors_in_household,
-      adults_in_household: createUserDto.adults_in_household,
-      children_in_household: createUserDto.children_in_household,
-      permission_to_email: createUserDto.permission_to_email,
-      permission_to_text: createUserDto.permission_to_text,
-      date_of_birth: createUserDto.date_of_birth,
-      credential_id: createUserDto.credential_id,
-      user_detail_id: createUserDto.user_detail_id,
-      user_type: createUserDto.user_type || 'registered',
-      email: createUserDto.email,
-      cognito_uuid: bufferUuid,
-    });
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    // Check for existing user by cognito_uuid or identification_code
+    let existingUser: User | undefined = undefined;
+    if (bufferUuid) {
+      const found = await this.userRepository.findOne({ where: { cognito_uuid: bufferUuid } });
+      if (found) existingUser = found;
+    }
+    if (!existingUser && createUserDto.identification_code) {
+      const found = await this.userRepository.findOne({
+        where: { identification_code: createUserDto.identification_code },
+      });
+      if (found) existingUser = found;
+    }
+    if (existingUser && existingUser.deleted_on) {
+      // Restore user and update fields
+      Object.assign(existingUser, {
+        ...createUserDto,
+        cognito_uuid: bufferUuid,
+        deleted_on: null,
+      });
+      await this.userRepository.save(existingUser);
+      // Use restored user for downstream
+    } else if (existingUser) {
+      // User exists and is active, update fields
+      Object.assign(existingUser, {
+        ...createUserDto,
+        cognito_uuid: bufferUuid,
+      });
+      await this.userRepository.save(existingUser);
+    }
+    const user =
+      existingUser ??
+      this.userRepository.create({
+        ...createUserDto,
+        cognito_uuid: bufferUuid,
+      });
     const savedUser = (await this.userRepository.save(user)) as User;
 
     // Always use savedUser.id for all downstream calls

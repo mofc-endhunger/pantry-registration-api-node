@@ -30,6 +30,15 @@ interface JwtUser {
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class UsersController {
+  @Patch(':id/delete')
+  async softDelete(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.softDeleteUser(id);
+  }
+
+  @Patch(':id/restore')
+  async restore(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.restoreUser(id);
+  }
   constructor(private readonly usersService: UsersService) {}
 
   @Post()

@@ -14,6 +14,8 @@ import { Identity } from './identity.entity';
 
 @Entity('users')
 export class User {
+  @Column({ type: 'datetime', nullable: true, default: null })
+  deleted_on?: Date | null;
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: number;
 
