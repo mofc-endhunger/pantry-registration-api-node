@@ -15,7 +15,17 @@ export class UsersService {
     const householdId = await this.getHouseholdIdForUser(userId);
     if (!householdId) throw new NotFoundException('Household not found for user');
     // Use householdsService to get full household with members/counts
-    return this.householdsService.getHouseholdById(householdId, userId);
+    const household = await this.householdsService.getHouseholdById(householdId, userId);
+    // Get user for address fields
+    const user = await this.findById(userId);
+    return {
+      ...household,
+      address_line_1: user.address_line_1,
+      address_line_2: user.address_line_2,
+      city: user.city,
+      state: user.state,
+      zip_code: user.zip_code,
+    };
   }
   async softDeleteUser(userId: number): Promise<User> {
     await this.userRepository.update(userId, { deleted_on: new Date() } as Partial<User>);
@@ -199,6 +209,11 @@ export class UsersService {
       last_name: dto.members?.find((m) => m.user_id == id?.toString())?.last_name ?? undefined,
       date_of_birth:
         dto.members?.find((m) => m.user_id == id?.toString())?.date_of_birth ?? undefined,
+      address_line_1: dto.address_line_1,
+      address_line_2: dto.address_line_2,
+      city: dto.city,
+      state: dto.state,
+      zip_code: dto.zip_code,
       // Add more user fields as needed
     };
     await this.userRepository.update(id, userUpdate);
