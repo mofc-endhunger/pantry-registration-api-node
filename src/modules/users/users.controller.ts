@@ -15,7 +15,7 @@ import {
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserWithHouseholdDto } from './dto/update-user-with-household.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 import type { Request } from 'express';
@@ -70,12 +70,9 @@ export class UsersController {
     const cognitoUuid = user?.userId ?? (user as any)?.id ?? '';
     const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(cognitoUuid);
     if (!dbUserId) throw new Error('User not found');
-    const dbUser = await this.usersService.findById(dbUserId);
-    // Remove cognito_uuid from the returned user object
-    const { cognito_uuid, ...userWithoutCognito } = dbUser as any;
-    // Get household_id for the user
-    const householdId = await this.usersService.getHouseholdIdForUser(dbUserId);
-    return { ...userWithoutCognito, household_id: householdId };
+    // Get the full household template for PATCH
+    const household = await this.usersService.getHouseholdTemplateForUser(dbUserId);
+    return household;
   }
 
   @Get(':id')
@@ -89,7 +86,12 @@ export class UsersController {
   }
 
   @Patch(':id')
-  async update(@Param('id', ParseIntPipe) id: number, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(id, updateUserDto);
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateUserDto: UpdateUserWithHouseholdDto,
+    @Req() req: Request,
+  ) {
+    // Optionally, extract user info from JWT if needed
+    return this.usersService.updateUserWithHousehold(id, updateUserDto);
   }
 }

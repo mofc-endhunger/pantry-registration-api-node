@@ -2,56 +2,65 @@ import { IsInt, IsOptional, IsString, IsArray, ValidateNested, IsObject } from '
 import { Type } from 'class-transformer';
 
 export class UpdateHouseholdMemberDto {
+  @IsOptional()
   @IsInt()
-  id: number;
-
-  @IsInt()
-  household_id: number;
-
-  @IsString()
-  user_id: string;
+  id?: number | null;
 
   @IsOptional()
   @IsInt()
-  number?: number;
-
-  @IsString()
-  first_name: string;
+  household_id?: number | null;
 
   @IsOptional()
   @IsString()
-  middle_name?: string;
-
-  @IsString()
-  last_name: string;
-
-  @IsString()
-  date_of_birth: string;
-
-  @IsInt()
-  is_head_of_household: number;
-
-  @IsInt()
-  is_active: number;
-
-  @IsString()
-  added_by: string;
+  user_id?: string | null;
 
   @IsOptional()
   @IsInt()
-  gender_id?: number;
+  number?: number | null;
+
+  @IsOptional()
+  @IsString()
+  first_name?: string | null;
+
+  @IsOptional()
+  @IsString()
+  middle_name?: string | null;
+
+  @IsOptional()
+  @IsString()
+  last_name?: string | null;
+
+  @IsOptional()
+  @IsString()
+  date_of_birth?: string | null;
 
   @IsOptional()
   @IsInt()
-  suffix_id?: number;
+  is_head_of_household?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  is_active?: number | null;
 
   @IsOptional()
   @IsString()
-  created_at?: string;
+  added_by?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  gender_id?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  suffix_id?: number | null;
 
   @IsOptional()
   @IsString()
-  updated_at?: string;
+  created_at?: string | null;
+
+  @IsOptional()
+  @IsString()
+  updated_at?: string | null;
 }
 
 export class UpdateHouseholdCountsDto {

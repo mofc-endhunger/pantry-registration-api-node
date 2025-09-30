@@ -106,9 +106,7 @@ export class HouseholdsService {
           await this.membersRepo.save(member);
         } else {
           // New member
-          const newMember = this.membersRepo.create({
-            household_id: householdId,
-            user_id: typeof m.user_id === 'string' ? parseInt(m.user_id, 10) : m.user_id,
+          const newMemberData: any = {
             number: m.number,
             first_name: m.first_name,
             middle_name: m.middle_name,
@@ -119,7 +117,13 @@ export class HouseholdsService {
             added_by: m.added_by,
             gender_id: m.gender_id,
             suffix_id: m.suffix_id,
-          });
+          };
+          if (typeof householdId !== 'undefined') newMemberData.household_id = householdId;
+          if (typeof m.user_id !== 'undefined' && m.user_id !== null) {
+            newMemberData.user_id =
+              typeof m.user_id === 'string' ? parseInt(m.user_id, 10) : m.user_id;
+          }
+          const newMember = this.membersRepo.create(newMemberData);
           await this.membersRepo.save(newMember);
         }
       }

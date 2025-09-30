@@ -4,11 +4,19 @@ import { Repository } from 'typeorm';
 import { User } from '../../entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserWithHouseholdDto } from './dto/update-user-with-household.dto';
 import { HouseholdsService } from '../households/households.service';
 import { UpsertMemberDto } from '../households/dto/upsert-member.dto';
 
 @Injectable()
 export class UsersService {
+  async getHouseholdTemplateForUser(userId: number) {
+    // Find household for this user (as head or member)
+    const householdId = await this.getHouseholdIdForUser(userId);
+    if (!householdId) throw new NotFoundException('Household not found for user');
+    // Use householdsService to get full household with members/counts
+    return this.householdsService.getHouseholdById(householdId, userId);
+  }
   async softDeleteUser(userId: number): Promise<User> {
     await this.userRepository.update(userId, { deleted_on: new Date() } as Partial<User>);
     return this.findById(userId);
@@ -184,13 +192,23 @@ export class UsersService {
     return user;
   }
 
-  async update(id: number, updateUserDto: UpdateUserDto): Promise<User> {
-    // Prepare update object for repository
-    const update: Record<string, unknown> = { ...updateUserDto };
-    if (typeof updateUserDto.cognito_uuid === 'string') {
-      update.cognito_uuid = Buffer.from(updateUserDto.cognito_uuid, 'hex');
-    }
-    await this.userRepository.update(id, update);
-    return this.findById(id);
+  async updateUserWithHousehold(id: number, dto: UpdateUserWithHouseholdDto): Promise<any> {
+    // Update user fields (only those that exist on the user entity)
+    const userUpdate: Partial<User> = {
+      first_name: dto.members?.find((m) => m.user_id == id?.toString())?.first_name ?? undefined,
+      last_name: dto.members?.find((m) => m.user_id == id?.toString())?.last_name ?? undefined,
+      date_of_birth:
+        dto.members?.find((m) => m.user_id == id?.toString())?.date_of_birth ?? undefined,
+      // Add more user fields as needed
+    };
+    await this.userRepository.update(id, userUpdate);
+    // Find household for this user
+    const householdId = dto.id;
+    // Delegate to household PATCH logic
+    await this.householdsService.updateHousehold(householdId, id, dto);
+    // Return updated user and household
+    const user = await this.findById(id);
+    const household = await this.householdsService.getHouseholdById(householdId, id);
+    return { user, household };
   }
 }
