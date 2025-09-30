@@ -25,6 +25,8 @@ export class UsersService {
       city: user.city,
       state: user.state,
       zip_code: user.zip_code,
+      phone: user.phone,
+      email: user.email,
     };
   }
   async softDeleteUser(userId: number): Promise<User> {
@@ -214,6 +216,8 @@ export class UsersService {
       city: dto.city,
       state: dto.state,
       zip_code: dto.zip_code,
+      phone: dto.phone,
+      email: dto.email,
       // Add more user fields as needed
     };
     await this.userRepository.update(id, userUpdate);

@@ -21,4 +21,12 @@ export class UpdateUserWithHouseholdDto extends UpdateHouseholdDto {
   @IsOptional()
   @IsString()
   zip_code?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
 }
