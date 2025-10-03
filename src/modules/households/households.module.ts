@@ -4,10 +4,14 @@ import { HouseholdsController } from './households.controller';
 import { HouseholdsService } from './households.service';
 import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
+import { HouseholdAddress } from '../../entities/household-address.entity';
 import { UsersModule } from '../users/users.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Household, HouseholdMember]), forwardRef(() => UsersModule)],
+  imports: [
+    TypeOrmModule.forFeature([Household, HouseholdMember, HouseholdAddress]),
+    forwardRef(() => UsersModule),
+  ],
   controllers: [HouseholdsController],
   providers: [HouseholdsService],
   exports: [HouseholdsService],

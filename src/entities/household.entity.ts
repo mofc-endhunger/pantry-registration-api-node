@@ -1,5 +1,14 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  OneToMany,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { HouseholdMember } from './household-member.entity';
+
+import { HouseholdAddress } from './household-address.entity';
 
 @Entity('households')
 export class Household {
@@ -30,10 +39,12 @@ export class Household {
   @OneToMany(() => HouseholdMember, (member) => member.household)
   members!: HouseholdMember[];
 
+  @OneToMany(() => HouseholdAddress, (address) => address.household)
+  addresses!: HouseholdAddress[];
+
   @CreateDateColumn()
   created_at!: Date;
 
   @UpdateDateColumn()
   updated_at!: Date;
 }
-

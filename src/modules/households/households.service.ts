@@ -1,17 +1,22 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
+import { HouseholdAddress } from '../../entities/household-address.entity';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
 import { UpsertMemberDto } from './dto/upsert-member.dto';
+import { DataSource } from 'typeorm';
 
 @Injectable()
 export class HouseholdsService {
   constructor(
     @InjectRepository(Household) private readonly householdsRepo: Repository<Household>,
     @InjectRepository(HouseholdMember) private readonly membersRepo: Repository<HouseholdMember>,
+    @InjectRepository(HouseholdAddress)
+    private readonly addressesRepo: Repository<HouseholdAddress>,
+    private readonly dataSource: DataSource,
   ) {}
 
   async createHousehold(primaryUserId: number, dto: CreateHouseholdDto) {
@@ -63,19 +68,42 @@ export class HouseholdsService {
   async updateHousehold(householdId: number, requesterUserId: number, dto: UpdateHouseholdDto) {
     const household = await this.householdsRepo.findOne({
       where: { id: householdId },
-      relations: { members: true },
+      relations: { members: true, addresses: true },
     });
     if (!household) throw new NotFoundException('Household not found');
     await this.assertRequesterOwnsHousehold(household, requesterUserId);
 
-    // Update household fields
-    household.number = dto.number;
-    household.name = dto.name;
-    household.identification_code = dto.identification_code;
+    // Update household fields conditionally
+    if (typeof dto.number === 'number') household.number = dto.number;
+    if (typeof dto.name === 'string') household.name = dto.name;
+    if (typeof dto.identification_code === 'string')
+      household.identification_code = dto.identification_code;
     household.last_updated_by = requesterUserId;
     household.deleted_by = dto.deleted_by ?? null;
     household.deleted_on = dto.deleted_on ? new Date(dto.deleted_on) : null;
     await this.householdsRepo.save(household as any);
+
+    // Address history logic
+    if (dto.line_1 || dto.line_2 || dto.city || dto.state || dto.zip_code) {
+      // Soft-delete all previous addresses
+      await this.addressesRepo.update(
+        { household_id: householdId, deleted_on: IsNull() },
+        { deleted_on: new Date() },
+      );
+      // Insert new address
+      const newAddress: Partial<HouseholdAddress> = {
+        household_id: householdId,
+        line_1: dto.line_1 ?? '',
+        line_2: dto.line_2 ?? undefined,
+        city: dto.city ?? '',
+        state: dto.state ?? '',
+        zip_code: dto.zip_code ?? '',
+        zip_4: dto.zip_4 ?? undefined,
+        added_by: requesterUserId,
+        last_updated_by: requesterUserId,
+      };
+      await this.addressesRepo.save(this.addressesRepo.create(newAddress));
+    }
 
     // Upsert members
     if (Array.isArray(dto.members)) {

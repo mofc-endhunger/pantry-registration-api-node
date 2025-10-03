@@ -6,3 +6,4 @@ export { Credential } from './credential.entity';
 export { PasswordResetToken } from './password-reset-token.entity';
 export { Household } from './household.entity';
 export { HouseholdMember } from './household-member.entity';
+export { HouseholdAddress } from './household-address.entity';

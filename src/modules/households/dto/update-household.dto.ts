@@ -78,23 +78,29 @@ export class UpdateHouseholdCountsDto {
 }
 
 export class UpdateHouseholdDto {
+  @IsOptional()
   @IsInt()
-  id: number;
+  household_id?: number;
 
+  @IsOptional()
   @IsInt()
-  number: number;
+  number?: number;
 
+  @IsOptional()
   @IsString()
-  name: string;
+  name?: string;
 
+  @IsOptional()
   @IsString()
-  identification_code: string;
+  identification_code?: string;
 
+  @IsOptional()
   @IsInt()
-  added_by: number;
+  added_by?: number;
 
+  @IsOptional()
   @IsInt()
-  last_updated_by: number;
+  last_updated_by?: number;
 
   @IsOptional()
   @IsInt()
@@ -112,13 +118,40 @@ export class UpdateHouseholdDto {
   @IsString()
   updated_at?: string;
 
+  // Address fields matching DB schema
+  @IsOptional()
+  @IsString()
+  line_1?: string | null;
+
+  @IsOptional()
+  @IsString()
+  line_2?: string | null;
+
+  @IsOptional()
+  @IsString()
+  city?: string | null;
+
+  @IsOptional()
+  @IsString()
+  state?: string | null;
+
+  @IsOptional()
+  @IsString()
+  zip_code?: string | null;
+
+  @IsOptional()
+  @IsString()
+  zip_4?: string | null;
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => UpdateHouseholdMemberDto)
-  members: UpdateHouseholdMemberDto[];
+  members?: UpdateHouseholdMemberDto[];
 
+  @IsOptional()
   @IsObject()
   @ValidateNested()
   @Type(() => UpdateHouseholdCountsDto)
-  counts: UpdateHouseholdCountsDto;
+  counts?: UpdateHouseholdCountsDto;
 }
