@@ -80,6 +80,10 @@ export class UpdateHouseholdCountsDto {
 export class UpdateHouseholdDto {
   @IsOptional()
   @IsInt()
+  id?: number;
+
+  @IsOptional()
+  @IsInt()
   household_id?: number;
 
   @IsOptional()

@@ -222,12 +222,12 @@ export class UsersService {
     };
     await this.userRepository.update(id, userUpdate);
     // Find household for this user
-    const householdId = dto.household_id as number;
+    const householdId = (dto.household_id ?? dto.id) as number;
     // Delegate to household PATCH logic
     await this.householdsService.updateHousehold(householdId, id, dto);
     // Return updated user and household
     const user = await this.findById(id);
-    const household = await this.householdsService.getHouseholdById(householdId as number, id);
+    const household = await this.householdsService.getHouseholdById(householdId, id);
     return { user, household };
   }
 }
