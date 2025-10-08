@@ -8,6 +8,15 @@ export class RegisterDto {
   @IsInt()
   timeslot_id?: number;
 
+  // Public DB identifiers (optional). If provided, capacity checks will use freshtrak_public.
+  @IsOptional()
+  @IsInt()
+  event_slot_id?: number;
+
+  @IsOptional()
+  @IsInt()
+  event_date_id?: number;
+
   @IsOptional()
   @IsArray()
   @ArrayNotEmpty()

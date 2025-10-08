@@ -45,6 +45,13 @@ export class Registration {
   @Column({ type: 'bigint' })
   created_by!: number;
 
+  // Optional references to public DB identifiers used for capacity updates
+  @Column({ type: 'int', unsigned: true, nullable: true, default: null })
+  public_event_slot_id?: number | null;
+
+  @Column({ type: 'int', unsigned: true, nullable: true, default: null })
+  public_event_date_id?: number | null;
+
   @OneToMany(() => RegistrationAttendee, (a) => a.registration)
   attendees!: RegistrationAttendee[];
 

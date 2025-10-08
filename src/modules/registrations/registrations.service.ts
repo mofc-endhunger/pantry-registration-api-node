@@ -14,6 +14,7 @@ import { UsersService } from '../users/users.service';
 import { HouseholdsService } from '../households/households.service';
 import { CheckInDto } from './dto/check-in.dto';
 import { CheckInAudit } from '../../entities/checkin-audit.entity';
+import { PublicScheduleService } from '../public-schedule/public-schedule.service';
 
 @Injectable()
 export class RegistrationsService {
@@ -26,6 +27,7 @@ export class RegistrationsService {
     @InjectRepository(CheckInAudit) private readonly checkinsRepo: Repository<CheckInAudit>,
     private readonly usersService: UsersService,
     private readonly householdsService: HouseholdsService,
+    private readonly publicSchedule: PublicScheduleService,
   ) {}
 
   async listForEvent(eventId: number) {
@@ -34,7 +36,13 @@ export class RegistrationsService {
 
   async registerForEvent(
     user: any,
-    dto: { event_id: number; timeslot_id?: number; attendees?: number[] },
+    dto: {
+      event_id: number;
+      timeslot_id?: number;
+      attendees?: number[];
+      event_slot_id?: number;
+      event_date_id?: number;
+    },
   ) {
     const event = await this.eventsRepo.findOne({ where: { id: dto.event_id, is_active: true } });
     if (!event) throw new NotFoundException('Event not found');
@@ -60,15 +68,27 @@ export class RegistrationsService {
     });
     if (existing) throw new BadRequestException('Already registered');
 
-    // Capacity check (timeslot takes precedence; otherwise event-level)
+    // Capacity check
     let capacity: number | null = null;
     let confirmedCount = 0;
-    if (dto.timeslot_id) {
+    if (dto.event_slot_id) {
+      const slot = await this.publicSchedule.getSlot(dto.event_slot_id);
+      capacity = slot?.capacity ?? null;
+      if (slot && slot.capacity !== null) {
+        if (slot.reserved >= slot.capacity) throw new BadRequestException('Slot full');
+      }
+    } else if (dto.timeslot_id) {
       const timeslot = await this.timesRepo.findOne({ where: { id: dto.timeslot_id } });
       capacity = timeslot?.capacity ?? null;
       confirmedCount = await this.regsRepo.count({
         where: { timeslot_id: dto.timeslot_id, status: 'confirmed' } as any,
       });
+    } else if (dto.event_date_id) {
+      const date = await this.publicSchedule.getDate(dto.event_date_id);
+      capacity = date?.capacity ?? null;
+      if (date && date.capacity !== null) {
+        if (date.reserved >= date.capacity) throw new BadRequestException('Date full');
+      }
     } else {
       capacity = event.capacity ?? null;
       confirmedCount = await this.regsRepo.count({
@@ -83,6 +103,8 @@ export class RegistrationsService {
       timeslot_id: dto.timeslot_id ?? null,
       status: hasCapacity ? 'confirmed' : 'waitlisted',
       created_by: dbUserId,
+      public_event_slot_id: dto.event_slot_id ?? null,
+      public_event_date_id: dto.event_date_id ?? null,
     } as any);
     const savedOrArray = await this.regsRepo.save(reg);
     const saved: Registration = Array.isArray(savedOrArray)
@@ -96,6 +118,11 @@ export class RegistrationsService {
         } as any);
         await this.attendeesRepo.save(attendee);
       }
+    }
+    // Update public counters after success
+    if (hasCapacity) {
+      if (dto.event_slot_id) await this.publicSchedule.incrementSlotAndDate(dto.event_slot_id);
+      else if (dto.event_date_id) await this.publicSchedule.incrementDate(dto.event_date_id);
     }
     return saved;
   }
@@ -116,6 +143,12 @@ export class RegistrationsService {
 
     // Promote next waitlisted registration if any
     await this.promoteFromWaitlist(reg.event_id, reg.timeslot_id ?? null);
+
+    // Decrement public counters if present
+    if (reg.public_event_slot_id)
+      await this.publicSchedule.decrementSlotAndDate(reg.public_event_slot_id);
+    else if (reg.public_event_date_id)
+      await this.publicSchedule.decrementDate(reg.public_event_date_id);
     return reg;
   }
 

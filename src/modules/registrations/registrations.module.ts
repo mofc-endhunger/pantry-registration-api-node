@@ -11,6 +11,7 @@ import { CheckInAudit } from '../../entities/checkin-audit.entity';
 import { RegistrationsController } from './registrations.controller';
 import { UsersModule } from '../users/users.module';
 import { HouseholdsModule } from '../households/households.module';
+import { PublicScheduleModule } from '../public-schedule/public-schedule.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { HouseholdsModule } from '../households/households.module';
     ]),
     forwardRef(() => UsersModule),
     forwardRef(() => HouseholdsModule),
+    PublicScheduleModule,
   ],
   controllers: [RegistrationsController],
   providers: [RegistrationsService],
