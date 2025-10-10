@@ -26,7 +26,8 @@ export class EventsService {
     if (params.to) {
       qb.andWhere('(e.end_at IS NULL OR e.end_at <= :to)', { to: params.to });
     }
-    qb.orderBy('e.start_at', 'ASC', 'NULLS LAST');
+    // MySQL doesn't support 'NULLS LAST'; emulate by ordering nulls last, then ascending by value
+    qb.orderBy('e.start_at IS NULL', 'ASC').addOrderBy('e.start_at', 'ASC');
     return qb.getMany();
   }
 
