@@ -53,8 +53,13 @@ export class RegistrationsService {
       if (!timeslot) throw new NotFoundException('Timeslot not found');
     }
     // Resolve household via Cognito sub -> user -> household
-    const sub = (user?.userId as string) ?? (user?.id as string);
-    const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(sub);
+    let dbUserId: number | null = null;
+    if (user?.authType === 'guest' && typeof user.dbUserId === 'number') {
+      dbUserId = user.dbUserId;
+    } else {
+      const sub = (user?.userId as string) ?? (user?.id as string);
+      dbUserId = await this.usersService.findDbUserIdByCognitoUuid(sub);
+    }
     if (!dbUserId) throw new ForbiddenException('User not found');
     const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
     if (!household_id) throw new ForbiddenException('Household not resolved');
@@ -131,8 +136,12 @@ export class RegistrationsService {
     const reg = await this.regsRepo.findOne({ where: { id: registrationId } });
     if (!reg) throw new NotFoundException('Registration not found');
     // Resolve household via JWT sub
-    const sub = (user?.userId as string) ?? (user?.id as string);
-    const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(sub);
+    const dbUserId =
+      user?.authType === 'guest' && typeof user.dbUserId === 'number'
+        ? (user.dbUserId as number)
+        : await this.usersService.findDbUserIdByCognitoUuid(
+            ((user?.userId as string) ?? (user?.id as string)) as string,
+          );
     if (!dbUserId) throw new ForbiddenException('User not found');
     const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
     if (!household_id) throw new ForbiddenException('Household not resolved');
@@ -156,8 +165,12 @@ export class RegistrationsService {
     const reg = await this.regsRepo.findOne({ where: { id: dto.registration_id } });
     if (!reg) throw new NotFoundException('Registration not found');
     // Resolve household via JWT sub
-    const sub = (user?.userId as string) ?? (user?.id as string);
-    const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(sub);
+    const dbUserId =
+      user?.authType === 'guest' && typeof user.dbUserId === 'number'
+        ? (user.dbUserId as number)
+        : await this.usersService.findDbUserIdByCognitoUuid(
+            ((user?.userId as string) ?? (user?.id as string)) as string,
+          );
     if (!dbUserId) throw new ForbiddenException('User not found');
     const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
     if (!household_id) throw new ForbiddenException('Household not resolved');

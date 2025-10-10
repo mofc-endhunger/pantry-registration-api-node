@@ -29,13 +29,13 @@
 
 - GET `/api/registrations/event/:eventId` (staff/admin)
   - Lists registrations for an event.
-- POST `/api/registrations` (authenticated)
+- POST `/api/registrations` (authenticated via Cognito Bearer or X-Guest-Token)
   - Body: `{ event_id, timeslot_id?, attendees: number[] }`
   - Enforces one active registration per household per event.
   - Capacity: confirms if capacity available, else waitlists.
-- PATCH `/api/registrations/:id/cancel` (authenticated)
+- PATCH `/api/registrations/:id/cancel` (authenticated via Cognito Bearer or X-Guest-Token)
   - Cancels own registration; promotes next waitlisted, if any.
-- POST `/api/registrations/check-in` (authenticated)
+- POST `/api/registrations/check-in` (authenticated via Cognito Bearer or X-Guest-Token)
   - Body: `{ registration_id, attendee_ids: number[] }`
   - Marks registration as `checked_in` and records an audit row.
 
@@ -49,6 +49,11 @@
 
 ### Notes
 
-- Household is resolved from JWT via Cognito sub → user → household.
+- Auth options:
+  - Cognito: `Authorization: Bearer <JWT>`
+  - Guest: `X-Guest-Token: <token>`
+- Household resolution:
+  - Cognito: JWT sub → DB user → household
+  - Guest: token → `authentications.user_id` → household
 - Unique active registration per household per event.
 - Waitlist promotion occurs on cancellation.

@@ -14,6 +14,7 @@ import { User } from '../../entities/user.entity';
 import { PasswordResetToken } from '../../entities/password-reset-token.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { Credential } from '../../entities/credential.entity';
+import { GuestOrJwtAuthGuard } from './guest-or-jwt.guard';
 
 @Module({
   imports: [
@@ -25,7 +26,14 @@ import { Credential } from '../../entities/credential.entity';
     TypeOrmModule.forFeature([User, PasswordResetToken, Authentication, Credential]),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, MailerService, RolesGuard],
-  exports: [JwtAuthGuard, RolesGuard],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtAuthGuard,
+    GuestOrJwtAuthGuard,
+    MailerService,
+    RolesGuard,
+  ],
+  exports: [JwtAuthGuard, GuestOrJwtAuthGuard, RolesGuard],
 })
 export class AuthModule {}

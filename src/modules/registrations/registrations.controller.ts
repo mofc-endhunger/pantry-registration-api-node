@@ -12,6 +12,7 @@ import {
 import { RegistrationsService } from './registrations.service';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { GuestOrJwtAuthGuard } from '../auth/guest-or-jwt.guard';
 import type { Request } from 'express';
 import { CheckInDto } from './dto/check-in.dto';
 import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
@@ -31,7 +32,7 @@ export class RegistrationsController {
     return this.registrationsService.listForEvent(eventId);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(GuestOrJwtAuthGuard)
   @ApiBearerAuth()
   @ApiCreatedResponse({ description: 'Registration created (confirmed or waitlisted)' })
   @Post()
@@ -40,7 +41,7 @@ export class RegistrationsController {
     return this.registrationsService.registerForEvent(user, dto);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(GuestOrJwtAuthGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ description: 'Registration cancelled; waitlist promotion attempted' })
   @Patch(':id/cancel')
@@ -49,7 +50,7 @@ export class RegistrationsController {
     return this.registrationsService.cancelRegistration(user, id);
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(GuestOrJwtAuthGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ description: 'Registration checked in' })
   @Post('check-in')

@@ -12,6 +12,7 @@ import { RegistrationsController } from './registrations.controller';
 import { UsersModule } from '../users/users.module';
 import { HouseholdsModule } from '../households/households.module';
 import { PublicScheduleModule } from '../public-schedule/public-schedule.module';
+import { Authentication } from '../../entities/authentication.entity';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { PublicScheduleModule } from '../public-schedule/public-schedule.module'
       Household,
       HouseholdMember,
       CheckInAudit,
+      Authentication,
     ]),
     forwardRef(() => UsersModule),
     forwardRef(() => HouseholdsModule),
