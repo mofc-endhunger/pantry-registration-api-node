@@ -16,6 +16,7 @@ import { UpdateEventDto } from './dto/update-event.dto';
 import { CreateTimeslotDto } from './dto/create-timeslot.dto';
 import { UpdateTimeslotDto } from './dto/update-timeslot.dto';
 import { ApiTags, ApiQuery, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
+import { PublicScheduleService } from '../public-schedule/public-schedule.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -24,7 +25,10 @@ import { ApiBearerAuth } from '@nestjs/swagger';
 @ApiTags('events')
 @Controller('events')
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(
+    private readonly eventsService: EventsService,
+    private readonly publicSchedule: PublicScheduleService,
+  ) {}
 
   @Get()
   @ApiQuery({ name: 'active', required: false, type: Boolean })
@@ -71,6 +75,22 @@ export class EventsController {
   @Get(':id/timeslots')
   listTimeslots(@Param('id', ParseIntPipe) eventId: number) {
     return this.eventsService.listTimeslots(eventId);
+  }
+
+  // Legacy-style public date structure for today by default; accepts optional :eventDateId
+  @Get(':id/public-date')
+  async getPublicDateStructureDefault(@Param('id', ParseIntPipe) eventId: number) {
+    const eventDateId = await this.publicSchedule.getEventDateIdDefault(eventId);
+    if (!eventDateId) return { event_date: null };
+    return this.publicSchedule.buildEventDateStructure(eventDateId);
+  }
+
+  @Get(':id/public-date/:eventDateId')
+  getPublicDateStructure(
+    @Param('id', ParseIntPipe) _eventId: number,
+    @Param('eventDateId', ParseIntPipe) eventDateId: number,
+  ) {
+    return this.publicSchedule.buildEventDateStructure(eventDateId);
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
