@@ -17,9 +17,21 @@ export class CreateGuestAuthenticationDto {
   @IsOptional()
   last_name?: string;
 
+  @IsString()
+  @IsOptional()
+  middle_name?: string;
+
+  @IsString()
+  @IsOptional()
+  suffix?: string;
+
   @IsDateString()
   @IsOptional()
   date_of_birth?: string;
+
+  @IsString()
+  @IsOptional()
+  gender?: string;
 
   @IsString()
   @IsOptional()
@@ -60,4 +72,16 @@ export class CreateGuestAuthenticationDto {
   @IsBoolean()
   @IsOptional()
   permission_to_text?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  no_phone_number?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  no_email?: boolean;
+
+  @IsString()
+  @IsOptional()
+  identification_code?: string;
 }

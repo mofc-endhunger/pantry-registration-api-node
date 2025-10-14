@@ -53,8 +53,11 @@ export class GuestAuthenticationsService {
     if (dto.phone !== undefined) user.phone = dto.phone;
     if (dto.email !== undefined) user.email = dto.email;
     if (dto.first_name !== undefined) user.first_name = dto.first_name;
+    if (dto.middle_name !== undefined) user.middle_name = dto.middle_name;
     if (dto.last_name !== undefined) user.last_name = dto.last_name;
+    if (dto.suffix !== undefined) user.suffix = dto.suffix;
     if (dto.date_of_birth !== undefined) user.date_of_birth = dto.date_of_birth as unknown as string;
+    if (dto.gender !== undefined) user.gender = dto.gender;
     if (dto.address_line_1 !== undefined) user.address_line_1 = dto.address_line_1;
     if (dto.address_line_2 !== undefined) user.address_line_2 = dto.address_line_2;
     if (dto.city !== undefined) user.city = dto.city;
@@ -65,6 +68,10 @@ export class GuestAuthenticationsService {
     if (dto.children_in_household !== undefined) user.children_in_household = dto.children_in_household as number;
     if (dto.permission_to_email !== undefined) user.permission_to_email = dto.permission_to_email as boolean;
     if (dto.permission_to_text !== undefined) user.permission_to_text = dto.permission_to_text as boolean;
+    // Optional flags stored in user_detail in some systems; we map them to nulling contact fields if true
+    if (dto.no_phone_number === true) user.phone = null;
+    if (dto.no_email === true) user.email = null;
+    if (dto.identification_code !== undefined) user.identification_code = dto.identification_code;
 
     await this.userRepo.save(user);
     return { updated: true };
