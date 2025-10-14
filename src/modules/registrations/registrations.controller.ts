@@ -39,7 +39,8 @@ export class RegistrationsController {
   @Post()
   async register(@Body() dto: RegisterDto, @Req() req: Request) {
     const user = req.user as any;
-    return this.registrationsService.registerForEvent(user, dto);
+    const guestToken = (req.headers['x-guest-token'] as string) || undefined;
+    return this.registrationsService.registerForEvent(user, dto as any, guestToken);
   }
 
   @UseGuards(GuestOrJwtAuthGuard)

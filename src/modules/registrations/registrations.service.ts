@@ -15,6 +15,7 @@ import { HouseholdsService } from '../households/households.service';
 import { CheckInDto } from './dto/check-in.dto';
 import { CheckInAudit } from '../../entities/checkin-audit.entity';
 import { PublicScheduleService } from '../public-schedule/public-schedule.service';
+import { Authentication } from '../../entities/authentication.entity';
 
 @Injectable()
 export class RegistrationsService {
@@ -25,6 +26,7 @@ export class RegistrationsService {
     @InjectRepository(Event) private readonly eventsRepo: Repository<Event>,
     @InjectRepository(EventTimeslot) private readonly timesRepo: Repository<EventTimeslot>,
     @InjectRepository(CheckInAudit) private readonly checkinsRepo: Repository<CheckInAudit>,
+    @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
     private readonly usersService: UsersService,
     private readonly householdsService: HouseholdsService,
     private readonly publicSchedule: PublicScheduleService,
@@ -43,6 +45,7 @@ export class RegistrationsService {
       event_slot_id?: number;
       event_date_id?: number;
     },
+    guestToken?: string,
   ) {
     const event = await this.eventsRepo.findOne({ where: { id: dto.event_id, is_active: true } });
     if (!event) throw new NotFoundException('Event not found');
@@ -52,9 +55,12 @@ export class RegistrationsService {
       });
       if (!timeslot) throw new NotFoundException('Timeslot not found');
     }
-    // Resolve household via Cognito sub -> user -> household
+    // Resolve household (prefer explicit guest token if provided)
     let dbUserId: number | null = null;
-    if (user?.authType === 'guest' && typeof user.dbUserId === 'number') {
+    if (guestToken) {
+      const auth = await this.authRepo.findOne({ where: { token: guestToken } });
+      dbUserId = auth ? (auth.user_id as unknown as number) : null;
+    } else if (user?.authType === 'guest' && typeof user.dbUserId === 'number') {
       dbUserId = user.dbUserId;
     } else {
       const sub = (user?.userId as string) ?? (user?.id as string);
