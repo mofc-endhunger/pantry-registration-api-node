@@ -67,7 +67,21 @@ export class RegistrationsService {
       dbUserId = await this.usersService.findDbUserIdByCognitoUuid(sub);
     }
     if (!dbUserId) throw new ForbiddenException('User not found');
-    const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
+    let household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
+    if (!household_id) {
+      // Auto-create a minimal household for this user (guest-first flow)
+      try {
+        const userEntity = await this.usersService.findById(dbUserId);
+        await this.householdsService.createHousehold(dbUserId, {
+          primary_first_name: userEntity.first_name || 'Guest',
+          primary_last_name: userEntity.last_name || 'User',
+          primary_date_of_birth: (userEntity.date_of_birth as unknown as string) || '1900-01-01',
+        } as any);
+        household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
+      } catch (_) {
+        // ignore and fall through to error
+      }
+    }
     if (!household_id) throw new ForbiddenException('Household not resolved');
 
     const existing = await this.regsRepo.findOne({
