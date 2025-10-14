@@ -52,6 +52,15 @@ async function bootstrap() {
       },
       'JWT-auth',
     )
+    .addApiKey(
+      {
+        type: 'apiKey',
+        name: 'X-Guest-Token',
+        in: 'header',
+        description: 'Guest token header for non-authenticated users',
+      },
+      'Guest-Token',
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

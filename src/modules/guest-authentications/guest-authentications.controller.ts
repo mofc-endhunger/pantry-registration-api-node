@@ -2,7 +2,9 @@ import { Controller, Post, Body, Patch, Req, BadRequestException } from '@nestjs
 import { GuestAuthenticationsService } from './guest-authentications.service';
 import { CreateGuestAuthenticationDto } from './dto/create-guest-authentication.dto';
 import type { Request } from 'express';
+import { ApiSecurity, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('guest-authentications')
 @Controller('guest-authentications')
 export class GuestAuthenticationsController {
   constructor(private readonly guestAuthenticationsService: GuestAuthenticationsService) {}
@@ -13,6 +15,7 @@ export class GuestAuthenticationsController {
   }
 
   @Patch()
+  @ApiSecurity('Guest-Token')
   async update(@Req() req: Request, @Body() dto: CreateGuestAuthenticationDto) {
     const token = (req.headers['x-guest-token'] as string) || '';
     if (!token) throw new BadRequestException('X-Guest-Token header required');

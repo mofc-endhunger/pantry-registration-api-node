@@ -15,7 +15,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GuestOrJwtAuthGuard } from '../auth/guest-or-jwt.guard';
 import type { Request } from 'express';
 import { CheckInDto } from './dto/check-in.dto';
-import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiCreatedResponse, ApiSecurity } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 
@@ -34,6 +34,7 @@ export class RegistrationsController {
 
   @UseGuards(GuestOrJwtAuthGuard)
   @ApiBearerAuth()
+  @ApiSecurity('Guest-Token')
   @ApiCreatedResponse({ description: 'Registration created (confirmed or waitlisted)' })
   @Post()
   async register(@Body() dto: RegisterDto, @Req() req: Request) {
@@ -43,6 +44,7 @@ export class RegistrationsController {
 
   @UseGuards(GuestOrJwtAuthGuard)
   @ApiBearerAuth()
+  @ApiSecurity('Guest-Token')
   @ApiOkResponse({ description: 'Registration cancelled; waitlist promotion attempted' })
   @Patch(':id/cancel')
   async cancel(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
@@ -52,6 +54,7 @@ export class RegistrationsController {
 
   @UseGuards(GuestOrJwtAuthGuard)
   @ApiBearerAuth()
+  @ApiSecurity('Guest-Token')
   @ApiOkResponse({ description: 'Registration checked in' })
   @Post('check-in')
   async checkIn(@Body() dto: CheckInDto, @Req() req: Request) {
