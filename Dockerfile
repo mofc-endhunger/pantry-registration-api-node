@@ -1,6 +1,8 @@
 # Base stage for all environments
 FROM node:22-alpine AS base
 
+ARG PORT=3000
+
 WORKDIR /app
 
 # Copy package files
@@ -15,8 +17,8 @@ RUN npm install --legacy-peer-deps
 # Copy application code
 COPY . .
 
-# Expose port
-EXPOSE 3000
+# Expose port (configurable via PORT env var)
+EXPOSE ${PORT}
 
 # Start in development mode with hot reload
 CMD ["npm", "run", "start:dev"]
@@ -60,10 +62,6 @@ USER nodejs
 
 # Expose port
 EXPOSE 3000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {r.statusCode === 200 ? process.exit(0) : process.exit(1)})"
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
