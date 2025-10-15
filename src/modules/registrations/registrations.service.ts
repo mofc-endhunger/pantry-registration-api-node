@@ -99,8 +99,9 @@ export class RegistrationsService {
     if (dto.event_slot_id) {
       const slot = await this.publicSchedule.getSlot(dto.event_slot_id);
       capacity = slot?.capacity ?? null;
-      if (slot && slot.capacity !== null) {
-        if (slot.reserved >= slot.capacity) throw new BadRequestException('Slot full');
+      if (slot && slot.capacity !== null && slot.reserved >= slot.capacity) {
+        // Mark as full → will create waitlisted registration (no counters incremented)
+        confirmedCount = slot.capacity;
       }
     } else if (dto.timeslot_id) {
       const timeslot = await this.timesRepo.findOne({ where: { id: dto.timeslot_id } });
@@ -111,8 +112,9 @@ export class RegistrationsService {
     } else if (dto.event_date_id) {
       const date = await this.publicSchedule.getDate(dto.event_date_id);
       capacity = date?.capacity ?? null;
-      if (date && date.capacity !== null) {
-        if (date.reserved >= date.capacity) throw new BadRequestException('Date full');
+      if (date && date.capacity !== null && date.reserved >= date.capacity) {
+        // Mark as full → will create waitlisted registration
+        confirmedCount = date.capacity;
       }
     } else {
       capacity = event.capacity ?? null;
