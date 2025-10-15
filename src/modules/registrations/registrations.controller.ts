@@ -25,7 +25,7 @@ export class RegistrationsController {
   constructor(private readonly registrationsService: RegistrationsService) {}
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @ApiBearerAuth()
+  @ApiBearerAuth('JWT-auth')
   @Roles('staff', 'admin')
   @Get('event/:eventId')
   listForEvent(@Param('eventId', ParseIntPipe) eventId: number) {
@@ -33,7 +33,7 @@ export class RegistrationsController {
   }
 
   @UseGuards(GuestOrJwtAuthGuard)
-  @ApiBearerAuth()
+  @ApiBearerAuth('JWT-auth')
   @ApiSecurity('Guest-Token')
   @ApiCreatedResponse({ description: 'Registration created (confirmed or waitlisted)' })
   @Post()
@@ -44,7 +44,7 @@ export class RegistrationsController {
   }
 
   @UseGuards(GuestOrJwtAuthGuard)
-  @ApiBearerAuth()
+  @ApiBearerAuth('JWT-auth')
   @ApiSecurity('Guest-Token')
   @ApiOkResponse({ description: 'Registration cancelled; waitlist promotion attempted' })
   @Patch(':id/cancel')
@@ -54,7 +54,7 @@ export class RegistrationsController {
   }
 
   @UseGuards(GuestOrJwtAuthGuard)
-  @ApiBearerAuth()
+  @ApiBearerAuth('JWT-auth')
   @ApiSecurity('Guest-Token')
   @ApiOkResponse({ description: 'Registration checked in' })
   @Post('check-in')
