@@ -16,7 +16,7 @@ async function bootstrap() {
     origin: process.env.CORS_ORIGIN || '*',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Guest-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'authorization', 'X-Guest-Token', 'x-guest-token'],
   });
 
   // Set global API prefix
