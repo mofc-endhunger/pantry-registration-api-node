@@ -65,6 +65,21 @@ export class RegistrationsService {
     } else {
       const sub = (user?.userId as string) ?? (user?.id as string);
       dbUserId = await this.usersService.findDbUserIdByCognitoUuid(sub);
+      if (!dbUserId) {
+        // Auto-provision Cognito user and household if not found
+        const email: string | undefined = (user?.email as string) || undefined;
+        const username: string | undefined = (user?.username as string) || undefined;
+        const created = await this.usersService.create({
+          email: email ?? `${sub}@auto.local`,
+          first_name: username ?? undefined,
+          last_name: undefined,
+          date_of_birth: undefined as any,
+          identification_code: sub,
+          user_type: 'customer',
+          cognito_uuid: sub,
+        } as any);
+        dbUserId = created.user.id;
+      }
     }
     if (!dbUserId) throw new ForbiddenException('User not found');
     let household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
