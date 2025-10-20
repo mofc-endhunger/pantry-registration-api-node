@@ -57,14 +57,15 @@ describe('Registrations flows (E2E)', () => {
       eventsRepo.create({ name: 'JWT Flow Event', is_active: true, capacity: null } as any),
     );
 
+    const regEmail = `regflow+${Date.now()}@example.com`;
     await request(app.getHttpServer())
       .post('/auth/register')
-      .send({ email: 'regflow@example.com', password: 'TestPassword123' })
+      .send({ email: regEmail, password: 'TestPassword123' })
       .expect(201);
 
     const login = await request(app.getHttpServer())
       .post('/auth/login')
-      .send({ email: 'regflow@example.com', password: 'TestPassword123' })
+      .send({ email: regEmail, password: 'TestPassword123' })
       .expect(201);
     const jwt = login.body.access_token as string;
 

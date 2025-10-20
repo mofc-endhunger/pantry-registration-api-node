@@ -20,10 +20,11 @@ describe('AuthController (e2e)', () => {
   });
 
   it('/auth/register (POST) registers a new user', async () => {
+    const email = `testuser+${Date.now()}@example.com`;
     const res = await request(app.getHttpServer())
       .post('/auth/register')
       .send({
-        email: 'testuser@example.com',
+        email,
         password: 'TestPassword123',
         phone: '5551234567',
       })
@@ -33,15 +34,16 @@ describe('AuthController (e2e)', () => {
   });
 
   it('/auth/login (POST) logs in a user', async () => {
+    const email = `loginuser+${Date.now()}@example.com`;
     await request(app.getHttpServer()).post('/auth/register').send({
-      email: 'loginuser@example.com',
+      email,
       password: 'TestPassword123',
       phone: '5551234567',
     });
     const res = await request(app.getHttpServer())
       .post('/auth/login')
       .send({
-        email: 'loginuser@example.com',
+        email,
         password: 'TestPassword123',
       })
       .expect(201);
@@ -49,14 +51,15 @@ describe('AuthController (e2e)', () => {
   });
 
   it('/auth/request-password-reset (POST) requests a password reset', async () => {
+    const email = `resetuser+${Date.now()}@example.com`;
     await request(app.getHttpServer()).post('/auth/register').send({
-      email: 'resetuser@example.com',
+      email,
       password: 'TestPassword123',
       phone: '5551234567',
     });
     const res = await request(app.getHttpServer())
       .post('/auth/request-password-reset')
-      .send({ email: 'resetuser@example.com' })
+      .send({ email })
       .expect(201);
     expect(res.body).toHaveProperty('message');
   });
