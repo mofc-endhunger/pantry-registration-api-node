@@ -15,7 +15,13 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GuestOrJwtAuthGuard } from '../auth/guest-or-jwt.guard';
 import type { Request } from 'express';
 import { CheckInDto } from './dto/check-in.dto';
-import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiCreatedResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiCreatedResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 
@@ -30,6 +36,16 @@ export class RegistrationsController {
   @Get('event/:eventId')
   listForEvent(@Param('eventId', ParseIntPipe) eventId: number) {
     return this.registrationsService.listForEvent(eventId);
+  }
+
+  @UseGuards(GuestOrJwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('Guest-Token')
+  @Get('me')
+  listForMe(@Req() req: Request) {
+    const user = req.user as any;
+    const guestToken = (req.headers['x-guest-token'] as string) || undefined;
+    return this.registrationsService.listForMe(user, guestToken);
   }
 
   @UseGuards(GuestOrJwtAuthGuard)

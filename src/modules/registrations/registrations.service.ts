@@ -36,6 +36,31 @@ export class RegistrationsService {
     return this.regsRepo.find({ where: { event_id: eventId } });
   }
 
+  async listForMe(user: any, guestToken?: string) {
+    // Resolve dbUserId similarly to registration flow
+    let dbUserId: number | null = null;
+    if (guestToken) {
+      const auth = await this.authRepo.findOne({ where: { token: guestToken } });
+      dbUserId = auth ? (auth.user_id as unknown as number) : null;
+    } else if (user?.authType === 'guest' && typeof user.dbUserId === 'number') {
+      dbUserId = user.dbUserId;
+    } else {
+      const sub = (user?.userId as string) ?? (user?.id as string);
+      dbUserId = await this.usersService.findDbUserIdByCognitoUuid(sub);
+    }
+    if (!dbUserId) throw new ForbiddenException('User not found');
+    const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
+    if (!household_id) throw new ForbiddenException('Household not resolved');
+    return this.regsRepo.find({
+      where: [
+        { household_id, status: 'confirmed' } as any,
+        { household_id, status: 'waitlisted' } as any,
+        { household_id, status: 'checked_in' } as any,
+      ],
+      order: { created_at: 'DESC' } as any,
+    });
+  }
+
   async registerForEvent(
     user: any,
     dto: {
