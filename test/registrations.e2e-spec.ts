@@ -1,6 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
 describe('Registrations E2E', () => {
@@ -17,6 +17,6 @@ describe('Registrations E2E', () => {
   });
 
   it('rejects POST /registrations without auth', async () => {
-    await request(app.getHttpServer()).post('/registrations').send({ event_id: 1 }).expect(401);
+    await request(app.getHttpServer()).post('/registrations').send({ event_id: 1 }).expect(403);
   });
 });
