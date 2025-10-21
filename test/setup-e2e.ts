@@ -19,6 +19,7 @@ process.env.DB_PORT = process.env.DB_PORT || '3306';
 process.env.DB_USERNAME = process.env.DB_USERNAME || 'root';
 process.env.DB_PASSWORD = process.env.DB_PASSWORD || 'password';
 process.env.DB_DATABASE = process.env.DB_DATABASE || 'freshtrak_private_test';
+process.env.USE_LOCAL_JWT = process.env.USE_LOCAL_JWT || '1';
 
 // Ensure DB is migrated before tests and clean between suites
 beforeAll(async () => {
