@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import * as dotenv from 'dotenv';
+import { migrate, truncateAll } from './helpers/db';
 
 // Load .env.test if present
 const testEnvPath = path.resolve(process.cwd(), '.env.test');
@@ -18,3 +19,12 @@ process.env.DB_PORT = process.env.DB_PORT || '3306';
 process.env.DB_USERNAME = process.env.DB_USERNAME || 'root';
 process.env.DB_PASSWORD = process.env.DB_PASSWORD || 'password';
 process.env.DB_DATABASE = process.env.DB_DATABASE || 'freshtrak_private_test';
+
+// Ensure DB is migrated before tests and clean between suites
+beforeAll(async () => {
+  await migrate();
+});
+
+afterEach(async () => {
+  await truncateAll();
+});
