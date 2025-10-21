@@ -14,7 +14,7 @@
     ]
   },
   "testEnvironment": "node",
-  "setupFilesAfterEnv": [],
+  "setupFilesAfterEnv": ["<rootDir>/test/setup-e2e.ts"],
   "moduleNameMapper": {
     "^src/(.*)": "<rootDir>/src/$1"
   }
