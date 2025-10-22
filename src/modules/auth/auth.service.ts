@@ -122,8 +122,11 @@ export class AuthService {
     if (typeof user.email === 'string') {
       try {
         await this.mailerService.sendResetEmail(user.email, token);
-      } catch (_) {
-        // Ignore mail errors in non-prod/test environments
+      } catch (err) {
+        // Log mail errors so they show up in CloudWatch while still
+        // allowing the password reset flow to succeed in non-prod/test.
+        // eslint-disable-next-line no-console
+        console.warn('Failed to send password reset email', err);
       }
     }
     return { message: 'If the email exists, a reset link will be sent.' };
