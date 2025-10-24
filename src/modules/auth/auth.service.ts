@@ -23,10 +23,10 @@ export class AuthService {
     private readonly resetTokenRepository: Repository<PasswordResetToken>,
     private readonly mailerService: MailerService,
     private readonly jwtService: JwtService,
-  @InjectRepository(Authentication)
-  private readonly authenticationRepository: Repository<Authentication>,
-  @InjectRepository(Credential)
-  private readonly credentialRepository: Repository<Credential>,
+    @InjectRepository(Authentication)
+    private readonly authenticationRepository: Repository<Authentication>,
+    @InjectRepository(Credential)
+    private readonly credentialRepository: Repository<Credential>,
   ) {}
   async registerGuest() {
     // Create a new guest user
@@ -61,10 +61,7 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     // Find user by email or identification_code
     const user = await this.userRepository.findOne({
-      where: [
-        { email: loginDto.email },
-        { identification_code: loginDto.email },
-      ],
+      where: [{ email: loginDto.email }, { identification_code: loginDto.email }],
     });
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -80,7 +77,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
     // Issue JWT
-  const payload = { email: user.email, sub: user.id };
+    const payload = { email: user.email, sub: user.id };
     const access_token = this.jwtService.sign(payload);
     return { access_token };
   }
@@ -88,10 +85,7 @@ export class AuthService {
   async register(registerDto: RegisterDto) {
     // Check for duplicate email or identification_code
     const existing = await this.userRepository.findOne({
-      where: [
-  { email: registerDto.email },
-  { identification_code: registerDto.email },
-      ],
+      where: [{ email: registerDto.email }, { identification_code: registerDto.email }],
     });
     if (existing) {
       throw new BadRequestException('User already exists');
@@ -116,7 +110,7 @@ export class AuthService {
   }
 
   async requestPasswordReset(dto: RequestPasswordResetDto) {
-  const user = await this.userRepository.findOne({ where: { email: dto.email } });
+    const user = await this.userRepository.findOne({ where: { email: dto.email } });
     if (!user) {
       return { message: 'If the email exists, a reset link will be sent.' };
     }
@@ -125,7 +119,16 @@ export class AuthService {
     const expires_at = new Date(Date.now() + 1000 * 60 * 60); // 1 hour expiry
     await this.resetTokenRepository.save({ user_id: user.id, token, expires_at, user });
     // Send email with token
-    await this.mailerService.sendResetEmail(user.email, token);
+    if (typeof user.email === 'string') {
+      try {
+        await this.mailerService.sendResetEmail(user.email, token);
+      } catch (err) {
+        // Log mail errors so they show up in CloudWatch while still
+        // allowing the password reset flow to succeed in non-prod/test.
+        // eslint-disable-next-line no-console
+        console.warn('Failed to send password reset email', err);
+      }
+    }
     return { message: 'If the email exists, a reset link will be sent.' };
   }
 
@@ -152,7 +155,7 @@ export class AuthService {
     return { message: 'Password reset successful' };
   }
 
-  async facebookAuth(dto: any) {
+  facebookAuth(dto: unknown): { message: string; received: unknown } {
     // TODO: Implement Facebook token verification and user lookup/creation
     // dto: { userID, graphDomain, accessToken }
     return { message: 'Facebook auth not yet implemented', received: dto };

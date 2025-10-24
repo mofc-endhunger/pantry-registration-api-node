@@ -16,13 +16,11 @@ async function bootstrap() {
     origin: process.env.CORS_ORIGIN || '*',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'authorization', 'X-Guest-Token', 'x-guest-token'],
   });
 
   // Set global API prefix
-  app.setGlobalPrefix('api', {
-    exclude: ['docs'], // Exclude health checks and Swagger docs from prefix
-  });
+  app.setGlobalPrefix('api');
 
   // Enable global validation for all DTOs
   app.useGlobalPipes(
@@ -54,11 +52,19 @@ async function bootstrap() {
       },
       'JWT-auth',
     )
-    .addServer('/api', 'API v1')
+    .addApiKey(
+      {
+        type: 'apiKey',
+        name: 'X-Guest-Token',
+        in: 'header',
+        description: 'Guest token header for non-authenticated users',
+      },
+      'Guest-Token',
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document, {
+  SwaggerModule.setup('api/docs', app, document, {
     swaggerOptions: {
       persistAuthorization: true,
       tagsSorter: 'alpha',
