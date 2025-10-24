@@ -175,8 +175,8 @@ export class UsersService {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       cognito_uuid: _removed,
       ...userWithoutCognito
-    } = savedUser as unknown as Record<string, unknown>;
-    return { user: userWithoutCognito as User, household_id: householdId };
+    } = savedUser;
+    return { user: userWithoutCognito, household_id: householdId };
   }
 
   async findById(id: number): Promise<User> {
