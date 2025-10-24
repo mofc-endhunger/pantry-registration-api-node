@@ -1,13 +1,10 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsDateString, IsNotEmpty } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsInt, IsDateString } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateUserDto {
   @IsString()
-  @IsNotEmpty()
-  user_type!: 'guest' | 'customer';
-
-  @IsString()
-  @IsNotEmpty()
-  identification_code!: string;
+  @IsOptional()
+  identification_code?: string;
 
   @IsString()
   @IsOptional()
@@ -35,10 +32,6 @@ export class CreateUserDto {
 
   @IsString()
   @IsOptional()
-  email!: string;
-
-  @IsString()
-  @IsOptional()
   address_line_1?: string;
 
   @IsString()
@@ -61,14 +54,17 @@ export class CreateUserDto {
   @IsOptional()
   license_plate?: string;
 
+  @Type(() => Number)
   @IsInt()
   @IsOptional()
   seniors_in_household?: number;
 
+  @Type(() => Number)
   @IsInt()
   @IsOptional()
   adults_in_household?: number;
 
+  @Type(() => Number)
   @IsInt()
   @IsOptional()
   children_in_household?: number;
@@ -92,4 +88,8 @@ export class CreateUserDto {
   @IsInt()
   @IsOptional()
   user_detail_id?: number;
+
+  @IsInt()
+  @IsOptional()
+  household_id?: number;
 }

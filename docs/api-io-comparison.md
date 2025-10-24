@@ -1,30 +1,33 @@
 # API Input/Output Comparison: Legacy vs. New System
 
 ## Overview
+
 This document compares the endpoints, input, output, and business logic between the legacy FreshTrak Registration API (Rails) and the new Pantry Registration API (NestJS). It highlights parity, enhancements, and gaps for team review.
 
 ---
 
 ## Endpoint Comparison Table
 
-| Endpoint / Action                | Legacy System (freshtrak-registration-api)                                                                 | New System (NestJS API)                                                                                   |
-|----------------------------------|-----------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------|
-| **/api/user** (GET)              | **Input:** Auth token<br>**Output:**<br>{ ...user fields... }                                              | **Input:** Auth token (JWT, `/users/:id` or `/users?identification_code=`)<br>**Output:** User object     |
-| **/api/user** (PATCH/PUT)        | **Input:** { "user": { ...fields... } }<br>**Output:** User object or errors                              | **Input:** { ...fields... }<br>**Output:** User object or errors                                          |
-| **/api/guest_authentications**   | **POST**<br>**Input:** None<br>**Output:** { "id", "user_id", "token", ... }                              | **POST**<br>**Input:** { "phone"?, "email"? }<br>**Output:** Guest auth object (token, user_id, etc.)     |
-| **/auth_callbacks/facebook**     | **POST**<br>**Input:** { "userID", "graphDomain", "accessToken" }<br>**Output:** Auth object or {} (401)  | **POST**<br>**Input:** { "userID", "graphDomain", "accessToken" }<br>**Output:** Auth object (token, etc.)|
-| **/api/households** (GET/POST)   | **GET:** `/households/:id`<br>**Output:** Household object<br>**POST:** { "household": { ... } }          | _(Not yet implemented in new system)_                                                                     |
-| **/auth/login**                  | _(Not explicit in legacy)_                                                                                | **POST**<br>**Input:** { "email", "password" }<br>**Output:** { "access_token": "..." }                   |
-| **/auth/register**               | _(Not explicit in legacy)_                                                                                | **POST**<br>**Input:** { "email", "password", "user_type" }<br>**Output:** User object                    |
-| **/auth/request-password-reset** | _(Not explicit in legacy)_                                                                                | **POST**<br>**Input:** { "email" }<br>**Output:** { "message": "..." }                                    |
-| **/auth/reset-password**         | _(Not explicit in legacy)_                                                                                | **POST**<br>**Input:** { "token", "newPassword" }<br>**Output:** { "message": "..." }                     |
+| Endpoint / Action                | Legacy System (freshtrak-registration-api)                                                               | New System (NestJS API)                                                                                    |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **/api/user** (GET)              | **Input:** Auth token<br>**Output:**<br>{ ...user fields... }                                            | **Input:** Auth token (JWT, `/users/:id` or `/users?identification_code=`)<br>**Output:** User object      |
+| **/api/user** (PATCH/PUT)        | **Input:** { "user": { ...fields... } }<br>**Output:** User object or errors                             | **Input:** { ...fields... }<br>**Output:** User object or errors                                           |
+| **/api/guest_authentications**   | **POST**<br>**Input:** None<br>**Output:** { "id", "user_id", "token", ... }                             | **POST**<br>**Input:** { "phone"?, "email"? }<br>**Output:** Guest auth object (token, user_id, etc.)      |
+| **/auth_callbacks/facebook**     | **POST**<br>**Input:** { "userID", "graphDomain", "accessToken" }<br>**Output:** Auth object or {} (401) | **POST**<br>**Input:** { "userID", "graphDomain", "accessToken" }<br>**Output:** Auth object (token, etc.) |
+| **/api/households** (GET/POST)   | **GET:** `/households/:id`<br>**Output:** Household object<br>**POST:** { "household": { ... } }         | _(Not yet implemented in new system)_                                                                      |
+| **/auth/login**                  | _(Not explicit in legacy)_                                                                               | **POST**<br>**Input:** { "email", "password" }<br>**Output:** { "access_token": "..." }                    |
+| **/auth/register**               | _(Not explicit in legacy)_                                                                               | **POST**<br>**Input:** { "email", "password", "user_type" }<br>**Output:** User object                     |
+| **/auth/request-password-reset** | _(Not explicit in legacy)_                                                                               | **POST**<br>**Input:** { "email" }<br>**Output:** { "message": "..." }                                     |
+| **/auth/reset-password**         | _(Not explicit in legacy)_                                                                               | **POST**<br>**Input:** { "token", "newPassword" }<br>**Output:** { "message": "..." }                      |
 
 ---
 
 ## JSON Input/Output Examples
 
 ### User (GET/PATCH)
+
 **Legacy Output:**
+
 ```json
 {
   "id": 123,
@@ -36,7 +39,9 @@ This document compares the endpoints, input, output, and business logic between 
   // ...other user fields
 }
 ```
+
 **New System Input:**
+
 ```json
 {
   "user_type": "customer",
@@ -49,7 +54,9 @@ This document compares the endpoints, input, output, and business logic between 
 ```
 
 ### Guest Authentication (POST)
+
 **Legacy Output:**
+
 ```json
 {
   "id": 456,
@@ -61,7 +68,9 @@ This document compares the endpoints, input, output, and business logic between 
   "new_record": true
 }
 ```
+
 **New System Input:**
+
 ```json
 {
   "phone": "5551234567",
@@ -70,7 +79,9 @@ This document compares the endpoints, input, output, and business logic between 
 ```
 
 ### Facebook Auth Callback (POST)
+
 **Input (Both):**
+
 ```json
 {
   "userID": "facebook_user_id",
@@ -78,7 +89,9 @@ This document compares the endpoints, input, output, and business logic between 
   "accessToken": "fb_token"
 }
 ```
+
 **Output (Both):**
+
 ```json
 {
   "id": 456,
@@ -92,14 +105,18 @@ This document compares the endpoints, input, output, and business logic between 
 ```
 
 ### Auth (New System Only)
+
 **Login:**
+
 ```json
 {
   "email": "user@example.com",
   "password": "password123"
 }
 ```
+
 **Output:**
+
 ```json
 {
   "access_token": "jwt.token.here"
@@ -107,6 +124,7 @@ This document compares the endpoints, input, output, and business logic between 
 ```
 
 **Register:**
+
 ```json
 {
   "email": "user@example.com",
@@ -116,12 +134,15 @@ This document compares the endpoints, input, output, and business logic between 
 ```
 
 **Password Reset:**
+
 ```json
 {
   "email": "user@example.com"
 }
 ```
+
 **Output:**
+
 ```json
 {
   "message": "If the email exists, a reset link will be sent."
@@ -131,12 +152,14 @@ This document compares the endpoints, input, output, and business logic between 
 ---
 
 ## Business Logic & Validation Notes
+
 - **Legacy:** Token-based authentication, guest/customer user types, unique identification_code, phone format validation, no explicit password reset or registration endpoints.
 - **New System:** Adds JWT login, registration, password reset, and more explicit DTO validation. All legacy flows are supported and extended.
 
 ---
 
 ## Gaps & Enhancements
+
 - New system covers all legacy flows and adds modern authentication features.
 - Some endpoints (e.g., households) are not yet implemented in the new system.
 - All new endpoints and IO are documented above for team review.

@@ -8,7 +8,7 @@
     "build": "nest build",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -17,6 +17,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.883.0",
     "@nestjs/common": "^11.1.6",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.6",
@@ -28,6 +29,7 @@
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
+    "jwks-rsa": "^3.2.0",
     "mysql": "^2.18.1",
     "mysql2": "^3.14.3",
     "nodemailer": "^7.0.5",
@@ -81,7 +83,12 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "transpilation": true
+        }
+      ]
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
