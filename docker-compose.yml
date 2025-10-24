@@ -20,7 +20,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./test:/app/test
-      - ./node_modules:/app/node_modules
+      - /app/node_modules
     networks:
       - pantry-network
 
