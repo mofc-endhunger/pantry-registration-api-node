@@ -8,7 +8,7 @@
     "build": "nest build",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
@@ -67,6 +67,7 @@
   },
   "lint-staged": {
     "*.{ts,js}": [
+      "eslint --fix",
       "prettier --write"
     ],
     "*.{json,md}": [

@@ -1,21 +1,23 @@
 import { Injectable } from '@nestjs/common';
-import { CognitoIdentityProviderClient, SignUpCommand, InitiateAuthCommand } from '@aws-sdk/client-cognito-identity-provider';
+import {
+  CognitoIdentityProviderClient,
+  SignUpCommand,
+  InitiateAuthCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 import * as crypto from 'crypto';
 
 @Injectable()
 export class CognitoService {
-  private client: any;
+  private client: CognitoIdentityProviderClient;
 
   constructor() {
     this.client = new CognitoIdentityProviderClient({ region: process.env.COGNITO_REGION });
-  console.log('[CognitoService] Loaded ClientId:', process.env.COGNITO_CLIENT_ID);
-  console.log('[CognitoService] Loaded UserPoolId:', process.env.COGNITO_USER_POOL_ID);
-  console.log('[CognitoService] Loaded ClientSecret:', process.env.COGNITO_CLIENT_SECRET);
   }
   private getSecretHash(username: string): string {
     const clientId = process.env.COGNITO_CLIENT_ID || '';
     const clientSecret = process.env.COGNITO_CLIENT_SECRET || '';
-    return crypto.createHmac('SHA256', clientSecret)
+    return crypto
+      .createHmac('SHA256', clientSecret)
       .update(username + clientId)
       .digest('base64');
   }

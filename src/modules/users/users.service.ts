@@ -42,33 +42,17 @@ export class UsersService {
     return this.householdsService.findHouseholdIdByUserId(userId);
   }
   async findDbUserIdByCognitoUuid(cognitoUuid: string): Promise<number | null> {
-    // Log the incoming value for debugging
-    console.log('[findDbUserIdByCognitoUuid] Received cognitoUuid:', cognitoUuid);
     if (!cognitoUuid || typeof cognitoUuid !== 'string' || cognitoUuid.trim() === '') {
-      console.error(
-        '[findDbUserIdByCognitoUuid] ERROR: cognitoUuid is empty or invalid:',
-        cognitoUuid,
-      );
       throw new NotFoundException('Cognito UUID is missing or invalid');
     }
     // Remove dashes if present (standard UUID format)
     const normalized = cognitoUuid.replace(/-/g, '');
     if (!/^[a-fA-F0-9]{32}$/.test(normalized)) {
-      console.error(
-        '[findDbUserIdByCognitoUuid] ERROR: Normalized UUID is not 32 hex chars:',
-        normalized,
-      );
       throw new NotFoundException('Cognito UUID format is invalid');
     }
     const user = await this.userRepository.findOne({
       where: { cognito_uuid: Buffer.from(normalized, 'hex') },
     });
-    if (!user) {
-      console.error(
-        '[findDbUserIdByCognitoUuid] ERROR: No user found for cognito_uuid:',
-        normalized,
-      );
-    }
     return user ? user.id : null;
   }
   constructor(
@@ -82,7 +66,6 @@ export class UsersService {
     createUserDto: CreateUserDto & { email: string; cognito_uuid: string; user_type: string },
   ): Promise<{ user: User; household_id: number }> {
     // Assign Cognito fields and user_type safely
-    // Log the incoming Cognito UUID for verification
     // Handle optional cognito_uuid
     let bufferUuid: Buffer | undefined = undefined;
     if (createUserDto.cognito_uuid && typeof createUserDto.cognito_uuid === 'string') {
@@ -126,7 +109,7 @@ export class UsersService {
         ...createUserDto,
         cognito_uuid: bufferUuid,
       });
-    const savedUser = (await this.userRepository.save(user)) as User;
+    const savedUser = await this.userRepository.save(user);
 
     // Always use savedUser.id for all downstream calls
     const userId = savedUser.id;
@@ -188,8 +171,12 @@ export class UsersService {
     }
 
     // Remove cognito_uuid from the returned user object
-    const { cognito_uuid, ...userWithoutCognito } = savedUser as any;
-    return { user: userWithoutCognito, household_id: householdId };
+    const {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      cognito_uuid: _removed,
+      ...userWithoutCognito
+    } = savedUser as unknown as Record<string, unknown>;
+    return { user: userWithoutCognito as User, household_id: householdId };
   }
 
   async findById(id: number): Promise<User> {
