@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsDateString, IsInt } from 'class-validator';
 
 export class CreateGuestAuthenticationDto {
   @IsString()
@@ -8,4 +8,80 @@ export class CreateGuestAuthenticationDto {
   @IsString()
   @IsOptional()
   email?: string;
+
+  @IsString()
+  @IsOptional()
+  first_name?: string;
+
+  @IsString()
+  @IsOptional()
+  last_name?: string;
+
+  @IsString()
+  @IsOptional()
+  middle_name?: string;
+
+  @IsString()
+  @IsOptional()
+  suffix?: string;
+
+  @IsDateString()
+  @IsOptional()
+  date_of_birth?: string;
+
+  @IsString()
+  @IsOptional()
+  gender?: string;
+
+  @IsString()
+  @IsOptional()
+  address_line_1?: string;
+
+  @IsString()
+  @IsOptional()
+  address_line_2?: string;
+
+  @IsString()
+  @IsOptional()
+  city?: string;
+
+  @IsString()
+  @IsOptional()
+  state?: string;
+
+  @IsString()
+  @IsOptional()
+  zip_code?: string;
+
+  @IsInt()
+  @IsOptional()
+  seniors_in_household?: number;
+
+  @IsInt()
+  @IsOptional()
+  adults_in_household?: number;
+
+  @IsInt()
+  @IsOptional()
+  children_in_household?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  permission_to_email?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  permission_to_text?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  no_phone_number?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  no_email?: boolean;
+
+  @IsString()
+  @IsOptional()
+  identification_code?: string;
 }

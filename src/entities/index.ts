@@ -7,3 +7,7 @@ export { PasswordResetToken } from './password-reset-token.entity';
 export { Household } from './household.entity';
 export { HouseholdMember } from './household-member.entity';
 export { HouseholdAddress } from './household-address.entity';
+export { Event } from './event.entity';
+export { EventTimeslot } from './event-timeslot.entity';
+export { Registration } from './registration.entity';
+export { RegistrationAttendee } from './registration-attendee.entity';

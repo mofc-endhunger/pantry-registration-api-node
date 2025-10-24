@@ -120,7 +120,14 @@ export class AuthService {
     await this.resetTokenRepository.save({ user_id: user.id, token, expires_at, user });
     // Send email with token
     if (typeof user.email === 'string') {
-      await this.mailerService.sendResetEmail(user.email, token);
+      try {
+        await this.mailerService.sendResetEmail(user.email, token);
+      } catch (err) {
+        // Log mail errors so they show up in CloudWatch while still
+        // allowing the password reset flow to succeed in non-prod/test.
+        // eslint-disable-next-line no-console
+        console.warn('Failed to send password reset email', err);
+      }
     }
     return { message: 'If the email exists, a reset link will be sent.' };
   }

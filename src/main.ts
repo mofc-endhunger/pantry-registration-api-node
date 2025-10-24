@@ -16,7 +16,7 @@ async function bootstrap() {
     origin: process.env.CORS_ORIGIN || '*',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'authorization', 'X-Guest-Token', 'x-guest-token'],
   });
 
   // Set global API prefix
@@ -51,6 +51,15 @@ async function bootstrap() {
         in: 'header',
       },
       'JWT-auth',
+    )
+    .addApiKey(
+      {
+        type: 'apiKey',
+        name: 'X-Guest-Token',
+        in: 'header',
+        description: 'Guest token header for non-authenticated users',
+      },
+      'Guest-Token',
     )
     .build();
 
