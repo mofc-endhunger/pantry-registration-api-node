@@ -1,0 +1,48 @@
+name: Test and Publish to Xray
+
+on:
+  push:
+    branches: [ household, event-registration, main ]
+  pull_request:
+    branches: [ household, event-registration, main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build --if-present
+
+      - name: Run unit tests (JUnit)
+        run: npm run test:ci
+
+      - name: Upload JUnit to Xray
+        if: always()
+        env:
+          XRAY_CLIENT_ID: ${{ secrets.XRAY_CLIENT_ID }}
+          XRAY_CLIENT_SECRET: ${{ secrets.XRAY_CLIENT_SECRET }}
+          XRAY_PROJECT_KEY: ${{ secrets.XRAY_PROJECT_KEY }}
+          XRAY_CLOUD_BASE: ${{ secrets.XRAY_CLOUD_BASE_URL }}
+        run: |
+          if [ -z "$XRAY_CLOUD_BASE" ]; then XRAY_CLOUD_BASE="https://xray.cloud.getxray.app"; fi
+          if [ ! -f reports/junit.xml ]; then echo "No JUnit report found"; exit 0; fi
+          echo "Authenticating to Xray Cloud..."
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -d "{\"client_id\":\"$XRAY_CLIENT_ID\",\"client_secret\":\"$XRAY_CLIENT_SECRET\"}" \
+            "$XRAY_CLOUD_BASE/api/v2/authenticate" | tr -d '"')
+          echo "Uploading junit.xml to Xray..."
+          curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" \
+            -F "file=@reports/junit.xml" \
+            "$XRAY_CLOUD_BASE/api/v2/import/execution/junit?projectKey=$XRAY_PROJECT_KEY"
+
