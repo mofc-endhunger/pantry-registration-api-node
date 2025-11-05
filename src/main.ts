@@ -16,7 +16,13 @@ async function bootstrap() {
     origin: process.env.CORS_ORIGIN || '*',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'authorization', 'X-Guest-Token', 'x-guest-token'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'authorization',
+      'X-Guest-Token',
+      'x-guest-token',
+    ],
   });
 
   // Set global API prefix
@@ -34,43 +40,45 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger setup with enhanced configuration
-  const config = new DocumentBuilder()
-    .setTitle('Pantry Registration API')
-    .setDescription(
-      'API documentation for user registration and authentication in the Pantry system',
-    )
-    .setVersion('1.0')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        name: 'JWT',
-        description: 'Enter JWT token',
-        in: 'header',
-      },
-      'JWT-auth',
-    )
-    .addApiKey(
-      {
-        type: 'apiKey',
-        name: 'X-Guest-Token',
-        in: 'header',
-        description: 'Guest token header for non-authenticated users',
-      },
-      'Guest-Token',
-    )
-    .build();
+  // Swagger setup with enhanced configuration (only in development/local)
+  if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'local') {
+    const config = new DocumentBuilder()
+      .setTitle('Pantry Registration API')
+      .setDescription(
+        'API documentation for user registration and authentication in the Pantry system',
+      )
+      .setVersion('1.0')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          name: 'JWT',
+          description: 'Enter JWT token',
+          in: 'header',
+        },
+        'JWT-auth',
+      )
+      .addApiKey(
+        {
+          type: 'apiKey',
+          name: 'X-Guest-Token',
+          in: 'header',
+          description: 'Guest token header for non-authenticated users',
+        },
+        'Guest-Token',
+      )
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-      tagsSorter: 'alpha',
-      operationsSorter: 'alpha',
-    },
-  });
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+        tagsSorter: 'alpha',
+        operationsSorter: 'alpha',
+      },
+    });
+  }
 
   // Apply HTTP exception filter to format error responses
   app.useGlobalFilters(new HttpExceptionFilter());
