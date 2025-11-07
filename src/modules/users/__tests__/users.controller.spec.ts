@@ -60,4 +60,21 @@ describe('UsersController', () => {
 		expect(service.updateUserWithHousehold).toHaveBeenCalledWith(22, body);
 		expect(res).toEqual({ ok: true });
 	});
+
+	it('create builds dto from JWT and delegates to service', async () => {
+		(service.create as jest.Mock).mockResolvedValueOnce({ id: 7 });
+		const req = { user: { email: 'u@example.com', userId: 'uuid-1', user_type: 'customer' } } as unknown as Request;
+		const res = await controller.create({ identification_code: undefined } as any, req);
+		expect(service.create).toHaveBeenCalledWith(
+			expect.objectContaining({ email: 'u@example.com', cognito_uuid: 'uuid-1', user_type: 'customer', identification_code: 'uuid-1' }),
+		);
+		expect(res).toEqual({ id: 7 });
+	});
+
+	it('findByIdentificationCode delegates with query value', async () => {
+		(service.findByIdentificationCode as jest.Mock).mockResolvedValueOnce({ id: 88 });
+		const res = await controller.findByIdentificationCode('code-123');
+		expect(service.findByIdentificationCode).toHaveBeenCalledWith('code-123');
+		expect(res).toEqual({ id: 88 });
+	});
 });
