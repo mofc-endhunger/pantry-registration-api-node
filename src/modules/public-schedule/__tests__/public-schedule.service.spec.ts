@@ -123,4 +123,22 @@ describe('PublicScheduleService', () => {
 		const res = await service.buildEventDateStructure(55);
 		expect(res).toEqual({ event_date: null });
 	});
+
+	it('buildEventDateStructure assembles hours and slots and formats date', async () => {
+		// dateRow with key 20251105
+		datesRepo.query
+			.mockResolvedValueOnce([{ id: 1, event_id: 2, capacity: 100, reserved: 10, event_date_key: 20251105 }] as any)
+			.mockResolvedValueOnce([{ event_hour_id: 50, event_date_id: 1, capacity: null }] as any);
+		// slots for hour 50
+		slotsRepo.query.mockResolvedValueOnce([
+			{ event_slot_id: 500, event_hour_id: 50, capacity: 5, reserved: 2 },
+			{ event_slot_id: 501, event_hour_id: 50, capacity: 10, reserved: 3 },
+		] as any);
+		const res = await service.buildEventDateStructure(1);
+		expect(res.event_date).toBeTruthy();
+		const ed = res.event_date as any;
+		expect(ed.date).toBe('2025-11-05');
+		expect(ed.event_hours[0].event_slots.length).toBe(2);
+		expect(ed.open_slots).toBe(10); // (5-2)+(10-3)=10
+	});
 });
