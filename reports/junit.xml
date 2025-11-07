@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="jest tests" tests="95" failures="0" errors="0" time="58.535">
+  <testsuite name="GuestAuthenticationsService" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:47:27" time="45.818" tests="3">
+    <testcase classname="GuestAuthenticationsService createGuest generates unique code (retries on collision) and auth token" name="GuestAuthenticationsService createGuest generates unique code (retries on collision) and auth token" time="0.051" file="src\modules\guest-authentications\__tests__\guest-authentications.service.spec.ts">
+    </testcase>
+    <testcase classname="GuestAuthenticationsService updateGuestByToken throws when token not found" name="GuestAuthenticationsService updateGuestByToken throws when token not found" time="0.04" file="src\modules\guest-authentications\__tests__\guest-authentications.service.spec.ts">
+    </testcase>
+    <testcase classname="GuestAuthenticationsService updateGuestByToken updates provided fields and respects no_email/no_phone flags" name="GuestAuthenticationsService updateGuestByToken updates provided fields and respects no_email/no_phone flags" time="0.012" file="src\modules\guest-authentications\__tests__\guest-authentications.service.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="AuthService - register/login" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:47:27" time="47.894" tests="5">
+    <testcase classname="AuthService - register/login register creates user and credential; rejects duplicate email" name="AuthService - register/login register creates user and credential; rejects duplicate email" time="0.565" file="src\modules\auth\__tests__\auth.service.login-register.spec.ts">
+    </testcase>
+    <testcase classname="AuthService - register/login login returns jwt on valid credentials" name="AuthService - register/login login returns jwt on valid credentials" time="0.006" file="src\modules\auth\__tests__\auth.service.login-register.spec.ts">
+    </testcase>
+    <testcase classname="AuthService - register/login login throws Unauthorized when user not found" name="AuthService - register/login login throws Unauthorized when user not found" time="0.005" file="src\modules\auth\__tests__\auth.service.login-register.spec.ts">
+    </testcase>
+    <testcase classname="AuthService - register/login login throws Unauthorized when credential missing" name="AuthService - register/login login throws Unauthorized when credential missing" time="0.007" file="src\modules\auth\__tests__\auth.service.login-register.spec.ts">
+    </testcase>
+    <testcase classname="AuthService - register/login login throws Unauthorized when password mismatch" name="AuthService - register/login login throws Unauthorized when password mismatch" time="0.007" file="src\modules\auth\__tests__\auth.service.login-register.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="PublicScheduleService" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:48:13" time="3.281" tests="10">
+    <testcase classname="PublicScheduleService incrementSlotAndDate increments both when available" name="PublicScheduleService incrementSlotAndDate increments both when available" time="0.01" file="src\modules\public-schedule\__tests__\public-schedule.service.spec.ts">
+    </testcase>
+    <testcase classname="PublicScheduleService decrementSlotAndDate decrements and does not go below zero" name="PublicScheduleService decrementSlotAndDate decrements and does not go below zero" time="0.005" file="src\modules\public-schedule\__tests__\public-schedule.service.spec.ts">
+    </testcase>
+    <testcase classname="PublicScheduleService incrementDate increments when date exists" name="PublicScheduleService incrementDate increments when date exists" time="0.004" file="src\modules\public-schedule\__tests__\public-schedule.service.spec.ts">
+    </testcase>
+    <testcase classname="PublicScheduleService decrementDate decrements and clamps to zero" name="PublicScheduleService decrementDate decrements and clamps to zero" time="0.004" file="src\modules\public-schedule\__tests__\public-schedule.service.spec.ts">
+    </testcase>
+    <testcase classname="PublicScheduleService getEventDateIdForDate returns id when found via raw query" name="PublicScheduleService getEventDateIdForDate returns id when found via raw query" time="0.007" file="src\modules\public-schedule\__tests__\public-schedule.service.spec.ts">
+    </testcase>
+    <testcase classname="PublicScheduleService getEventDateIdDefault prefers upcoming else recent" name="PublicScheduleService getEventDateIdDefault prefers upcoming else recent" time="0.004" file="src\modules\public-schedule\__tests__\public-schedule.service.spec.ts">
+    </testcase>
+    <testcase classname="PublicScheduleService getEventDateIdDefault returns upcoming when present" name="PublicScheduleService getEventDateIdDefault returns upcoming when present" time="0.012" file="src\modules\public-schedule\__tests__\public-schedule.service.spec.ts">
+    </testcase>
+    <testcase classname="PublicScheduleService incrementSlotAndDate returns early when slot not found" name="PublicScheduleService incrementSlotAndDate returns early when slot not found" time="0.003" file="src\modules\public-schedule\__tests__\public-schedule.service.spec.ts">
+    </testcase>
+    <testcase classname="PublicScheduleService decrementSlotAndDate returns early when slot not found" name="PublicScheduleService decrementSlotAndDate returns early when slot not found" time="0.004" file="src\modules\public-schedule\__tests__\public-schedule.service.spec.ts">
+    </testcase>
+    <testcase classname="PublicScheduleService buildEventDateStructure returns {event_date:null} when not found" name="PublicScheduleService buildEventDateStructure returns {event_date:null} when not found" time="0.004" file="src\modules\public-schedule\__tests__\public-schedule.service.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="AuthController" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:47:27" time="50.526" tests="4">
+    <testcase classname="AuthController registerGuest delegates to service" name="AuthController registerGuest delegates to service" time="0.014" file="src\modules\auth\__tests__\auth.controller.spec.ts">
+    </testcase>
+    <testcase classname="AuthController login/register delegate to service" name="AuthController login/register delegate to service" time="0.001" file="src\modules\auth\__tests__\auth.controller.spec.ts">
+    </testcase>
+    <testcase classname="AuthController password reset endpoints delegate to service" name="AuthController password reset endpoints delegate to service" time="0.002" file="src\modules\auth\__tests__\auth.controller.spec.ts">
+    </testcase>
+    <testcase classname="AuthController facebookAuth delegates to service" name="AuthController facebookAuth delegates to service" time="0.001" file="src\modules\auth\__tests__\auth.controller.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="GuestAuthenticationsController" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:47:27" time="51.135" tests="3">
+    <testcase classname="GuestAuthenticationsController create delegates to service" name="GuestAuthenticationsController create delegates to service" time="0.015" file="src\modules\guest-authentications\__tests__\guest-authentications.controller.spec.ts">
+    </testcase>
+    <testcase classname="GuestAuthenticationsController update requires X-Guest-Token header" name="GuestAuthenticationsController update requires X-Guest-Token header" time="0.026" file="src\modules\guest-authentications\__tests__\guest-authentications.controller.spec.ts">
+    </testcase>
+    <testcase classname="GuestAuthenticationsController update delegates to service with token" name="GuestAuthenticationsController update delegates to service with token" time="0.002" file="src\modules\guest-authentications\__tests__\guest-authentications.controller.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="AuthService - requestPasswordReset" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:48:15" time="3.413" tests="2">
+    <testcase classname="AuthService - requestPasswordReset returns generic message if email not found" name="AuthService - requestPasswordReset returns generic message if email not found" time="0.006" file="src\modules\auth\__tests__\auth.service.spec.ts">
+    </testcase>
+    <testcase classname="AuthService - requestPasswordReset saves reset token and sends email; ignores send errors in test" name="AuthService - requestPasswordReset saves reset token and sends email; ignores send errors in test" time="0.005" file="src\modules\auth\__tests__\auth.service.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="UsersController" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:47:27" time="51.674" tests="5">
+    <testcase classname="UsersController getCurrentUser returns household for JWT user" name="UsersController getCurrentUser returns household for JWT user" time="0.016" file="src\modules\users\__tests__\users.controller.spec.ts">
+    </testcase>
+    <testcase classname="UsersController getCurrentUser throws when DB user not found" name="UsersController getCurrentUser throws when DB user not found" time="0.046" file="src\modules\users\__tests__\users.controller.spec.ts">
+    </testcase>
+    <testcase classname="UsersController softDelete and restore delegate to service" name="UsersController softDelete and restore delegate to service" time="0.002" file="src\modules\users\__tests__\users.controller.spec.ts">
+    </testcase>
+    <testcase classname="UsersController findById delegates to service" name="UsersController findById delegates to service" time="0.001" file="src\modules\users\__tests__\users.controller.spec.ts">
+    </testcase>
+    <testcase classname="UsersController update delegates to service with id and body" name="UsersController update delegates to service with id and body" time="0.002" file="src\modules\users\__tests__\users.controller.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="EventsController" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:47:27" time="51.982" tests="7">
+    <testcase classname="EventsController list parses active query and delegates to service" name="EventsController list parses active query and delegates to service" time="0.022" file="src\modules\events\__tests__\events.controller.spec.ts">
+    </testcase>
+    <testcase classname="EventsController get delegates to service" name="EventsController get delegates to service" time="0.001" file="src\modules\events\__tests__\events.controller.spec.ts">
+    </testcase>
+    <testcase classname="EventsController create/update/remove delegate to service" name="EventsController create/update/remove delegate to service" time="0.002" file="src\modules\events\__tests__\events.controller.spec.ts">
+    </testcase>
+    <testcase classname="EventsController timeslot methods delegate and attach event id" name="EventsController timeslot methods delegate and attach event id" time="0.009" file="src\modules\events\__tests__\events.controller.spec.ts">
+    </testcase>
+    <testcase classname="EventsController public date default returns null structure when no date id" name="EventsController public date default returns null structure when no date id" time="0.001" file="src\modules\events\__tests__\events.controller.spec.ts">
+    </testcase>
+    <testcase classname="EventsController public date default returns built structure when id exists" name="EventsController public date default returns built structure when id exists" time="0.001" file="src\modules\events\__tests__\events.controller.spec.ts">
+    </testcase>
+    <testcase classname="EventsController public date specific delegates to build" name="EventsController public date specific delegates to build" time="0.001" file="src\modules\events\__tests__\events.controller.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="RegistrationsController" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:47:27" time="52.424" tests="5">
+    <testcase classname="RegistrationsController listForEvent delegates to service with parsed eventId" name="RegistrationsController listForEvent delegates to service with parsed eventId" time="0.017" file="src\modules\registrations\__tests__\registrations.controller.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsController listForMe passes user and guest token from request" name="RegistrationsController listForMe passes user and guest token from request" time="0.001" file="src\modules\registrations\__tests__\registrations.controller.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsController register forwards dto, user, and optional guest token" name="RegistrationsController register forwards dto, user, and optional guest token" time="0.002" file="src\modules\registrations\__tests__\registrations.controller.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsController cancel calls service with user and id" name="RegistrationsController cancel calls service with user and id" time="0.001" file="src\modules\registrations\__tests__\registrations.controller.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsController checkIn calls service with user and dto" name="RegistrationsController checkIn calls service with user and dto" time="0.002" file="src\modules\registrations\__tests__\registrations.controller.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="EventsService" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:48:16" time="3.937" tests="1">
+    <testcase classname="EventsService create maps nullable fields and saves" name="EventsService create maps nullable fields and saves" time="0.012" file="src\modules\events\__tests__\events.service.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="RolesGuard" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:48:19" time="2.657" tests="4">
+    <testcase classname="RolesGuard allows when no roles required" name="RolesGuard allows when no roles required" time="0.002" file="src\modules\auth\__tests__\roles.guard.spec.ts">
+    </testcase>
+    <testcase classname="RolesGuard allows when user has required role via cognito:groups" name="RolesGuard allows when user has required role via cognito:groups" time="0.001" file="src\modules\auth\__tests__\roles.guard.spec.ts">
+    </testcase>
+    <testcase classname="RolesGuard allows when user has required role via roles array" name="RolesGuard allows when user has required role via roles array" time="0.001" file="src\modules\auth\__tests__\roles.guard.spec.ts">
+    </testcase>
+    <testcase classname="RolesGuard denies when user lacks role" name="RolesGuard denies when user lacks role" time="0.033" file="src\modules\auth\__tests__\roles.guard.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="HealthService" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:48:20" time="1.926" tests="3">
+    <testcase classname="HealthService getHealth should return health status object" name="HealthService getHealth should return health status object" time="0.003" file="src\modules\health\__tests__\health.service.spec.ts">
+    </testcase>
+    <testcase classname="HealthService getHealth should return valid timestamp" name="HealthService getHealth should return valid timestamp" time="0" file="src\modules\health\__tests__\health.service.spec.ts">
+    </testcase>
+    <testcase classname="HealthService getHealth should return numeric uptime" name="HealthService getHealth should return numeric uptime" time="0.001" file="src\modules\health\__tests__\health.service.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="GuestOrJwtAuthGuard" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:48:17" time="4.474" tests="3">
+    <testcase classname="GuestOrJwtAuthGuard returns true and sets authType=cognito when JWT succeeds" name="GuestOrJwtAuthGuard returns true and sets authType=cognito when JWT succeeds" time="0.002" file="src\modules\auth\__tests__\guest-or-jwt.guard.spec.ts">
+    </testcase>
+    <testcase classname="GuestOrJwtAuthGuard falls back to guest token when JWT fails and valid token exists" name="GuestOrJwtAuthGuard falls back to guest token when JWT fails and valid token exists" time="0.001" file="src\modules\auth\__tests__\guest-or-jwt.guard.spec.ts">
+    </testcase>
+    <testcase classname="GuestOrJwtAuthGuard returns false when no JWT and no guest token" name="GuestOrJwtAuthGuard returns false when no JWT and no guest token" time="0.001" file="src\modules\auth\__tests__\guest-or-jwt.guard.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="HealthController" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:48:19" time="2.638" tests="2">
+    <testcase classname="HealthController should be defined" name="HealthController should be defined" time="0.018" file="src\modules\health\__tests__\health.controller.spec.ts">
+    </testcase>
+    <testcase classname="HealthController getHealth should return health status from service" name="HealthController getHealth should return health status from service" time="0.003" file="src\modules\health\__tests__\health.controller.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="UsersService" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:48:18" time="4.065" tests="12">
+    <testcase classname="UsersService findDbUserIdByCognitoUuid validates and finds user id" name="UsersService findDbUserIdByCognitoUuid validates and finds user id" time="0.058" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+    <testcase classname="UsersService create creates user and household with minimal info" name="UsersService create creates user and household with minimal info" time="0.004" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+    <testcase classname="UsersService updateUserWithHousehold updates user and household (happy path)" name="UsersService updateUserWithHousehold updates user and household (happy path)" time="0.003" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+    <testcase classname="UsersService updateUserWithHousehold falls back to dto.id when household_id missing" name="UsersService updateUserWithHousehold falls back to dto.id when household_id missing" time="0.002" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+    <testcase classname="UsersService findById throws NotFound when missing" name="UsersService findById throws NotFound when missing" time="0.002" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+    <testcase classname="UsersService findByIdentificationCode throws NotFound when missing" name="UsersService findByIdentificationCode throws NotFound when missing" time="0.002" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+    <testcase classname="UsersService getHouseholdTemplateForUser throws when no household found for user" name="UsersService getHouseholdTemplateForUser throws when no household found for user" time="0.003" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+    <testcase classname="UsersService create restores soft-deleted existing user and proceeds" name="UsersService create restores soft-deleted existing user and proceeds" time="0.009" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+    <testcase classname="UsersService create updates active existing user fields and proceeds" name="UsersService create updates active existing user fields and proceeds" time="0.003" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+    <testcase classname="UsersService updateUserWithHousehold maps member first/last/dob into user update" name="UsersService updateUserWithHousehold maps member first/last/dob into user update" time="0.002" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+    <testcase classname="UsersService softDeleteUser and restoreUser call repo.update then return findById" name="UsersService softDeleteUser and restoreUser call repo.update then return findById" time="0.002" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+    <testcase classname="UsersService getHouseholdTemplateForUser returns household with user address fields" name="UsersService getHouseholdTemplateForUser returns household with user address fields" time="0.004" file="src\modules\users\__tests__\users.service.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="JwtStrategy.validate" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:48:19" time="3.957" tests="5">
+    <testcase classname="JwtStrategy.validate returns mapped user in local mode (USE_LOCAL_JWT=1)" name="JwtStrategy.validate returns mapped user in local mode (USE_LOCAL_JWT=1)" time="0.001" file="src\modules\auth\__tests__\jwt.strategy.spec.ts">
+    </testcase>
+    <testcase classname="JwtStrategy.validate in Cognito mode: rejects access token with wrong client_id" name="JwtStrategy.validate in Cognito mode: rejects access token with wrong client_id" time="0.017" file="src\modules\auth\__tests__\jwt.strategy.spec.ts">
+    </testcase>
+    <testcase classname="JwtStrategy.validate in Cognito mode: accepts access token with matching client_id" name="JwtStrategy.validate in Cognito mode: accepts access token with matching client_id" time="0.001" file="src\modules\auth\__tests__\jwt.strategy.spec.ts">
+    </testcase>
+    <testcase classname="JwtStrategy.validate in Cognito mode: rejects id token with wrong aud" name="JwtStrategy.validate in Cognito mode: rejects id token with wrong aud" time="0.001" file="src\modules\auth\__tests__\jwt.strategy.spec.ts">
+    </testcase>
+    <testcase classname="JwtStrategy.validate in Cognito mode: accepts id token with matching aud" name="JwtStrategy.validate in Cognito mode: accepts id token with matching aud" time="0.001" file="src\modules\auth\__tests__\jwt.strategy.spec.ts">
+    </testcase>
+  </testsuite>
+  <testsuite name="RegistrationsService" errors="0" failures="0" skipped="0" timestamp="2025-11-07T01:48:18" time="4.519" tests="21">
+    <testcase classname="RegistrationsService throws NotFound when event does not exist" name="RegistrationsService throws NotFound when event does not exist" time="0.045" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService creates waitlisted registration when slot capacity is full" name="RegistrationsService creates waitlisted registration when slot capacity is full" time="0.004" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService creates confirmed registration for timeslot_id with available capacity" name="RegistrationsService creates confirmed registration for timeslot_id with available capacity" time="0.003" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService creates waitlisted registration for timeslot_id when full" name="RegistrationsService creates waitlisted registration for timeslot_id when full" time="0.002" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService event_date_id branch increments date counter on confirm" name="RegistrationsService event_date_id branch increments date counter on confirm" time="0.004" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService persists attendees when provided" name="RegistrationsService persists attendees when provided" time="0.004" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService throws Already registered when existing registration is found" name="RegistrationsService throws Already registered when existing registration is found" time="0.002" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService auto-provisions user and household when Cognito user not found" name="RegistrationsService auto-provisions user and household when Cognito user not found" time="0.002" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService cancelRegistration sets cancelled, promotes waitlisted, decrements counters" name="RegistrationsService cancelRegistration sets cancelled, promotes waitlisted, decrements counters" time="0.003" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService cancelRegistration decrements date when public_event_date_id is set" name="RegistrationsService cancelRegistration decrements date when public_event_date_id is set" time="0.002" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService checkIn throws Forbidden when household mismatch" name="RegistrationsService checkIn throws Forbidden when household mismatch" time="0.002" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService checkIn updates status and writes audit" name="RegistrationsService checkIn updates status and writes audit" time="0.003" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService throws NotFound when timeslot_id provided but not found" name="RegistrationsService throws NotFound when timeslot_id provided but not found" time="0.002" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService event_date_id branch waitlists when date is full and does not increment" name="RegistrationsService event_date_id branch waitlists when date is full and does not increment" time="0.006" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService cancelRegistration decrements slot and date when public_event_slot_id is set" name="RegistrationsService cancelRegistration decrements slot and date when public_event_slot_id is set" time="0.003" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService cancelRegistration promotes next waitlisted for same timeslot" name="RegistrationsService cancelRegistration promotes next waitlisted for same timeslot" time="0.004" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService cancelRegistration returns early when already cancelled" name="RegistrationsService cancelRegistration returns early when already cancelled" time="0.002" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService cancelRegistration throws Forbidden when household mismatch" name="RegistrationsService cancelRegistration throws Forbidden when household mismatch" time="0.002" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService listForMe returns registrations for guest token path" name="RegistrationsService listForMe returns registrations for guest token path" time="0.002" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService listForMe throws Forbidden when user not resolved" name="RegistrationsService listForMe throws Forbidden when user not resolved" time="0.002" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+    <testcase classname="RegistrationsService listForMe throws Forbidden when household not resolved" name="RegistrationsService listForMe throws Forbidden when household not resolved" time="0.002" file="src\modules\registrations\__tests__\registrations.service.spec.ts">
+    </testcase>
+  </testsuite>
+</testsuites>

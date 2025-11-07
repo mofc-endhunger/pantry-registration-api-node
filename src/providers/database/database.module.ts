@@ -25,7 +25,7 @@ import { HouseholdAddress } from '../../entities/household-address.entity';
         password: configService.get<string>('database.password'),
         database: configService.get<string>('database.database'),
         entities: [...Object.values(entities), HouseholdAddress], // Explicitly register all entities
-        synchronize: false, // NEVER enable - will modify database schema!
+        synchronize: process.env.NODE_ENV === 'test',
         logging: process.env.NODE_ENV === 'development', // Only log in development
       }),
     }),

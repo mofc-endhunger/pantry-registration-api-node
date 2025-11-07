@@ -5,10 +5,24 @@ on:
     branches: [ household, event-registration, main ]
   pull_request:
     branches: [ household, event-registration, main ]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: freshtrak_private_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ppassword || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,13 +41,27 @@ jobs:
       - name: Run unit tests (JUnit)
         run: npm run test:ci
 
-      - name: Upload JUnit to Xray
+      - name: Run e2e tests (JUnit)
+        env:
+          NODE_ENV: test
+          USE_LOCAL_JWT: '1'
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USERNAME: root
+          DB_PASSWORD: password
+          DB_DATABASE: freshtrak_private_test
+          JEST_JUNIT_OUTPUT_NAME: junit-e2e.xml
+        run: |
+          npx jest --config ./test/jest-e2e.json --reporters=default --reporters=jest-junit --runInBand || true
+
+      - name: Upload JUnit to Xray (unit)
         if: always()
         env:
           XRAY_CLIENT_ID: ${{ secrets.XRAY_CLIENT_ID }}
           XRAY_CLIENT_SECRET: ${{ secrets.XRAY_CLIENT_SECRET }}
           XRAY_PROJECT_KEY: ${{ secrets.XRAY_PROJECT_KEY }}
           XRAY_CLOUD_BASE: ${{ secrets.XRAY_CLOUD_BASE_URL }}
+          XRAY_TEST_PLAN_KEY: ${{ secrets.XRAY_TEST_PLAN_KEY }}
         run: |
           if [ -z "$XRAY_CLOUD_BASE" ]; then XRAY_CLOUD_BASE="https://xray.cloud.getxray.app"; fi
           if [ ! -f reports/junit.xml ]; then echo "No JUnit report found"; exit 0; fi
@@ -42,7 +70,41 @@ jobs:
             -d "{\"client_id\":\"$XRAY_CLIENT_ID\",\"client_secret\":\"$XRAY_CLIENT_SECRET\"}" \
             "$XRAY_CLOUD_BASE/api/v2/authenticate" | tr -d '"')
           echo "Uploading junit.xml to Xray..."
-          curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" \
-            -F "file=@reports/junit.xml" \
-            "$XRAY_CLOUD_BASE/api/v2/import/execution/junit?projectKey=$XRAY_PROJECT_KEY"
+          if [ -n "$XRAY_TEST_PLAN_KEY" ]; then \
+            curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" \
+              -F "file=@reports/junit.xml" \
+              -F "info={\\\"testPlanKey\\\": \\\"$XRAY_TEST_PLAN_KEY\\\", \\\"fields\\\": { \\\"summary\\\": \\\"Automated Unit Test Execution\\\" }};type=application/json" \
+              "$XRAY_CLOUD_BASE/api/v2/import/execution/junit/multipart?projectKey=$XRAY_PROJECT_KEY"; \
+          else \
+            curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" \
+              -F "file=@reports/junit.xml" \
+              "$XRAY_CLOUD_BASE/api/v2/import/execution/junit?projectKey=$XRAY_PROJECT_KEY"; \
+          fi
+
+      - name: Upload JUnit to Xray (e2e)
+        if: always()
+        env:
+          XRAY_CLIENT_ID: ${{ secrets.XRAY_CLIENT_ID }}
+          XRAY_CLIENT_SECRET: ${{ secrets.XRAY_CLIENT_SECRET }}
+          XRAY_PROJECT_KEY: ${{ secrets.XRAY_PROJECT_KEY }}
+          XRAY_CLOUD_BASE: ${{ secrets.XRAY_CLOUD_BASE_URL }}
+          XRAY_TEST_PLAN_KEY: ${{ secrets.XRAY_TEST_PLAN_KEY }}
+        run: |
+          if [ -z "$XRAY_CLOUD_BASE" ]; then XRAY_CLOUD_BASE="https://xray.cloud.getxray.app"; fi
+          if [ ! -f reports/junit-e2e.xml ]; then echo "No E2E JUnit report found"; exit 0; fi
+          echo "Authenticating to Xray Cloud..."
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -d "{\"client_id\":\"$XRAY_CLIENT_ID\",\"client_secret\":\"$XRAY_CLIENT_SECRET\"}" \
+            "$XRAY_CLOUD_BASE/api/v2/authenticate" | tr -d '"')
+          echo "Uploading junit-e2e.xml to Xray..."
+          if [ -n "$XRAY_TEST_PLAN_KEY" ]; then \
+            curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" \
+              -F "file=@reports/junit-e2e.xml" \
+              -F "info={\\\"testPlanKey\\\": \\\"$XRAY_TEST_PLAN_KEY\\\", \\\"fields\\\": { \\\"summary\\\": \\\"Automated E2E Test Execution\\\" }};type=application/json" \
+              "$XRAY_CLOUD_BASE/api/v2/import/execution/junit/multipart?projectKey=$XRAY_PROJECT_KEY"; \
+          else \
+            curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" \
+              -F "file=@reports/junit-e2e.xml" \
+              "$XRAY_CLOUD_BASE/api/v2/import/execution/junit?projectKey=$XRAY_PROJECT_KEY"; \
+          fi
 
