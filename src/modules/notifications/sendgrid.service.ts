@@ -1,6 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import sgMail from '@sendgrid/mail';
+
+interface EmailResult {
+  success: boolean;
+  error?: unknown;
+}
 
 @Injectable()
 export class SendgridService {
@@ -11,20 +15,20 @@ export class SendgridService {
     if (key) {
       try {
         sgMail.setApiKey(key);
-      } catch (err) {
-        this.logger.warn('Failed to initialize SendGrid', err);
+      } catch (err: unknown) {
+        this.logger.warn('Failed to initialize SendGrid', err as Error);
       }
     } else {
       this.logger.log('SendGrid not configured (missing env) — email will be skipped');
     }
   }
 
-  async sendEmail(from: string, to: string, subject: string, html: string) {
+  async sendEmail(from: string, to: string, subject: string, html: string): Promise<EmailResult> {
     try {
       await sgMail.send({ from, to, subject, html });
       return { success: true };
-    } catch (err) {
-      this.logger.warn('SendGrid sendEmail error', err);
+    } catch (err: unknown) {
+      this.logger.warn('SendGrid sendEmail error', err as Error);
       return { success: false, error: err };
     }
   }
