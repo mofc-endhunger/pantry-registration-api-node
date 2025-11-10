@@ -14,10 +14,18 @@ interface SmsResult {
 export class TwilioService {
   private readonly logger = new Logger(TwilioService.name);
   private client?: TwilioClient;
+  private enabled = true;
 
   constructor() {
     const sid = process.env.TWILIO_ACCOUNT_SID;
     const token = process.env.TWILIO_AUTH_TOKEN;
+    // Respect runtime guard to quickly disable SMS in non-prod
+    this.enabled = process.env.TWILIO_ENABLED !== 'false';
+    if (!this.enabled) {
+      this.logger.log('Twilio disabled via TWILIO_ENABLED — SMS will be skipped');
+      return;
+    }
+
     if (sid && token) {
       try {
         // initialize client
@@ -32,6 +40,11 @@ export class TwilioService {
   }
 
   async sendSms(from: string | undefined, to: string, body: string): Promise<SmsResult> {
+    if (!this.enabled) {
+      this.logger.warn('Twilio disabled at runtime — skipping SMS');
+      return { success: false, reason: 'disabled' };
+    }
+
     if (!this.client) {
       this.logger.warn('Twilio client not available — skipping SMS');
       return { success: false, reason: 'not-configured' };

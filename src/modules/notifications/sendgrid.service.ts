@@ -9,8 +9,16 @@ interface EmailResult {
 @Injectable()
 export class SendgridService {
   private readonly logger = new Logger(SendgridService.name);
+  private enabled = true;
 
   constructor() {
+    // Respect runtime guard to quickly disable email sending in non-prod
+    this.enabled = process.env.SENDGRID_ENABLED !== 'false';
+    if (!this.enabled) {
+      this.logger.log('SendGrid disabled via SENDGRID_ENABLED — email will be skipped');
+      return;
+    }
+
     const key = process.env.SENDGRID_API_KEY;
     if (key) {
       try {
@@ -24,6 +32,10 @@ export class SendgridService {
   }
 
   async sendEmail(from: string, to: string, subject: string, html: string): Promise<EmailResult> {
+    if (!this.enabled) {
+      this.logger.warn('SendGrid disabled at runtime — skipping email');
+      return { success: false, error: 'disabled' };
+    }
     try {
       await sgMail.send({ from, to, subject, html });
       return { success: true };
