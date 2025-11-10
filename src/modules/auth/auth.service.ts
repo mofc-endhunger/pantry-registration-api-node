@@ -1,5 +1,5 @@
 import { Credential } from '../../entities/credential.entity';
-import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../../entities/user.entity';
@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { PasswordResetToken } from '../../entities/password-reset-token.entity';
 import { MailerService } from './mailer.service';
+import { TwilioService } from '../../modules/notifications/twilio.service';
 import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
@@ -27,6 +28,7 @@ export class AuthService {
     private readonly authenticationRepository: Repository<Authentication>,
     @InjectRepository(Credential)
     private readonly credentialRepository: Repository<Credential>,
+    @Optional() private readonly twilioService?: TwilioService,
   ) {}
   async registerGuest() {
     // Create a new guest user
@@ -122,13 +124,25 @@ export class AuthService {
     if (typeof user.email === 'string') {
       try {
         await this.mailerService.sendResetEmail(user.email, token);
-      } catch (_) {
-        // Ignore mail errors in non-prod/test environments
+      } catch (err) {
+        // Log mail errors so they show up in CloudWatch while still
+        // allowing the password reset flow to succeed in non-prod/test.
+        // eslint-disable-next-line no-console
+        console.warn('Failed to send password reset email', err);
+      }
+    }
+    // Also send SMS if phone number exists
+    if (user.phone) {
+      try {
+        const msg = `Password reset token: ${token}`;
+        await this.twilioService?.sendSms(undefined, user.phone, msg);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to send password reset SMS', err);
       }
     }
     return { message: 'If the email exists, a reset link will be sent.' };
   }
-
   async resetPassword(dto: ResetPasswordDto) {
     const resetToken = await this.resetTokenRepository.findOne({ where: { token: dto.token } });
     if (!resetToken || resetToken.expires_at < new Date()) {

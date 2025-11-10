@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD, Reflector } from '@nestjs/core';
+import { Reflector } from '@nestjs/core';
+import { NotificationsModule } from '../../modules/notifications/notifications.module';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
@@ -24,6 +25,7 @@ import { GuestOrJwtAuthGuard } from './guest-or-jwt.guard';
       signOptions: { expiresIn: jwtConstants.expiresIn },
     }),
     TypeOrmModule.forFeature([User, PasswordResetToken, Authentication, Credential]),
+    NotificationsModule,
   ],
   controllers: [AuthController],
   providers: [
