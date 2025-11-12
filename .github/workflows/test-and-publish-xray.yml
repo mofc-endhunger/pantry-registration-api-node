@@ -8,6 +8,22 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      DB_HOST: ${{ secrets.DB_HOST }}
+      DB_USERNAME: ${{ secrets.DB_USERNAME }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      DB_DATABASE: ${{ secrets.DB_DATABASE }}
+      DB_PUBLIC_HOST: ${{ secrets.DB_PUBLIC_HOST }}
+      DB_PUBLIC_USERNAME: ${{ secrets.DB_PUBLIC_USERNAME }}
+      DB_PUBLIC_PASSWORD: ${{ secrets.DB_PUBLIC_PASSWORD }}
+      DB_PUBLIC_DATABASE: ${{ secrets.DB_PUBLIC_DATABASE }}
+      COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID }}
+      COGNITO_CLIENT_SECRET: ${{ secrets.COGNITO_CLIENT_SECRET }}
+      COGNITO_USER_POOL_ID: ${{ secrets.COGNITO_USER_POOL_ID }}
+      COGNITO_REGION: ${{ secrets.COGNITO_REGION }}
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,9 +38,3 @@ jobs:
 
       - name: Run unit tests (JUnit)
         run: npm run test:ci
-        env:
-          NODE_ENV: test
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
