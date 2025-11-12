@@ -1,6 +1,8 @@
 name: Test and Publish to Xray
 
 on:
+  push:
+    branches: [ feature/twilio ]
   pull_request:
     branches: [ feature/twilio ]
   workflow_dispatch:
