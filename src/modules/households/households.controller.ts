@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Param, Patch, Delete, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Patch,
+  UseGuards,
+  Req,
+  NotFoundException,
+} from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { HouseholdsService } from './households.service';
 import { CreateHouseholdDto } from './dto/create-household.dto';
@@ -21,16 +31,10 @@ export class HouseholdsController {
   @ApiOperation({ summary: 'Create a new household' })
   @ApiResponse({ status: 201, description: 'Household created.' })
   async create(@Body() createHouseholdDto: CreateHouseholdDto, @Req() req: Request) {
-    const user = req.user as any;
+    const user = req.user as { id?: string; userId?: string } | undefined;
     const cognitoUuid = user?.id ?? user?.userId ?? '';
-    console.log(
-      '[HouseholdsController.create] Extracted cognitoUuid from JWT (user.id/userId):',
-      cognitoUuid,
-      'user:',
-      user,
-    );
     const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(cognitoUuid);
-    if (!dbUserId) throw new Error('User not found');
+    if (!dbUserId) throw new NotFoundException('User not found');
     return this.householdsService.createHousehold(dbUserId, createHouseholdDto);
   }
 
@@ -38,16 +42,10 @@ export class HouseholdsController {
   @ApiOperation({ summary: 'Get a household by ID' })
   @ApiResponse({ status: 200, description: 'Household found.' })
   async findOne(@Param('id') id: string, @Req() req: Request) {
-    const user = req.user as any;
+    const user = req.user as { id?: string; userId?: string } | undefined;
     const cognitoUuid = user?.id ?? user?.userId ?? '';
-    console.log(
-      '[HouseholdsController.findOne] Extracted cognitoUuid from JWT (user.id/userId):',
-      cognitoUuid,
-      'user:',
-      user,
-    );
     const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(cognitoUuid);
-    if (!dbUserId) throw new Error('User not found');
+    if (!dbUserId) throw new NotFoundException('User not found');
     return this.householdsService.getHouseholdById(+id, dbUserId);
   }
 
@@ -102,16 +100,10 @@ export class HouseholdsController {
     @Body() updateHouseholdDto: UpdateHouseholdDto,
     @Req() req: Request,
   ) {
-    const user = req.user as any;
+    const user = req.user as { id?: string; userId?: string } | undefined;
     const cognitoUuid = user?.id ?? user?.userId ?? '';
-    console.log(
-      '[HouseholdsController.update] Extracted cognitoUuid from JWT (user.id/userId):',
-      cognitoUuid,
-      'user:',
-      user,
-    );
     const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(cognitoUuid);
-    if (!dbUserId) throw new Error('User not found');
+    if (!dbUserId) throw new NotFoundException('User not found');
     return this.householdsService.updateHousehold(+id, dbUserId, updateHouseholdDto);
   }
 

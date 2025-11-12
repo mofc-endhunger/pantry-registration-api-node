@@ -1,0 +1,30 @@
+name: PR into main
+on:
+  pull_request:
+    types: [closed]
+    branches: 
+      - beta
+jobs:
+  pull-request:
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout-repository
+        uses: actions/checkout@v3
+      - name: create-pull-request
+        id: pr
+        uses: repo-sync/pull-request@v2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          source_branch: "beta"
+          destination_branch: "main"                        # If blank, default: main
+          pr_title: "PR 'beta' into main"                   # Title of pull request
+          pr_body: "Auto-Generated from [PR ${{ github.event.number }}](https://github.com/${{ github.repository }}/pull/${{ github.event.number }})" # Full markdown support, requires pr_title to be set
+          pr_reviewer: "thompson2091"                       # Comma-separated list (no spaces)
+          pr_assignee: ""                                   # Comma-separated list (no spaces)
+          pr_label: "main"                                  # Comma-separated list (no spaces)
+          pr_draft: true                                    # Creates pull request as draft
+          pr_allow_empty: false                             # Creates pull request even if there are no changes
+      - name: pull-request-url
+        run: echo ${{steps.pr.outputs.pr_url}}

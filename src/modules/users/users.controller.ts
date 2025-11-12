@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
   Req,
+  NotFoundException,
 } from '@nestjs/common';
 
 import { ApiBearerAuth } from '@nestjs/swagger';
@@ -44,9 +45,9 @@ export class UsersController {
   @Post()
   async create(@Body() createUserDto: CreateUserDto, @Req() req: Request) {
     // Extract email, uuid, and user_type from JWT (req.user)
-    const user = req.user as JwtUser | undefined;
+    const user = req.user as (JwtUser & { id?: string }) | undefined;
     const email = user?.email ?? '';
-    const userId = user?.userId ?? (user as any)?.id ?? '';
+    const userId = user?.userId ?? user?.id ?? '';
     const user_type = user?.user_type ?? 'registered';
     // Always use values from token, not body
     const dto: CreateUserDto & {
@@ -66,10 +67,10 @@ export class UsersController {
 
   @Get('me')
   async getCurrentUser(@Req() req: Request) {
-    const user = req.user as JwtUser | undefined;
-    const cognitoUuid = user?.userId ?? (user as any)?.id ?? '';
+    const user = req.user as (JwtUser & { id?: string }) | undefined;
+    const cognitoUuid = user?.userId ?? user?.id ?? '';
     const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(cognitoUuid);
-    if (!dbUserId) throw new Error('User not found');
+    if (!dbUserId) throw new NotFoundException('User not found');
     // Get the full household template for PATCH
     const household = await this.usersService.getHouseholdTemplateForUser(dbUserId);
     return household;
@@ -89,9 +90,10 @@ export class UsersController {
   async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserWithHouseholdDto,
-    @Req() req: Request,
+    @Req() _req: Request,
   ) {
     // Optionally, extract user info from JWT if needed
-    return this.usersService.updateUserWithHousehold(id, updateUserDto);
+    await this.usersService.updateUserWithHousehold(id, updateUserDto);
+    return { success: true };
   }
 }
