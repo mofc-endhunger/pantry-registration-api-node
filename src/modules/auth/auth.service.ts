@@ -134,7 +134,8 @@ export class AuthService {
     // Also send SMS if phone number exists
     if (user.phone) {
       try {
-        const msg = `Password reset token: ${token}`;
+        const resetUrl = `${process.env.PASSWORD_RESET_URL || 'http://localhost:3000/reset-password'}?token=${token}`;
+        const msg = `Reset your password: ${resetUrl}`;
         await this.twilioService?.sendSms(undefined, user.phone, msg);
       } catch (err) {
         // eslint-disable-next-line no-console

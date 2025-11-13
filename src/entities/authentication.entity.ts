@@ -19,7 +19,7 @@ export class Authentication {
   @Column({ type: 'bigint' })
   user_id!: number;
 
-  @Column({ unique: true, default: () => 'UUID()' })
+  @Column({ unique: true })
   token!: string;
 
   @Column({ type: 'timestamp' })
