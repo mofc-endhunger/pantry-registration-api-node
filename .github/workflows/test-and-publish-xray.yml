@@ -40,3 +40,21 @@ jobs:
 
       - name: Run unit tests (JUnit)
         run: npm run test:ci
+        - name: Upload JUnit to Xray
+        if: always()
+        env:
+          XRAY_CLIENT_ID: ${{ secrets.XRAY_CLIENT_ID }}
+          XRAY_CLIENT_SECRET: ${{ secrets.XRAY_CLIENT_SECRET }}
+          XRAY_PROJECT_KEY: ${{ secrets.XRAY_PROJECT_KEY }}
+          XRAY_CLOUD_BASE: ${{ secrets.XRAY_CLOUD_BASE_URL }}
+        run: |
+          if [ -z "$XRAY_CLOUD_BASE" ]; then XRAY_CLOUD_BASE="https://xray.cloud.getxray.app"; fi
+          if [ ! -f reports/junit.xml ]; then echo "No JUnit report found"; exit 0; fi
+          echo "Authenticating to Xray Cloud..."
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -d "{\"client_id\":\"$XRAY_CLIENT_ID\",\"client_secret\":\"$XRAY_CLIENT_SECRET\"}" \
+            "$XRAY_CLOUD_BASE/api/v2/authenticate" | tr -d '"')
+          echo "Uploading junit.xml to Xray..."
+          curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" \
+            -F "file=@reports/junit.xml" \
+            "$XRAY_CLOUD_BASE/api/v2/import/execution/junit?projectKey=$XRAY_PROJECT_KEY"
