@@ -39,7 +39,13 @@ jobs:
           TOKEN=$(curl -s -H "Content-Type: application/json" \
             -d "{\"client_id\":\"$XRAY_CLIENT_ID\",\"client_secret\":\"$XRAY_CLIENT_SECRET\"}" \
             "$XRAY_CLOUD_BASE/api/v2/authenticate" | tr -d '"')
+          if [ -z "$TOKEN" ]; then echo "Authentication failed"; exit 1; fi
           echo "Uploading junit.xml to Xray..."
-          curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $TOKEN" \
+          RESPONSE=$(curl -s -w "\n%{http_code}" -H "Authorization: Bearer $TOKEN" \
             -F "file=@reports/junit.xml" \
-            "$XRAY_CLOUD_BASE/api/v2/import/execution/junit?projectKey=$XRAY_PROJECT_KEY"
+            "$XRAY_CLOUD_BASE/api/v2/import/execution/junit?projectKey=$XRAY_PROJECT_KEY")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          if [ "$HTTP_CODE" != "200" ]; then exit 1; fi
