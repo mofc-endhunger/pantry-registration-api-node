@@ -63,4 +63,29 @@ describe('AuthController (e2e)', () => {
       .expect(201);
     expect(res.body).toHaveProperty('message');
   });
+
+  it('/auth/register (POST) rejects duplicate email', async () => {
+    const email = `dupe+${Date.now()}@example.com`;
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email, password: 'TestPassword123', phone: '5551234567' })
+      .expect(201);
+    const res = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email, password: 'TestPassword123', phone: '5551234567' })
+      .expect(400);
+    expect(res.body.message).toMatch(/already exists/i);
+  });
+
+  it('/auth/login (POST) rejects invalid password', async () => {
+    const email = `badpw+${Date.now()}@example.com`;
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email, password: 'RightPass123', phone: '5551234567' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'WrongPass123' })
+      .expect(401);
+  });
 });

@@ -13,7 +13,9 @@ describe('Registrations E2E', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   it('rejects POST /registrations without auth', async () => {

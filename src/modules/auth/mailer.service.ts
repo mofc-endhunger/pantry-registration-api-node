@@ -7,6 +7,12 @@ export class MailerService {
   private transporter: Transporter;
 
   constructor() {
+    const useTest = process.env.NODE_ENV === 'test' || process.env.USE_TEST_MAILER === '1';
+    if (useTest) {
+      // Use a built-in transport that does not perform network I/O
+      this.transporter = nodemailer.createTransport({ jsonTransport: true });
+      return;
+    }
     this.transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.example.com',
       port: +(process.env.SMTP_PORT || 587),

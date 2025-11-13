@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { Household } from './household.entity';
 
 @Entity('household_members')
@@ -54,4 +62,3 @@ export class HouseholdMember {
   @UpdateDateColumn()
   updated_at!: Date;
 }
-
