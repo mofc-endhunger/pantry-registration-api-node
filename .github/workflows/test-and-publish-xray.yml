@@ -61,7 +61,10 @@ jobs:
             echo "Failed to obtain Xray token"; exit 1
           fi
           echo "Uploading junit.xml to Xray..."
-          HTTP_CODE=$(curl -s -o xray_response.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" \
+          echo "File size: $(wc -c < reports/junit.xml) bytes"
+          HTTP_CODE=$(curl -s -o xray_response.json -w "%{http_code}" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: multipart/form-data" \
             -F "file=@reports/junit.xml" \
             "$XRAY_CLOUD_BASE/api/v2/import/execution/junit?projectKey=$XRAY_PROJECT_KEY")
           echo "Xray upload HTTP status: $HTTP_CODE"
