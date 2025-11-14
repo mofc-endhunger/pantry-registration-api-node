@@ -6,3 +6,4 @@ reports/
 data-source.js
 
 jest.config.js
+src/workers/**
