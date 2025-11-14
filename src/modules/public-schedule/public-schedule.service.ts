@@ -189,7 +189,8 @@ export class PublicScheduleService {
       let hourEnd: string | null = null;
       return {
         event_hour_id: h.event_hour_id,
-        capacity: h.capacity ?? slotList.reduce((sum: number, s: any) => sum + (s.capacity ?? 0), 0),
+        capacity:
+          h.capacity ?? slotList.reduce((sum: number, s: any) => sum + (s.capacity ?? 0), 0),
         start_time: hourStart,
         end_time: hourEnd,
         open_slots: hourOpen,
@@ -197,30 +198,29 @@ export class PublicScheduleService {
       };
     });
 
-    const totalOpen = event_hours.reduce(
-      (sum: number, hr: any) => sum + (hr.open_slots ?? 0),
-      0,
-    );
+    const totalOpen = event_hours.reduce((sum: number, hr: any) => sum + (hr.open_slots ?? 0), 0);
 
     // Derive date-level start/end and date string from key
     const allStartCandidates = event_hours.map((h: any) => h.start_time).filter(Boolean);
     const allEndCandidates = event_hours.map((h: any) => h.end_time).filter(Boolean);
     const dateStart = allStartCandidates.length
-      ? allStartCandidates.reduce((min: string, v: string) =>
-          parseTimeToMinutes(v) < parseTimeToMinutes(min) ? v : min,
-        allStartCandidates[0] as string,
+      ? allStartCandidates.reduce(
+          (min: string, v: string) => (parseTimeToMinutes(v) < parseTimeToMinutes(min) ? v : min),
+          allStartCandidates[0] as string,
         )
       : null;
     const dateEnd = allEndCandidates.length
-      ? allEndCandidates.reduce((max: string, v: string) =>
-          parseTimeToMinutes(v) > parseTimeToMinutes(max) ? v : max,
-        allEndCandidates[0] as string,
+      ? allEndCandidates.reduce(
+          (max: string, v: string) => (parseTimeToMinutes(v) > parseTimeToMinutes(max) ? v : max),
+          allEndCandidates[0] as string,
         )
       : null;
 
     const key: number | undefined = dateRow.event_date_key as number | undefined;
     const keyStr = key ? String(key).padStart(8, '0') : undefined;
-    const dateIso = keyStr ? `${keyStr.slice(0, 4)}-${keyStr.slice(4, 6)}-${keyStr.slice(6, 8)}` : null;
+    const dateIso = keyStr
+      ? `${keyStr.slice(0, 4)}-${keyStr.slice(4, 6)}-${keyStr.slice(6, 8)}`
+      : null;
 
     return {
       event_date: {

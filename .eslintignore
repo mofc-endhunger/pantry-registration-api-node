@@ -1,1 +1,9 @@
+node_modules/
+dist/
+coverage/
+reports/
+**/lcov-report/**
+data-source.js
+
 jest.config.js
+src/workers/**
