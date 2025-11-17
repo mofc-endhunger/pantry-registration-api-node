@@ -238,29 +238,25 @@ docker-compose logs -f app
 
 ## Testing
 
-### Running Tests
+- Start MySQL for e2e locally:
 
 ```bash
-# Run all tests
+docker compose up -d mysql-test
+```
+
+- Run unit tests:
+
+```bash
 npm test
+```
 
-# Run tests in watch mode
-npm run test:watch
+- Run e2e tests (ensure MySQL is running):
 
-# Run tests with coverage
-npm run test:cov
-
-# Run end-to-end tests
+```bash
 npm run test:e2e
 ```
 
-### Test Organization
-
-Tests are organized alongside their respective modules:
-
-- Unit tests: `*.spec.ts` files next to source files
-- Integration tests: `*.integration.spec.ts`
-- E2E tests: `/test` directory
+Set test env overrides in `.env.test` if needed.
 
 ## Environment Variables
 

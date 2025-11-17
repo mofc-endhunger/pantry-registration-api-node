@@ -1,0 +1,62 @@
+name: Test and Publish to Xray
+
+on:
+  push:
+    branches: [ main, beta ]
+  pull_request:
+    branches: [ main, beta ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests (JUnit)
+        run: npm run test:ci
+
+      - name: Upload JUnit to Xray
+        if: always()
+        env:
+          XRAY_CLIENT_ID: ${{ secrets.XRAY_CLIENT_ID }}
+          XRAY_CLIENT_SECRET: ${{ secrets.XRAY_CLIENT_SECRET }}
+          XRAY_PROJECT_KEY: ${{ secrets.XRAY_PROJECT_KEY }}
+          XRAY_CLOUD_BASE: ${{ secrets.XRAY_CLOUD_BASE_URL }}
+        run: |
+          set -e
+          if [ -z "$XRAY_CLOUD_BASE" ]; then XRAY_CLOUD_BASE="https://xray.cloud.getxray.app"; fi
+          if [ -z "$XRAY_CLIENT_ID" ] || [ -z "$XRAY_CLIENT_SECRET" ]; then
+            echo "XRAY credentials not configured; skipping upload."; exit 0
+          fi
+          if [ ! -f reports/junit.xml ]; then echo "No JUnit report found; skipping upload."; exit 0; fi
+          echo "Authenticating to Xray Cloud..."
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -d "{\"client_id\":\"$XRAY_CLIENT_ID\",\"client_secret\":\"$XRAY_CLIENT_SECRET\"}" \
+            "$XRAY_CLOUD_BASE/api/v2/authenticate" | tr -d '"')
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "Failed to obtain Xray token"; exit 1
+          fi
+          echo "Uploading junit.xml to Xray..."
+          echo "File size: $(wc -c < reports/junit.xml) bytes"
+          echo "Project Key: $XRAY_PROJECT_KEY"
+          HTTP_CODE=$(curl -s -o xray_response.json -w "%{http_code}" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/xml" \
+            --data-binary "@reports/junit.xml" \
+            "$XRAY_CLOUD_BASE/api/v2/import/execution/junit?projectKey=$XRAY_PROJECT_KEY")
+          echo "Xray upload HTTP status: $HTTP_CODE"
+          echo "Xray response body:"
+          cat xray_response.json || true
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Xray upload failed"; exit 1
+          fi
