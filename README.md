@@ -99,6 +99,23 @@ npm run start
 
 - `npm run lint` - Run ESLint on TypeScript files
 
+## Deployment
+
+### Deploying Feature Branches to Dev
+
+To deploy your feature branch to the dev environment:
+
+1. Push your branch to origin
+2. Get your latest commit ID:
+   ```bash
+   git rev-parse HEAD
+   ```
+3. Go to AWS CodePipeline console → `pantry-registraton-api-dev`
+4. Click **"Release change"**
+5. Expand **"Source revision overrides"**
+6. Paste your commit ID in the **"Commit ID"** field
+7. Click **"Release"**
+
 ## API Documentation (Swagger)
 
 The Pantry Registration API includes interactive API documentation using Swagger UI.
