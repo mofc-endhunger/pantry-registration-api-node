@@ -8,6 +8,7 @@ import {
   UseGuards,
   Req,
   Patch,
+  HttpCode,
 } from '@nestjs/common';
 import { RegistrationsService } from './registrations.service';
 import { RegisterDto } from './dto/register.dto';
@@ -74,6 +75,7 @@ export class RegistrationsController {
   @ApiSecurity('Guest-Token')
   @ApiOkResponse({ description: 'Registration checked in' })
   @Post('check-in')
+  @HttpCode(200)
   async checkIn(@Body() dto: CheckInDto, @Req() req: Request) {
     const user = req.user as any;
     return this.registrationsService.checkIn(user, dto);
