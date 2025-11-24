@@ -110,17 +110,8 @@ export class RegistrationsService {
     },
     guestToken?: string,
   ) {
-    // Debug: surface intermittent 404s during E2E
-    // eslint-disable-next-line no-console
-    console.warn('[E2E DEBUG] registerForEvent dto', JSON.stringify(dto));
-    // eslint-disable-next-line no-console
-    console.warn('[E2E DEBUG] events count', await this.eventsRepo.count());
-    // eslint-disable-next-line no-console
-    console.warn('[E2E DEBUG] events list', JSON.stringify(await this.eventsRepo.find()));
     let event = await this.eventsRepo.findOne({ where: { id: dto.event_id, is_active: true } });
     if (!event) {
-      // eslint-disable-next-line no-console
-      console.warn('[E2E DEBUG] fallback lookup by id only');
       // Fallback: fetch by id only and validate active flag in JS
       const byId = await this.eventsRepo.findOne({ where: { id: dto.event_id } });
       if (!byId || !byId.is_active) {
@@ -308,12 +299,6 @@ export class RegistrationsService {
           })();
     if (!dbUserId) throw new ForbiddenException('User not found');
     const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
-    // eslint-disable-next-line no-console
-    console.warn('[E2E DEBUG] checkIn compare', {
-      regHousehold: reg.household_id,
-      computedHousehold: household_id,
-      dbUserId,
-    });
     if (!household_id) throw new ForbiddenException('Household not resolved');
     if (String(reg.household_id) !== String(household_id)) throw new ForbiddenException();
     if (reg.status === 'cancelled') return reg;
