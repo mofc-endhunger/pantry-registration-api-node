@@ -12,3 +12,7 @@ export { EventTimeslot } from './event-timeslot.entity';
 export { Registration } from './registration.entity';
 export { RegistrationAttendee } from './registration-attendee.entity';
 export { CheckInAudit } from './checkin-audit.entity';
+export { NotificationOutbox } from './notification-outbox.entity';
+export { NotificationTemplate } from './notification-template.entity';
+export { NotificationPreference } from './notification-preference.entity';
+export { NotificationAudit } from './notification-audit.entity';
