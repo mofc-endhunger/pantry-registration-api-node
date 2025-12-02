@@ -20,7 +20,7 @@ import * as entities from '../../entities';
         const isTest = process.env.NODE_ENV === 'test';
         // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return {
-          type: 'mysql2',
+          type: 'mysql',
           host: configService.get<string>('database.host'),
           port: configService.get<number>('database.port'),
           username: configService.get<string>('database.username'),

@@ -15,7 +15,7 @@ import publicDatabaseConfig from '../../config/public-database.config';
         // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return {
           name: 'public',
-          type: 'mysql2',
+          type: 'mysql',
           host: configService.get<string>('publicDatabase.host'),
           port: configService.get<number>('publicDatabase.port'),
           username: configService.get<string>('publicDatabase.username'),
