@@ -352,11 +352,19 @@ describe('RegistrationsService', () => {
     const result = await service.cancelRegistration({ userId: 'jwt' } as any, 21);
 
     expect(result.status).toBe('cancelled');
-    expect(regsRepo.save).toHaveBeenCalledWith(expect.objectContaining({ id: 22, status: 'confirmed' }));
+    expect(regsRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 22, status: 'confirmed' }),
+    );
   });
 
   it('cancelRegistration returns early when already cancelled', async () => {
-    const reg: any = { id: 31, event_id: 1, timeslot_id: null, household_id: 20, status: 'cancelled' };
+    const reg: any = {
+      id: 31,
+      event_id: 1,
+      timeslot_id: null,
+      household_id: 20,
+      status: 'cancelled',
+    };
     regsRepo.findOne.mockResolvedValueOnce(reg);
     (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10 as any);
     (householdsService.findHouseholdIdByUserId as jest.Mock).mockResolvedValue(20 as any);
@@ -369,12 +377,20 @@ describe('RegistrationsService', () => {
   });
 
   it('cancelRegistration throws Forbidden when household mismatch', async () => {
-    const reg: any = { id: 41, event_id: 1, timeslot_id: null, household_id: 999, status: 'confirmed' };
+    const reg: any = {
+      id: 41,
+      event_id: 1,
+      timeslot_id: null,
+      household_id: 999,
+      status: 'confirmed',
+    };
     regsRepo.findOne.mockResolvedValueOnce(reg);
     (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10 as any);
     (householdsService.findHouseholdIdByUserId as jest.Mock).mockResolvedValue(20 as any);
 
-    await expect(service.cancelRegistration({ userId: 'jwt' } as any, 41)).rejects.toThrow('Forbidden');
+    await expect(service.cancelRegistration({ userId: 'jwt' } as any, 41)).rejects.toThrow(
+      'Forbidden',
+    );
   });
 
   it('listForMe returns registrations for guest token path', async () => {
@@ -390,13 +406,16 @@ describe('RegistrationsService', () => {
   it('listForMe throws Forbidden when user not resolved', async () => {
     (authRepo.findOne as jest.Mock).mockResolvedValueOnce(null as any);
     (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValueOnce(null as any);
+    (usersService.create as jest.Mock).mockResolvedValueOnce({ user: { id: null } });
     await expect(service.listForMe({} as any)).rejects.toThrow('User not found');
   });
 
   it('listForMe throws Forbidden when household not resolved', async () => {
     (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValueOnce(77 as any);
     (householdsService.findHouseholdIdByUserId as jest.Mock).mockResolvedValueOnce(null as any);
-    await expect(service.listForMe({ userId: 'sub' } as any)).rejects.toThrow('Household not resolved');
+    await expect(service.listForMe({ userId: 'sub' } as any)).rejects.toThrow(
+      'Household not resolved',
+    );
   });
 });
 

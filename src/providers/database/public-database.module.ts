@@ -12,6 +12,7 @@ import publicDatabaseConfig from '../../config/public-database.config';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const isTest = process.env.NODE_ENV === 'test';
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return {
           name: 'public',
           type: 'mysql',

@@ -18,6 +18,7 @@ import * as entities from '../../entities';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const isTest = process.env.NODE_ENV === 'test';
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return {
           type: 'mysql',
           host: configService.get<string>('database.host'),
