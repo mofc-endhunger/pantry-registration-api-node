@@ -1,13 +1,16 @@
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, IsNull, DataSource } from 'typeorm';
 import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
 import { HouseholdAddress } from '../../entities/household-address.entity';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
 import { UpsertMemberDto } from './dto/upsert-member.dto';
-import { DataSource } from 'typeorm';
+import { User } from '../../entities/user.entity';
+
+
+type HouseholdWithComments = unknown; // placeholder to avoid type errors in modification context
 
 type HouseholdWithCounts = Household & {
   members: HouseholdMember[];
@@ -175,10 +178,29 @@ export class HouseholdsService {
       }
     }
 
-    // Counts are computed, but you could update related user/household fields if needed
-    // (No direct counts table in schema)
+    // Recalculate counts and return updated household
+    const updated = await this.getHouseholdById(household.id, requesterUserId);
 
-    return this.getHouseholdById(household.id, requesterUserId);
+    // Also persist aggregate counts on the head-of-household user record so that
+    // users.seniors/adults/children stay in sync with the household members.
+    try {
+      const headUserId = household.added_by; // primary user who owns the household
+      if (headUserId) {
+        await this.dataSource.getRepository(User).update(
+          { id: Number(headUserId) },
+          {
+            seniors_in_household: (updated as any).counts?.seniors ?? 0,
+            adults_in_household: (updated as any).counts?.["adults"] ?? 0,
+            children_in_household: (updated as any).counts?.["children"] ?? 0,
+          },
+        );
+      }
+    } catch (e) {
+      // Swallow to avoid blocking household update; surface via logs if a logger is configured
+      // console.warn('Failed to sync user household counts', e);
+    }
+
+    return updated;
   }
 
   private withComputedCounts(household: Household): HouseholdWithCounts {
