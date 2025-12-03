@@ -30,7 +30,7 @@ export class User {
   @Column({ type: 'varchar', length: 255 })
   user_type!: string;
 
-  @CreateDateColumn({ type: 'datetime', precision: 6 })
+  @CreateDateColumn({ type: 'datetime', precision: 6, default: () => 'CURRENT_TIMESTAMP(6)' })
   created_at!: Date;
 
   @UpdateDateColumn({ type: 'datetime', precision: 6 })
