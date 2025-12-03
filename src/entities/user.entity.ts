@@ -75,13 +75,13 @@ export class User {
   @Column({ type: 'varchar', length: 255, nullable: true, default: null })
   license_plate?: string | null;
 
-  @Column({ type: 'int', nullable: true, default: null })
+  @Column({ type: 'int', default: 0 })
   seniors_in_household?: number | null;
 
-  @Column({ type: 'int', nullable: true, default: null })
+  @Column({ type: 'int', default: 0 })
   adults_in_household?: number | null;
 
-  @Column({ type: 'int', nullable: true, default: null })
+  @Column({ type: 'int', default: 0 })
   children_in_household?: number | null;
 
   @Column({ type: 'tinyint', width: 1, nullable: true, default: null })
