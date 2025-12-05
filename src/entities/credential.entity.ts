@@ -10,7 +10,7 @@ export class Credential {
   user_id!: number;
 
   @Column({ type: 'varchar', length: 255, nullable: true, default: null })
-  token!: string | null;
+  token?: string;
 
   @Column({ nullable: true })
   secret!: string;
