@@ -25,10 +25,10 @@ export class Authentication {
   @Column({ type: 'timestamp' })
   expires_at!: Date;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @UpdateDateColumn({ type: 'datetime' })
   updated_at!: Date;
 
   @ManyToOne(() => User, (user) => user.authentications)
