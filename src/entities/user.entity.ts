@@ -30,10 +30,10 @@ export class User {
   @Column({ type: 'varchar', length: 255 })
   user_type!: string;
 
-  @CreateDateColumn({ type: 'timestamp', precision: 6, default: () => 'CURRENT_TIMESTAMP(6)' })
+  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'timestamp', precision: 6 })
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 
   @Column({ type: 'varchar', length: 255, nullable: true, default: null })
