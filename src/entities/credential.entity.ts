@@ -9,7 +9,7 @@ export class Credential {
   @Column({ type: 'bigint', nullable: true })
   user_id!: number;
 
-  @Column({ nullable: true, default: null })
+  @Column({ type: 'varchar', length: 255, nullable: true, default: null })
   token!: string | null;
 
   @Column({ nullable: true })
