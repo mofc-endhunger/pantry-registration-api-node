@@ -9,8 +9,8 @@ export class Credential {
   @Column({ type: 'bigint', nullable: true })
   user_id!: number;
 
-  @Column()
-  token!: string;
+  @Column({ nullable: true, default: null })
+  token!: string | null;
 
   @Column({ nullable: true })
   secret!: string;
