@@ -3,8 +3,8 @@ import {
   PrimaryGeneratedColumn,
   Column,
   OneToMany,
-  CreateDateColumn,
-  UpdateDateColumn,
+  BeforeInsert,
+  BeforeUpdate,
 } from 'typeorm';
 import { EventTimeslot } from './event-timeslot.entity';
 import { Registration } from './registration.entity';
@@ -38,9 +38,21 @@ export class Event {
   @OneToMany(() => Registration, (r) => r.event)
   registrations!: Registration[];
 
-  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ type: 'datetime' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @Column({ type: 'datetime' })
   updated_at!: Date;
+
+  @BeforeInsert()
+  setCreationDates(): void {
+    const now = new Date();
+    this.created_at = now;
+    this.updated_at = now;
+  }
+
+  @BeforeUpdate()
+  setUpdateDate(): void {
+    this.updated_at = new Date();
+  }
 }

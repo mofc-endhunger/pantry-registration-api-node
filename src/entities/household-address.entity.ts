@@ -3,8 +3,8 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
-  CreateDateColumn,
-  UpdateDateColumn,
+  BeforeInsert,
+  BeforeUpdate,
   DeleteDateColumn,
   Index,
   JoinColumn,
@@ -53,9 +53,21 @@ export class HouseholdAddress {
   @Column({ nullable: true })
   deleted_on: Date;
 
-  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ type: 'datetime' })
   created_at: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @Column({ type: 'datetime' })
   updated_at: Date;
+
+  @BeforeInsert()
+  setCreationDates(): void {
+    const now = new Date();
+    this.created_at = now;
+    this.updated_at = now;
+  }
+
+  @BeforeUpdate()
+  setUpdateDate(): void {
+    this.updated_at = new Date();
+  }
 }

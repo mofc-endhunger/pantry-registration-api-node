@@ -5,8 +5,8 @@ import {
   OneToMany,
   OneToOne,
   JoinColumn,
-  CreateDateColumn,
-  UpdateDateColumn,
+  BeforeInsert,
+  BeforeUpdate,
 } from 'typeorm';
 import { UserDetail } from './user-detail.entity';
 import { Authentication } from './authentication.entity';
@@ -30,10 +30,10 @@ export class User {
   @Column({ type: 'varchar', length: 255 })
   user_type!: string;
 
-  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ type: 'datetime' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @Column({ type: 'datetime' })
   updated_at!: Date;
 
   @Column({ type: 'varchar', length: 255, nullable: true, default: null })
@@ -111,4 +111,16 @@ export class User {
 
   @OneToMany(() => Identity, (identity) => identity.user)
   identities!: Identity[];
+
+  @BeforeInsert()
+  setCreationDates(): void {
+    const now = new Date();
+    this.created_at = now;
+    this.updated_at = now;
+  }
+
+  @BeforeUpdate()
+  setUpdateDate(): void {
+    this.updated_at = new Date();
+  }
 }

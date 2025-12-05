@@ -1,13 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  CreateDateColumn,
-  UpdateDateColumn,
-  JoinColumn,
-  BeforeInsert,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, BeforeInsert, BeforeUpdate } from 'typeorm';
 import { User } from './user.entity';
 import { randomBytes } from 'crypto';
 
@@ -25,10 +16,10 @@ export class Authentication {
   @Column({ type: 'timestamp' })
   expires_at!: Date;
 
-  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  @Column({ type: 'datetime' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @Column({ type: 'datetime' })
   updated_at!: Date;
 
   @ManyToOne(() => User, (user) => user.authentications)
@@ -43,5 +34,13 @@ export class Authentication {
     if (!this.expires_at) {
       this.expires_at = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
     }
+    const now = new Date();
+    this.created_at = now;
+    this.updated_at = now;
+  }
+
+  @BeforeUpdate()
+  setUpdateDate(): void {
+    this.updated_at = new Date();
   }
 }
