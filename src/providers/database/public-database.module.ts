@@ -25,7 +25,7 @@ import publicDatabaseConfig from '../../config/public-database.config';
           autoLoadEntities: true,
           synchronize: isTest ? true : false,
           dropSchema: false,
-          logging: process.env.NODE_ENV === 'development',
+          logging: process.env.NODE_ENV === 'development' || isTest,
         } as any;
       },
     }),

@@ -30,7 +30,7 @@ import * as entities from '../../entities';
           // In test, auto-sync the schema; rely on test helpers to truncate between tests
           synchronize: isTest ? true : false,
           dropSchema: false,
-          logging: process.env.NODE_ENV === 'development', // Only log in development
+          logging: process.env.NODE_ENV === 'development' || isTest,
         } as any;
       },
     }),
