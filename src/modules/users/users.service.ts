@@ -183,13 +183,14 @@ export class UsersService {
       // If counts sync fails, do not block user creation
     }
 
-    // Remove cognito_uuid from the returned user object
-    const {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      cognito_uuid: _removed,
-      ...userWithoutCognito
-    } = savedUser;
-    return { user: userWithoutCognito, household_id: householdId };
+    // Remove cognito_uuid from the returned user object but preserve class instance
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (savedUser as any).cognito_uuid;
+    } catch (_) {
+      // ignore if read-only
+    }
+    return { user: savedUser, household_id: householdId };
   }
 
   async findById(id: number): Promise<User> {
