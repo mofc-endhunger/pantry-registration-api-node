@@ -27,9 +27,9 @@ export class CheckInAudit {
   @Column({ type: 'int', nullable: true, default: null })
   attendees_count?: number | null;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 }

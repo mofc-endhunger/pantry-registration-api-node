@@ -29,9 +29,9 @@ export class RegistrationAttendee {
   @JoinColumn({ name: 'household_member_id' })
   household_member!: HouseholdMember;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 }

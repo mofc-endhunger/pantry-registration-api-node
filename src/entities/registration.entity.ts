@@ -55,9 +55,9 @@ export class Registration {
   @OneToMany(() => RegistrationAttendee, (a) => a.registration)
   attendees!: RegistrationAttendee[];
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 }

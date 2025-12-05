@@ -56,9 +56,9 @@ export class HouseholdMember {
   @Column({ type: 'bigint', nullable: true })
   suffix_id?: number | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 }

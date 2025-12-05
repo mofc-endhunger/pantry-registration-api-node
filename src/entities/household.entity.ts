@@ -42,9 +42,9 @@ export class Household {
   @OneToMany(() => HouseholdAddress, (address) => address.household)
   addresses!: HouseholdAddress[];
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at!: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 }

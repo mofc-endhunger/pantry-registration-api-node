@@ -33,9 +33,9 @@ export class EventTimeslot {
   @Column({ type: 'tinyint', width: 1, default: 1 })
   is_active!: boolean;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @CreateDateColumn({ type: 'timestamp' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @UpdateDateColumn({ type: 'timestamp' })
   updated_at!: Date;
 }
