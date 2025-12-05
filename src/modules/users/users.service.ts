@@ -170,6 +170,19 @@ export class UsersService {
       await addPlaceholders(createUserDto.children_in_household, 'Child');
     }
 
+    // After household creation (and optional placeholder members), ensure the user's snapshot
+    // counts reflect the actual household member distribution.
+    try {
+      const updatedHousehold = await this.householdsService.getHouseholdById(householdId, userId);
+      await this.userRepository.update(userId, {
+        seniors_in_household: (updatedHousehold as any).counts?.seniors ?? 0,
+        adults_in_household: (updatedHousehold as any).counts?.adults ?? 0,
+        children_in_household: (updatedHousehold as any).counts?.children ?? 0,
+      } as Partial<User>);
+    } catch (_) {
+      // If counts sync fails, do not block user creation
+    }
+
     // Remove cognito_uuid from the returned user object
     const {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
