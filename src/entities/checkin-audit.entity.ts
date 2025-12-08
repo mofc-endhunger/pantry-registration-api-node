@@ -4,8 +4,8 @@ import {
   Column,
   ManyToOne,
   JoinColumn,
-  CreateDateColumn,
-  UpdateDateColumn,
+  BeforeInsert,
+  BeforeUpdate,
 } from 'typeorm';
 import { Registration } from './registration.entity';
 
@@ -27,9 +27,21 @@ export class CheckInAudit {
   @Column({ type: 'int', nullable: true, default: null })
   attendees_count?: number | null;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @Column({ type: 'datetime' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @Column({ type: 'datetime' })
   updated_at!: Date;
+
+  @BeforeInsert()
+  setCreationDates(): void {
+    const now = new Date();
+    this.created_at = now;
+    this.updated_at = now;
+  }
+
+  @BeforeUpdate()
+  setUpdateDate(): void {
+    this.updated_at = new Date();
+  }
 }

@@ -3,8 +3,8 @@ import {
   PrimaryGeneratedColumn,
   Column,
   OneToMany,
-  CreateDateColumn,
-  UpdateDateColumn,
+  BeforeInsert,
+  BeforeUpdate,
 } from 'typeorm';
 import { HouseholdMember } from './household-member.entity';
 
@@ -42,9 +42,21 @@ export class Household {
   @OneToMany(() => HouseholdAddress, (address) => address.household)
   addresses!: HouseholdAddress[];
 
-  @CreateDateColumn()
+  @Column({ type: 'datetime' })
   created_at!: Date;
 
-  @UpdateDateColumn()
+  @Column({ type: 'datetime' })
   updated_at!: Date;
+
+  @BeforeInsert()
+  setCreationDates(): void {
+    const now = new Date();
+    this.created_at = now;
+    this.updated_at = now;
+  }
+
+  @BeforeUpdate()
+  setUpdateDate(): void {
+    this.updated_at = new Date();
+  }
 }

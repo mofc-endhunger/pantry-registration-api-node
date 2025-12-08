@@ -3,8 +3,8 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
-  CreateDateColumn,
-  UpdateDateColumn,
+  BeforeInsert,
+  BeforeUpdate,
   JoinColumn,
 } from 'typeorm';
 import { Event } from './event.entity';
@@ -33,9 +33,21 @@ export class EventTimeslot {
   @Column({ type: 'tinyint', width: 1, default: 1 })
   is_active!: boolean;
 
-  @CreateDateColumn({ type: 'datetime' })
+  @Column({ type: 'datetime' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'datetime' })
+  @Column({ type: 'datetime' })
   updated_at!: Date;
+
+  @BeforeInsert()
+  setCreationDates(): void {
+    const now = new Date();
+    this.created_at = now;
+    this.updated_at = now;
+  }
+
+  @BeforeUpdate()
+  setUpdateDate(): void {
+    this.updated_at = new Date();
+  }
 }

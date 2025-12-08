@@ -1,13 +1,16 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, IsNull, DataSource } from 'typeorm';
 import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
 import { HouseholdAddress } from '../../entities/household-address.entity';
 import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
 import { UpsertMemberDto } from './dto/upsert-member.dto';
-import { DataSource } from 'typeorm';
+import { User } from '../../entities/user.entity';
+
+
+type HouseholdWithComments = unknown; // placeholder to avoid type errors in modification context
 
 type HouseholdWithCounts = Household & {
   members: HouseholdMember[];
@@ -22,6 +25,7 @@ export class HouseholdsService {
     @InjectRepository(HouseholdAddress)
     private readonly addressesRepo: Repository<HouseholdAddress>,
     private readonly dataSource: DataSource,
+    @Optional() private readonly pantryTrakClient?: import('../integrations/pantrytrak.client').PantryTrakClient,
   ) {}
 
   async createHousehold(
@@ -170,15 +174,54 @@ export class HouseholdsService {
           const newMember = this.membersRepo.create(
             newMemberData as Required<Partial<HouseholdMember>>,
           );
-          await this.membersRepo.save(newMember);
+                const saved = await this.membersRepo.save(newMember);
+                // Best-effort: if this member maps to an existing user, sync that user to PantryTrak
+                try {
+                  if (this.pantryTrakClient && saved.user_id) {
+                    const userRepo = this.dataSource.getRepository(User);
+                    const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
+                    if (user) await this.pantryTrakClient.createUser(user as any);
+                  }
+                } catch (e) {
+                  // swallow errors to avoid blocking household updates
+                }
         }
       }
     }
 
-    // Counts are computed, but you could update related user/household fields if needed
-    // (No direct counts table in schema)
+    // Recalculate counts and return updated household
+    const updated = await this.getHouseholdById(household.id, requesterUserId);
 
-    return this.getHouseholdById(household.id, requesterUserId);
+    // Also persist aggregate counts on the head-of-household user record so that
+    // users.seniors/adults/children stay in sync with the household members.
+    try {
+      const headUserId = household.added_by; // primary user who owns the household
+      if (headUserId) {
+        await this.dataSource.getRepository(User).update(
+          { id: Number(headUserId) },
+          {
+            seniors_in_household: updated.counts.seniors ?? 0,
+            adults_in_household: updated.counts.adults ?? 0,
+            children_in_household: updated.counts.children ?? 0,
+          },
+        );
+        // Best-effort: sync the head user's full record to PantryTrak after counts changed
+        try {
+          if (this.pantryTrakClient) {
+            const userRepo = this.dataSource.getRepository(User);
+            const headUser = await userRepo.findOne({ where: { id: Number(headUserId) } });
+            if (headUser) await this.pantryTrakClient.createUser(headUser as any);
+          }
+        } catch (e) {
+          // swallow
+        }
+      }
+    } catch (e) {
+      // Swallow to avoid blocking household update; surface via logs if a logger is configured
+      // console.warn('Failed to sync user household counts', e);
+    }
+
+    return updated;
   }
 
   private withComputedCounts(household: Household): HouseholdWithCounts {
@@ -244,7 +287,17 @@ export class HouseholdsService {
       is_active: dto.is_active ?? true,
       added_by: String(requesterUserId),
     } as any);
-    return (await this.membersRepo.save(member)) as unknown as HouseholdMember;
+    const saved = (await this.membersRepo.save(member)) as unknown as HouseholdMember;
+    try {
+      if (this.pantryTrakClient && saved.user_id) {
+        const userRepo = this.dataSource.getRepository(User);
+        const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
+        if (user) await this.pantryTrakClient.createUser(user as any);
+      }
+    } catch (e) {
+      // swallow
+    }
+    return saved;
   }
 
   async updateMember(
@@ -271,7 +324,17 @@ export class HouseholdsService {
       is_head_of_household: dto.is_head_of_household ?? member.is_head_of_household,
       is_active: dto.is_active ?? member.is_active,
     });
-    return await this.membersRepo.save(member);
+    const saved = await this.membersRepo.save(member);
+    try {
+      if (this.pantryTrakClient && saved.user_id) {
+        const userRepo = this.dataSource.getRepository(User);
+        const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
+        if (user) await this.pantryTrakClient.createUser(user as any);
+      }
+    } catch (e) {
+      // swallow
+    }
+    return saved;
   }
 
   async deactivateMember(householdId: number, memberId: number, requesterUserId: number) {
@@ -284,6 +347,16 @@ export class HouseholdsService {
     if (!member) throw new NotFoundException('Member not found');
     if (!member.is_active) return member;
     member.is_active = false;
-    return await this.membersRepo.save(member);
+    const saved = await this.membersRepo.save(member);
+    try {
+      if (this.pantryTrakClient && saved.user_id) {
+        const userRepo = this.dataSource.getRepository(User);
+        const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
+        if (user) await this.pantryTrakClient.createUser(user as any);
+      }
+    } catch (e) {
+      // swallow
+    }
+    return saved;
   }
 }
