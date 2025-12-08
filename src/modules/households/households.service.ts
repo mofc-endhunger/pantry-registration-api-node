@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, DataSource } from 'typeorm';
 import { Household } from '../../entities/household.entity';
@@ -25,6 +25,7 @@ export class HouseholdsService {
     @InjectRepository(HouseholdAddress)
     private readonly addressesRepo: Repository<HouseholdAddress>,
     private readonly dataSource: DataSource,
+    @Optional() private readonly pantryTrakClient?: import('../integrations/pantrytrak.client').PantryTrakClient,
   ) {}
 
   async createHousehold(
@@ -173,7 +174,17 @@ export class HouseholdsService {
           const newMember = this.membersRepo.create(
             newMemberData as Required<Partial<HouseholdMember>>,
           );
-          await this.membersRepo.save(newMember);
+                const saved = await this.membersRepo.save(newMember);
+                // Best-effort: if this member maps to an existing user, sync that user to PantryTrak
+                try {
+                  if (this.pantryTrakClient && saved.user_id) {
+                    const userRepo = this.dataSource.getRepository(User);
+                    const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
+                    if (user) await this.pantryTrakClient.createUser(user as any);
+                  }
+                } catch (e) {
+                  // swallow errors to avoid blocking household updates
+                }
         }
       }
     }
@@ -189,11 +200,21 @@ export class HouseholdsService {
         await this.dataSource.getRepository(User).update(
           { id: Number(headUserId) },
           {
-            seniors_in_household: (updated as any).counts?.seniors ?? 0,
-            adults_in_household: (updated as any).counts?.["adults"] ?? 0,
-            children_in_household: (updated as any).counts?.["children"] ?? 0,
+            seniors_in_household: updated.counts.seniors ?? 0,
+            adults_in_household: updated.counts.adults ?? 0,
+            children_in_household: updated.counts.children ?? 0,
           },
         );
+        // Best-effort: sync the head user's full record to PantryTrak after counts changed
+        try {
+          if (this.pantryTrakClient) {
+            const userRepo = this.dataSource.getRepository(User);
+            const headUser = await userRepo.findOne({ where: { id: Number(headUserId) } });
+            if (headUser) await this.pantryTrakClient.createUser(headUser as any);
+          }
+        } catch (e) {
+          // swallow
+        }
       }
     } catch (e) {
       // Swallow to avoid blocking household update; surface via logs if a logger is configured
@@ -266,7 +287,17 @@ export class HouseholdsService {
       is_active: dto.is_active ?? true,
       added_by: String(requesterUserId),
     } as any);
-    return (await this.membersRepo.save(member)) as unknown as HouseholdMember;
+    const saved = (await this.membersRepo.save(member)) as unknown as HouseholdMember;
+    try {
+      if (this.pantryTrakClient && saved.user_id) {
+        const userRepo = this.dataSource.getRepository(User);
+        const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
+        if (user) await this.pantryTrakClient.createUser(user as any);
+      }
+    } catch (e) {
+      // swallow
+    }
+    return saved;
   }
 
   async updateMember(
@@ -293,7 +324,17 @@ export class HouseholdsService {
       is_head_of_household: dto.is_head_of_household ?? member.is_head_of_household,
       is_active: dto.is_active ?? member.is_active,
     });
-    return await this.membersRepo.save(member);
+    const saved = await this.membersRepo.save(member);
+    try {
+      if (this.pantryTrakClient && saved.user_id) {
+        const userRepo = this.dataSource.getRepository(User);
+        const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
+        if (user) await this.pantryTrakClient.createUser(user as any);
+      }
+    } catch (e) {
+      // swallow
+    }
+    return saved;
   }
 
   async deactivateMember(householdId: number, memberId: number, requesterUserId: number) {
@@ -306,6 +347,16 @@ export class HouseholdsService {
     if (!member) throw new NotFoundException('Member not found');
     if (!member.is_active) return member;
     member.is_active = false;
-    return await this.membersRepo.save(member);
+    const saved = await this.membersRepo.save(member);
+    try {
+      if (this.pantryTrakClient && saved.user_id) {
+        const userRepo = this.dataSource.getRepository(User);
+        const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
+        if (user) await this.pantryTrakClient.createUser(user as any);
+      }
+    } catch (e) {
+      // swallow
+    }
+    return saved;
   }
 }
