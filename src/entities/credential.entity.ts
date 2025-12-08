@@ -1,12 +1,4 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  ManyToOne,
-  CreateDateColumn,
-  UpdateDateColumn,
-  JoinColumn,
-} from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, BeforeInsert, BeforeUpdate, JoinColumn } from 'typeorm';
 import { User } from './user.entity';
 
 @Entity('credentials')
@@ -17,8 +9,8 @@ export class Credential {
   @Column({ type: 'bigint', nullable: true })
   user_id!: number;
 
-  @Column()
-  token!: string;
+  @Column({ type: 'varchar', length: 255, nullable: true, default: null })
+  token?: string;
 
   @Column({ nullable: true })
   secret!: string;
@@ -29,13 +21,25 @@ export class Credential {
   @Column({ type: 'timestamp', nullable: true })
   expires_at!: Date;
 
-  @CreateDateColumn({ type: 'timestamp' })
+  @Column({ type: 'datetime' })
   created_at!: Date;
 
-  @UpdateDateColumn({ type: 'timestamp' })
+  @Column({ type: 'datetime' })
   updated_at!: Date;
 
   @ManyToOne(() => User)
   @JoinColumn({ name: 'user_id' })
   user!: User;
+
+  @BeforeInsert()
+  setCreationDates(): void {
+    const now = new Date();
+    this.created_at = now;
+    this.updated_at = now;
+  }
+
+  @BeforeUpdate()
+  setUpdateDate(): void {
+    this.updated_at = new Date();
+  }
 }

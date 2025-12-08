@@ -27,10 +27,10 @@ import * as entities from '../../entities';
           password: configService.get<string>('database.password'),
           database: configService.get<string>('database.database'),
           entities: Object.values(entities), // Explicitly register all entities
-          // In test, auto-sync and drop schema to ensure a fresh DB visible to the Nest connection
+          // In test, auto-sync the schema; rely on test helpers to truncate between tests
           synchronize: isTest ? true : false,
-          dropSchema: isTest ? true : false,
-          logging: process.env.NODE_ENV === 'development', // Only log in development
+          dropSchema: false,
+          logging: process.env.NODE_ENV === 'development' || isTest,
         } as any;
       },
     }),

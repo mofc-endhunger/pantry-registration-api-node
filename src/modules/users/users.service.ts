@@ -8,6 +8,11 @@ import { UpdateUserWithHouseholdDto } from './dto/update-user-with-household.dto
 import { HouseholdsService } from '../households/households.service';
 import { UpsertMemberDto } from '../households/dto/upsert-member.dto';
 
+// Minimal shape needed from HouseholdsService.getHouseholdById
+type HouseholdWithCounts = {
+  counts: { seniors: number; adults: number; children: number };
+};
+
 @Injectable()
 export class UsersService {
   async getHouseholdTemplateForUser(userId: number) {
@@ -170,13 +175,30 @@ export class UsersService {
       await addPlaceholders(createUserDto.children_in_household, 'Child');
     }
 
-    // Remove cognito_uuid from the returned user object
-    const {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      cognito_uuid: _removed,
-      ...userWithoutCognito
-    } = savedUser;
-    return { user: userWithoutCognito, household_id: householdId };
+    // After household creation (and optional placeholder members), ensure the user's snapshot
+    // counts reflect the actual household member distribution.
+    try {
+      const updatedHousehold: HouseholdWithCounts = await this.householdsService.getHouseholdById(
+        householdId,
+        userId,
+      );
+      await this.userRepository.update(userId, {
+        seniors_in_household: updatedHousehold.counts.seniors ?? 0,
+        adults_in_household: updatedHousehold.counts.adults ?? 0,
+        children_in_household: updatedHousehold.counts.children ?? 0,
+      } as Partial<User>);
+    } catch (_) {
+      // If counts sync fails, do not block user creation
+    }
+
+    // Remove cognito_uuid from the returned user object but preserve class instance
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (savedUser as any).cognito_uuid;
+    } catch (_) {
+      // ignore if read-only
+    }
+    return { user: savedUser, household_id: householdId };
   }
 
   async findById(id: number): Promise<User> {
