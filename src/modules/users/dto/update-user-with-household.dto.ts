@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsBoolean } from 'class-validator';
 import { UpdateHouseholdDto } from '../../households/dto/update-household.dto';
 
 export class UpdateUserWithHouseholdDto extends UpdateHouseholdDto {
@@ -29,4 +29,12 @@ export class UpdateUserWithHouseholdDto extends UpdateHouseholdDto {
   @IsOptional()
   @IsString()
   email?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  permission_to_email?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  permission_to_text?: boolean;
 }

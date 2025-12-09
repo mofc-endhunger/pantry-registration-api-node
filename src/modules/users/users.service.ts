@@ -32,6 +32,8 @@ export class UsersService {
       zip_code: user.zip_code,
       phone: user.phone,
       email: user.email,
+      permission_to_email: user.permission_to_email,
+      permission_to_text: user.permission_to_text,
     };
   }
   async softDeleteUser(userId: number): Promise<User> {
@@ -229,6 +231,10 @@ export class UsersService {
       zip_code: dto.zip_code,
       phone: dto.phone,
       email: dto.email,
+      permission_to_email:
+        typeof dto.permission_to_email === 'boolean' ? dto.permission_to_email : undefined,
+      permission_to_text:
+        typeof dto.permission_to_text === 'boolean' ? dto.permission_to_text : undefined,
       // Add more user fields as needed
     };
     await this.userRepository.update(id, userUpdate);

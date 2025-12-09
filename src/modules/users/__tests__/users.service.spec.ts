@@ -202,11 +202,34 @@ describe('UsersService', () => {
 			zip_code: '43085',
 			phone: '555-555-5555',
 			email: 'u@example.com',
+			permission_to_email: true,
+			permission_to_text: false,
 		} as any);
 		householdsService.getHouseholdById.mockResolvedValueOnce({ id: 77, title: 'H' } as any);
 		const res = await service.getHouseholdTemplateForUser(10);
 		expect(res).toEqual(
-			expect.objectContaining({ id: 77, address_line_1: '123 Main', city: 'Columbus', email: 'u@example.com' }),
+			expect.objectContaining({
+				id: 77,
+				address_line_1: '123 Main',
+				city: 'Columbus',
+				email: 'u@example.com',
+				permission_to_email: true,
+				permission_to_text: false,
+			}),
+		);
+	});
+
+	it('updateUserWithHousehold updates permission flags when provided', async () => {
+		usersRepo.findOneBy.mockResolvedValueOnce({ id: 10 } as any);
+		const dto: any = {
+			household_id: 77,
+			permission_to_email: true,
+			permission_to_text: false,
+		};
+		await service.updateUserWithHousehold(10, dto);
+		expect(usersRepo.update).toHaveBeenCalledWith(
+			10,
+			expect.objectContaining({ permission_to_email: true, permission_to_text: false }),
 		);
 	});
 });
