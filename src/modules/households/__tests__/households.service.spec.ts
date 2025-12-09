@@ -122,7 +122,7 @@ describe('HouseholdsService', () => {
 		const existing: any = {
 			id: 13,
 			added_by: 3,
-			members: [],
+			members: [{ id: 200, number: 1 }],
 			addresses: [{
 				id: 9, household_id: 13, line_1: '123 Main', line_2: 'Apt 1', city: 'Town', state: 'OH', zip_code: '43085', zip_4: '1234', deleted_on: null
 			}],
@@ -151,6 +151,27 @@ describe('HouseholdsService', () => {
 			last_updated_by: 3,
 		}));
 		expect(spyGet).toHaveBeenCalledWith(13, 3);
+	});
+
+	it('updateHousehold upserts provided members without removing others', async () => {
+		const existing: any = {
+			id: 14,
+			added_by: 4,
+			members: [{ id: 100, number: 1 }, { id: 200, number: 2 }], // two existing
+			addresses: [],
+		};
+		householdsRepo.findOne.mockResolvedValue(existing);
+		householdsRepo.save.mockResolvedValue(existing);
+		membersRepo.save.mockImplementation(async (m: any) => m);
+
+		await service.updateHousehold(14, 4, {
+			members: [{ id: 100, number: 10 }], // only one provided
+		} as any);
+
+		// Should have updated member 100
+		expect(membersRepo.save).toHaveBeenCalledWith(expect.objectContaining({ id: 100, number: 10 }));
+		// Should NOT remove member 200 even though it wasn't included
+		expect(membersRepo.remove).not.toHaveBeenCalled();
 	});
 
 	it('listMembers returns members when requester owns', async () => {

@@ -165,16 +165,7 @@ export class HouseholdsService {
 
     // Upsert members
     if (Array.isArray(dto.members)) {
-      // Build a map of incoming member IDs
-      const incomingIds = dto.members.map((m) => m.id).filter(Boolean);
-      // Remove members not present in incoming
-      for (const member of household.members) {
-        if (!incomingIds.includes(member.id)) {
-          // remove returns removed entity, no need to await outside of Promise context
-          await this.membersRepo.remove(member);
-        }
-      }
-      // Upsert each member
+      // Upsert each provided member without removing others.
       for (const m of dto.members) {
         const member = household.members.find((mem) => mem.id === m.id);
         if (member) {
