@@ -165,15 +165,17 @@ export class UsersService {
         await this.householdsService.addMember(householdId, userId, member);
       }
     };
-    if (typeof createUserDto.seniors_in_household === 'number') {
-      await addPlaceholders(createUserDto.seniors_in_household, 'Senior');
-    }
-    if (typeof createUserDto.adults_in_household === 'number') {
-      await addPlaceholders(createUserDto.adults_in_household, 'Adult');
-    }
-    if (typeof createUserDto.children_in_household === 'number') {
-      await addPlaceholders(createUserDto.children_in_household, 'Child');
-    }
+    const toInt = (val: unknown): number => {
+      if (val === undefined || val === null) return 0;
+      const n = typeof val === 'string' ? Number(val) : (val as number);
+      return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+    };
+    const seniorsCount = toInt((createUserDto as any).seniors_in_household);
+    const adultsCount = toInt((createUserDto as any).adults_in_household);
+    const childrenCount = toInt((createUserDto as any).children_in_household);
+    if (seniorsCount > 0) await addPlaceholders(seniorsCount, 'Senior');
+    if (adultsCount > 0) await addPlaceholders(adultsCount, 'Adult');
+    if (childrenCount > 0) await addPlaceholders(childrenCount, 'Child');
 
     // After household creation (and optional placeholder members), ensure the user's snapshot
     // counts reflect the actual household member distribution.
