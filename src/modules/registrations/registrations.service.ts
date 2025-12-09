@@ -382,5 +382,26 @@ export class RegistrationsService {
     const toPromote = next[0];
     toPromote.status = 'confirmed';
     await this.regsRepo.save(toPromote);
+    // Best-effort: notify PantryTrak for newly-confirmed reservation promoted from waitlist
+    try {
+      if (this.pantryTrakClient) {
+        this.pantryTrakClient
+          .createReservation({
+            id: toPromote.id,
+            user_id: toPromote.created_by as unknown as number,
+            event_date_id: toPromote.public_event_date_id ?? toPromote.event_id,
+            event_slot_id: toPromote.public_event_slot_id ?? null,
+          })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            // eslint-disable-next-line no-console
+            console.warn('[PantryTrak] createReservation failed (promote)', msg);
+          });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // eslint-disable-next-line no-console
+      console.warn('[PantryTrak] client not available (promote)', msg);
+    }
   }
 }

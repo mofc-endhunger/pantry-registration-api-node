@@ -100,6 +100,59 @@ describe('HouseholdsService', () => {
 		expect(spyGet).toHaveBeenCalledWith(11, 1);
 	});
 
+	it('updateHousehold does not create address history when no address fields provided', async () => {
+		const existing: any = {
+			id: 12,
+			added_by: 2,
+			members: [],
+			addresses: [{ id: 1, household_id: 12, line_1: 'A', city: 'C', state: 'OH', zip_code: '43085', deleted_on: null }],
+		};
+		householdsRepo.findOne.mockResolvedValueOnce(existing);
+		householdsRepo.save.mockResolvedValueOnce(existing);
+		const spyGet = jest.spyOn(service as any, 'getHouseholdById').mockResolvedValue({ id: 12 } as any);
+
+		await service.updateHousehold(12, 2, { name: 'Only Name Change' } as any);
+
+		expect(addressesRepo.update).not.toHaveBeenCalled();
+		expect(addressesRepo.save).not.toHaveBeenCalled();
+		expect(spyGet).toHaveBeenCalledWith(12, 2);
+	});
+
+	it('updateHousehold only writes new address when changed and sets deleted_by on soft-delete', async () => {
+		const existing: any = {
+			id: 13,
+			added_by: 3,
+			members: [],
+			addresses: [{
+				id: 9, household_id: 13, line_1: '123 Main', line_2: 'Apt 1', city: 'Town', state: 'OH', zip_code: '43085', zip_4: '1234', deleted_on: null
+			}],
+		};
+		householdsRepo.findOne.mockResolvedValue(existing);
+		householdsRepo.save.mockResolvedValue(existing);
+		addressesRepo.create.mockImplementation((x: any) => x);
+		const spyGet = jest.spyOn(service as any, 'getHouseholdById').mockResolvedValue({ id: 13 } as any);
+
+		// No-op: provide same address -> should NOT update/save
+		await service.updateHousehold(13, 3, { line_1: '123 Main', line_2: 'Apt 1', city: 'Town', state: 'OH', zip_code: '43085', zip_4: '1234' } as any);
+		expect(addressesRepo.update).not.toHaveBeenCalled();
+		expect(addressesRepo.save).not.toHaveBeenCalled();
+
+		// Change: modify line_1 -> should soft-delete with deleted_by and insert new row
+		await service.updateHousehold(13, 3, { line_1: '124 Main' } as any);
+
+		expect(addressesRepo.update).toHaveBeenCalledWith(
+			expect.objectContaining({ household_id: 13 }),
+			expect.objectContaining({ deleted_on: expect.any(Date), deleted_by: 3, last_updated_by: 3 }),
+		);
+		expect(addressesRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+			household_id: 13,
+			line_1: '124 Main',
+			added_by: 3,
+			last_updated_by: 3,
+		}));
+		expect(spyGet).toHaveBeenCalledWith(13, 3);
+	});
+
 	it('listMembers returns members when requester owns', async () => {
 		householdsRepo.findOne.mockResolvedValueOnce({ id: 1, added_by: 1 } as any);
 		membersRepo.find.mockResolvedValueOnce([{ id: 1 }, { id: 2 }] as any);

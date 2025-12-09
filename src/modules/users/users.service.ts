@@ -234,8 +234,16 @@ export class UsersService {
     await this.userRepository.update(id, userUpdate);
     // Find household for this user
     const householdId = (dto.household_id ?? dto.id) as number;
-    // Delegate to household PATCH logic
-    await this.householdsService.updateHousehold(householdId, id, dto);
+    // Delegate to household PATCH logic. Map user address fields to household address fields if present.
+    const householdPatch: any = { ...dto };
+    // Map user-facing address fields to household address fields when needed
+    if (householdPatch.address_line_1 !== undefined && (householdPatch.line_1 === undefined || householdPatch.line_1 === '')) {
+      householdPatch['line_1'] = householdPatch.address_line_1 ?? '';
+    }
+    if (householdPatch.address_line_2 !== undefined && householdPatch.line_2 === undefined) {
+      householdPatch['line_2'] = householdPatch.address_line_2 ?? null;
+    }
+    await this.householdsService.updateHousehold(householdId, id, householdPatch);
     // Return updated user and household
     const user = await this.findById(id);
     const household = await this.householdsService.getHouseholdById(householdId, id);
