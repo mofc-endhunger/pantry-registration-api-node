@@ -71,9 +71,13 @@ describe('UsersService', () => {
 	it('updateUserWithHousehold updates user and household (happy path)', async () => {
 		usersRepo.findOneBy.mockResolvedValueOnce({ id: 10 } as any);
 		const dto: any = { household_id: 88, city: 'Columbus', address_line_1: '123 A', members: [] };
-		(await service.updateUserWithHousehold(10, dto));
-		expect(usersRepo.update).toHaveBeenCalledWith(10, expect.objectContaining({ city: 'Columbus', address_line_1: '123 A' }));
-		expect(householdsService.updateHousehold).toHaveBeenCalledWith(88, 10, dto);
+		(await service .updateUserWithHousehold(10, dto));
+		expect(usersRepo.update).toHaveBeenCalledWith(10, expect.any(Object));
+		expect(householdsService.updateHousehold).toHaveBeenCalledWith(
+			88,
+			10,
+			expect.objectContaining({ line_1: '123 A' }),
+		);
 		expect(householdsService.getHouseholdById).toHaveBeenCalledWith(88, 10);
 	});
 
@@ -143,6 +147,42 @@ describe('UsersService', () => {
 		);
 	});
 
+	it('create adds correct number of placeholders and syncs counts when provided as strings', async () => {
+		// Arrange: new user creation path
+		usersRepo.findOne.mockResolvedValueOnce(null as any);
+		usersRepo.create.mockImplementation((u: any) => ({ id: 10, ...u }));
+		usersRepo.save.mockResolvedValueOnce({ id: 10, email: 'u@example.com' } as any);
+		// Make household recount return 5/5/5 so snapshot sync updates user
+		householdsService.getHouseholdById.mockResolvedValueOnce({
+			id: 77,
+			counts: { seniors: 5, adults: 5, children: 5 },
+		} as any);
+
+		// Act
+		await service.create({
+			email: 'u@example.com',
+			cognito_uuid: '123e4567e89b12d3a456426614174000',
+			user_type: 'customer',
+			identification_code: 'code',
+			// Provide counts as strings to verify coercion
+			seniors_in_household: '5' as any,
+			adults_in_household: '5' as any,
+			children_in_household: '5' as any,
+		} as any);
+
+		// Assert: placeholders were created 15 times (5+5+5)
+		expect(householdsService.addMember).toHaveBeenCalledTimes(15);
+		// Assert: snapshot sync updated user with 5/5/5
+		expect(usersRepo.update).toHaveBeenCalledWith(
+			10,
+			expect.objectContaining({
+				seniors_in_household: 5,
+				adults_in_household: 5,
+				children_in_household: 5,
+			}),
+		);
+	});
+
 	it('softDeleteUser and restoreUser call repo.update then return findById', async () => {
 		usersRepo.findOneBy.mockResolvedValue({ id: 5 } as any);
 		await service.softDeleteUser(5);
@@ -162,11 +202,34 @@ describe('UsersService', () => {
 			zip_code: '43085',
 			phone: '555-555-5555',
 			email: 'u@example.com',
+			permission_to_email: true,
+			permission_to_text: false,
 		} as any);
 		householdsService.getHouseholdById.mockResolvedValueOnce({ id: 77, title: 'H' } as any);
 		const res = await service.getHouseholdTemplateForUser(10);
 		expect(res).toEqual(
-			expect.objectContaining({ id: 77, address_line_1: '123 Main', city: 'Columbus', email: 'u@example.com' }),
+			expect.objectContaining({
+				id: 77,
+				address_line_1: '123 Main',
+				city: 'Columbus',
+				email: 'u@example.com',
+				permission_to_email: true,
+				permission_to_text: false,
+			}),
+		);
+	});
+
+	it('updateUserWithHousehold updates permission flags when provided', async () => {
+		usersRepo.findOneBy.mockResolvedValueOnce({ id: 10 } as any);
+		const dto: any = {
+			household_id: 77,
+			permission_to_email: true,
+			permission_to_text: false,
+		};
+		await service.updateUserWithHousehold(10, dto);
+		expect(usersRepo.update).toHaveBeenCalledWith(
+			10,
+			expect.objectContaining({ permission_to_email: true, permission_to_text: false }),
 		);
 	});
 });
