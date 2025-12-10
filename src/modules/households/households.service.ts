@@ -103,39 +103,69 @@ export class HouseholdsService {
     await this.householdsRepo.save(household);
 
     // Address history logic
-    if (dto.line_1 || dto.line_2 || dto.city || dto.state || dto.zip_code) {
-      // Soft-delete all previous addresses
-      await this.addressesRepo.update(
-        { household_id: householdId, deleted_on: IsNull() },
-        { deleted_on: new Date() },
-      );
-      // Insert new address
-      const newAddress: Partial<HouseholdAddress> = {
-        household_id: householdId,
-        line_1: dto.line_1 ?? '',
-        line_2: dto.line_2 ?? undefined,
-        city: dto.city ?? '',
-        state: dto.state ?? '',
-        zip_code: dto.zip_code ?? '',
-        zip_4: dto.zip_4 ?? undefined,
-        added_by: requesterUserId,
-        last_updated_by: requesterUserId,
+    if (
+      dto.line_1 ||
+      (dto as any).address_line_1 ||
+      dto.line_2 ||
+      (dto as any).address_line_2 ||
+      dto.city ||
+      dto.state ||
+      dto.zip_code ||
+      dto.zip_4
+    ) {
+      // Determine current active address
+      const prevActive =
+        Array.isArray(household.addresses) && household.addresses.length
+          ? (household.addresses.find((a) => !a.deleted_on) as Partial<HouseholdAddress> | undefined)
+          : undefined;
+
+      // Proposed incoming values (only those explicitly provided)
+      const proposed = {
+        line_1: (dto.line_1 as string | undefined) ?? ((dto as any).address_line_1 as string | undefined),
+        line_2: (dto.line_2 as string | undefined) ?? ((dto as any).address_line_2 as string | undefined),
+        city: dto.city as string | undefined,
+        state: dto.state as string | undefined,
+        zip_code: dto.zip_code as string | undefined,
+        zip_4: dto.zip_4 as string | undefined,
       };
-      await this.addressesRepo.save(this.addressesRepo.create(newAddress));
+
+      // Decide whether there is any change vs the active address (only consider fields that were provided)
+      const anyChange =
+        !prevActive ||
+        (proposed.line_1 !== undefined && proposed.line_1 !== (prevActive.line_1 as string | undefined)) ||
+        (proposed.line_2 !== undefined && proposed.line_2 !== (prevActive.line_2 as string | undefined)) ||
+        (proposed.city !== undefined && proposed.city !== (prevActive.city as string | undefined)) ||
+        (proposed.state !== undefined && proposed.state !== (prevActive.state as string | undefined)) ||
+        (proposed.zip_code !== undefined && proposed.zip_code !== (prevActive.zip_code as string | undefined)) ||
+        (proposed.zip_4 !== undefined && proposed.zip_4 !== (prevActive.zip_4 as string | undefined));
+
+      if (anyChange) {
+        // Soft-delete previous active address rows and set deleted_by
+        await this.addressesRepo.update(
+          { household_id: householdId, deleted_on: IsNull() },
+          { deleted_on: new Date(), deleted_by: requesterUserId, last_updated_by: requesterUserId } as any,
+        );
+
+        // Build the new address values: prefer provided, else fall back to previous, else sensible defaults
+        const newAddress: Partial<HouseholdAddress> = {
+          household_id: householdId,
+          line_1: (proposed.line_1 ?? (prevActive?.line_1 as string | undefined) ?? '') as string,
+          line_2: (proposed.line_2 ?? (prevActive?.line_2 as string | undefined) ?? null) as any,
+          city: (proposed.city ?? (prevActive?.city as string | undefined) ?? '') as string,
+          state: (proposed.state ?? (prevActive?.state as string | undefined) ?? '') as string,
+          zip_code: (proposed.zip_code ?? (prevActive?.zip_code as string | undefined) ?? '') as string,
+          zip_4: (proposed.zip_4 ?? (prevActive?.zip_4 as string | undefined)) as any,
+          added_by: requesterUserId,
+          last_updated_by: requesterUserId,
+        };
+
+        await this.addressesRepo.save(this.addressesRepo.create(newAddress));
+      }
     }
 
     // Upsert members
     if (Array.isArray(dto.members)) {
-      // Build a map of incoming member IDs
-      const incomingIds = dto.members.map((m) => m.id).filter(Boolean);
-      // Remove members not present in incoming
-      for (const member of household.members) {
-        if (!incomingIds.includes(member.id)) {
-          // remove returns removed entity, no need to await outside of Promise context
-          await this.membersRepo.remove(member);
-        }
-      }
-      // Upsert each member
+      // Upsert each provided member without removing others.
       for (const m of dto.members) {
         const member = household.members.find((mem) => mem.id === m.id);
         if (member) {

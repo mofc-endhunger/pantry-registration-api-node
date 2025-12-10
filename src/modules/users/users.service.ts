@@ -32,6 +32,8 @@ export class UsersService {
       zip_code: user.zip_code,
       phone: user.phone,
       email: user.email,
+      permission_to_email: user.permission_to_email,
+      permission_to_text: user.permission_to_text,
     };
   }
   async softDeleteUser(userId: number): Promise<User> {
@@ -165,15 +167,17 @@ export class UsersService {
         await this.householdsService.addMember(householdId, userId, member);
       }
     };
-    if (typeof createUserDto.seniors_in_household === 'number') {
-      await addPlaceholders(createUserDto.seniors_in_household, 'Senior');
-    }
-    if (typeof createUserDto.adults_in_household === 'number') {
-      await addPlaceholders(createUserDto.adults_in_household, 'Adult');
-    }
-    if (typeof createUserDto.children_in_household === 'number') {
-      await addPlaceholders(createUserDto.children_in_household, 'Child');
-    }
+    const toInt = (val: unknown): number => {
+      if (val === undefined || val === null) return 0;
+      const n = typeof val === 'string' ? Number(val) : (val as number);
+      return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+    };
+    const seniorsCount = toInt((createUserDto as any).seniors_in_household);
+    const adultsCount = toInt((createUserDto as any).adults_in_household);
+    const childrenCount = toInt((createUserDto as any).children_in_household);
+    if (seniorsCount > 0) await addPlaceholders(seniorsCount, 'Senior');
+    if (adultsCount > 0) await addPlaceholders(adultsCount, 'Adult');
+    if (childrenCount > 0) await addPlaceholders(childrenCount, 'Child');
 
     // After household creation (and optional placeholder members), ensure the user's snapshot
     // counts reflect the actual household member distribution.
@@ -227,13 +231,25 @@ export class UsersService {
       zip_code: dto.zip_code,
       phone: dto.phone,
       email: dto.email,
+      permission_to_email:
+        typeof dto.permission_to_email === 'boolean' ? dto.permission_to_email : undefined,
+      permission_to_text:
+        typeof dto.permission_to_text === 'boolean' ? dto.permission_to_text : undefined,
       // Add more user fields as needed
     };
     await this.userRepository.update(id, userUpdate);
     // Find household for this user
     const householdId = (dto.household_id ?? dto.id) as number;
-    // Delegate to household PATCH logic
-    await this.householdsService.updateHousehold(householdId, id, dto);
+    // Delegate to household PATCH logic. Map user address fields to household address fields if present.
+    const householdPatch: any = { ...dto };
+    // Map user-facing address fields to household address fields when needed
+    if (householdPatch.address_line_1 !== undefined && (householdPatch.line_1 === undefined || householdPatch.line_1 === '')) {
+      householdPatch['line_1'] = householdPatch.address_line_1 ?? '';
+    }
+    if (householdPatch.address_line_2 !== undefined && householdPatch.line_2 === undefined) {
+      householdPatch['line_2'] = householdPatch.address_line_2 ?? null;
+    }
+    await this.householdsService.updateHousehold(householdId, id, householdPatch);
     // Return updated user and household
     const user = await this.findById(id);
     const household = await this.householdsService.getHouseholdById(householdId, id);
