@@ -163,9 +163,29 @@ export class HouseholdsService {
       }
     }
 
-    // Upsert members
+    // Upsert members and deactivate omitted ones
     if (Array.isArray(dto.members)) {
-      // Upsert each provided member without removing others.
+      // Get IDs of members in the payload (excluding new members with null/undefined id)
+      const payloadMemberIds = new Set(
+        dto.members
+          .filter((m: any) => m.id != null)
+          .map((m: any) => Number(m.id))
+      );
+
+      // Deactivate members that exist in DB but are NOT in the payload
+      // (except head of household - they cannot be deactivated this way)
+      for (const existingMember of household.members) {
+        if (
+          existingMember.is_active &&
+          !existingMember.is_head_of_household &&
+          !payloadMemberIds.has(existingMember.id)
+        ) {
+          existingMember.is_active = false;
+          await this.membersRepo.save(existingMember);
+        }
+      }
+
+      // Upsert each provided member
       for (const m of dto.members) {
         const member = household.members.find((mem) => mem.id === m.id);
         if (member) {
@@ -176,7 +196,7 @@ export class HouseholdsService {
             last_name: m.last_name,
             date_of_birth: m.date_of_birth,
             is_head_of_household: !!m.is_head_of_household,
-            is_active: !!m.is_active,
+            is_active: m.is_active !== undefined ? !!m.is_active : member.is_active,
             added_by: m.added_by,
             gender_id: m.gender_id ?? member.gender_id,
             suffix_id: m.suffix_id ?? member.suffix_id,
@@ -191,7 +211,7 @@ export class HouseholdsService {
             last_name: m.last_name ?? '',
             date_of_birth: m.date_of_birth ?? '1900-01-01',
             is_head_of_household: !!m.is_head_of_household,
-            is_active: !!m.is_active,
+            is_active: m.is_active !== undefined ? !!m.is_active : true,
             added_by: m.added_by != null ? String(m.added_by) : String(requesterUserId),
             gender_id: m.gender_id ?? null,
             suffix_id: m.suffix_id ?? null,
@@ -253,6 +273,7 @@ export class HouseholdsService {
 
     return updated;
   }
+ 
 
   private withComputedCounts(household: Household): HouseholdWithCounts {
     const members: HouseholdMember[] = household.members || [];
@@ -265,6 +286,7 @@ export class HouseholdsService {
       if (m < 0 || (m === 0 && today.getDate() < d.getDate())) years--;
       return years;
     };
+    // Filter to only active members for both counting and response
     const active = members.filter((m: HouseholdMember) => m.is_active);
     const seniors = active.filter(
       (m: HouseholdMember) => (age(m.date_of_birth) ?? -1) >= 60,
@@ -274,7 +296,7 @@ export class HouseholdsService {
     ).length;
     const adults = active.length - seniors - children;
     return Object.assign(household, {
-      members,
+      members: active, // Only return active members
       counts: { seniors, adults, children, total: active.length },
     }) as HouseholdWithCounts;
   }
