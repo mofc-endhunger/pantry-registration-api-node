@@ -9,8 +9,8 @@ import { UpdateHouseholdDto } from './dto/update-household.dto';
 import { UpsertMemberDto } from './dto/upsert-member.dto';
 import { User } from '../../entities/user.entity';
 
-
-type HouseholdWithComments = unknown; // placeholder to avoid type errors in modification context
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _HouseholdWithComments = unknown; // placeholder to avoid type errors in modification context
 
 type HouseholdWithCounts = Household & {
   members: HouseholdMember[];
@@ -25,7 +25,8 @@ export class HouseholdsService {
     @InjectRepository(HouseholdAddress)
     private readonly addressesRepo: Repository<HouseholdAddress>,
     private readonly dataSource: DataSource,
-    @Optional() private readonly pantryTrakClient?: import('../integrations/pantrytrak.client').PantryTrakClient,
+    @Optional()
+    private readonly pantryTrakClient?: import('../integrations/pantrytrak.client').PantryTrakClient,
   ) {}
 
   async createHousehold(
@@ -33,7 +34,7 @@ export class HouseholdsService {
     dto: CreateHouseholdDto,
   ): Promise<HouseholdWithCounts> {
     // Minimal create; number/name/identification_code come from upstream inputs you provide.
-    // Placeholder: you’ll likely supply number, name, identification_code elsewhere.
+    // Placeholder: you'll likely supply number, name, identification_code elsewhere.
     const created = await this.householdsRepo.save(
       this.householdsRepo.create({
         number: 0,
@@ -103,11 +104,12 @@ export class HouseholdsService {
     await this.householdsRepo.save(household);
 
     // Address history logic
+    const dtoRecord = dto as Record<string, unknown>;
     if (
       dto.line_1 ||
-      (dto as any).address_line_1 ||
+      dtoRecord['address_line_1'] ||
       dto.line_2 ||
-      (dto as any).address_line_2 ||
+      dtoRecord['address_line_2'] ||
       dto.city ||
       dto.state ||
       dto.zip_code ||
@@ -116,13 +118,17 @@ export class HouseholdsService {
       // Determine current active address
       const prevActive =
         Array.isArray(household.addresses) && household.addresses.length
-          ? (household.addresses.find((a) => !a.deleted_on) as Partial<HouseholdAddress> | undefined)
+          ? (household.addresses.find((a) => !a.deleted_on) as
+              | Partial<HouseholdAddress>
+              | undefined)
           : undefined;
 
       // Proposed incoming values (only those explicitly provided)
       const proposed = {
-        line_1: (dto.line_1 as string | undefined) ?? ((dto as any).address_line_1 as string | undefined),
-        line_2: (dto.line_2 as string | undefined) ?? ((dto as any).address_line_2 as string | undefined),
+        line_1:
+          (dto.line_1 as string | undefined) ?? (dtoRecord['address_line_1'] as string | undefined),
+        line_2:
+          (dto.line_2 as string | undefined) ?? (dtoRecord['address_line_2'] as string | undefined),
         city: dto.city as string | undefined,
         state: dto.state as string | undefined,
         zip_code: dto.zip_code as string | undefined,
@@ -132,29 +138,30 @@ export class HouseholdsService {
       // Decide whether there is any change vs the active address (only consider fields that were provided)
       const anyChange =
         !prevActive ||
-        (proposed.line_1 !== undefined && proposed.line_1 !== (prevActive.line_1 as string | undefined)) ||
-        (proposed.line_2 !== undefined && proposed.line_2 !== (prevActive.line_2 as string | undefined)) ||
-        (proposed.city !== undefined && proposed.city !== (prevActive.city as string | undefined)) ||
-        (proposed.state !== undefined && proposed.state !== (prevActive.state as string | undefined)) ||
-        (proposed.zip_code !== undefined && proposed.zip_code !== (prevActive.zip_code as string | undefined)) ||
-        (proposed.zip_4 !== undefined && proposed.zip_4 !== (prevActive.zip_4 as string | undefined));
+        (proposed.line_1 !== undefined && proposed.line_1 !== prevActive.line_1) ||
+        (proposed.line_2 !== undefined && proposed.line_2 !== prevActive.line_2) ||
+        (proposed.city !== undefined && proposed.city !== prevActive.city) ||
+        (proposed.state !== undefined && proposed.state !== prevActive.state) ||
+        (proposed.zip_code !== undefined && proposed.zip_code !== prevActive.zip_code) ||
+        (proposed.zip_4 !== undefined && proposed.zip_4 !== prevActive.zip_4);
 
       if (anyChange) {
         // Soft-delete previous active address rows and set deleted_by
-        await this.addressesRepo.update(
-          { household_id: householdId, deleted_on: IsNull() },
-          { deleted_on: new Date(), deleted_by: requesterUserId, last_updated_by: requesterUserId } as any,
-        );
+        await this.addressesRepo.update({ household_id: householdId, deleted_on: IsNull() }, {
+          deleted_on: new Date(),
+          deleted_by: requesterUserId,
+          last_updated_by: requesterUserId,
+        } as Partial<HouseholdAddress>);
 
         // Build the new address values: prefer provided, else fall back to previous, else sensible defaults
         const newAddress: Partial<HouseholdAddress> = {
           household_id: householdId,
-          line_1: (proposed.line_1 ?? (prevActive?.line_1 as string | undefined) ?? '') as string,
-          line_2: (proposed.line_2 ?? (prevActive?.line_2 as string | undefined) ?? null) as any,
-          city: (proposed.city ?? (prevActive?.city as string | undefined) ?? '') as string,
-          state: (proposed.state ?? (prevActive?.state as string | undefined) ?? '') as string,
-          zip_code: (proposed.zip_code ?? (prevActive?.zip_code as string | undefined) ?? '') as string,
-          zip_4: (proposed.zip_4 ?? (prevActive?.zip_4 as string | undefined)) as any,
+          line_1: proposed.line_1 ?? prevActive?.line_1 ?? '',
+          line_2: proposed.line_2 ?? prevActive?.line_2 ?? null,
+          city: proposed.city ?? prevActive?.city ?? '',
+          state: proposed.state ?? prevActive?.state ?? '',
+          zip_code: proposed.zip_code ?? prevActive?.zip_code ?? '',
+          zip_4: proposed.zip_4 ?? prevActive?.zip_4,
           added_by: requesterUserId,
           last_updated_by: requesterUserId,
         };
@@ -204,17 +211,8 @@ export class HouseholdsService {
           const newMember = this.membersRepo.create(
             newMemberData as Required<Partial<HouseholdMember>>,
           );
-                const saved = await this.membersRepo.save(newMember);
-                // Best-effort: if this member maps to an existing user, sync that user to PantryTrak
-                try {
-                  if (this.pantryTrakClient && saved.user_id) {
-                    const userRepo = this.dataSource.getRepository(User);
-                    const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
-                    if (user) await this.pantryTrakClient.createUser(user as any);
-                  }
-                } catch (e) {
-                  // swallow errors to avoid blocking household updates
-                }
+          await this.membersRepo.save(newMember);
+          // MOVED: PT createUser now triggered in UsersService/GuestAuthService on user update
         }
       }
     }
@@ -235,18 +233,9 @@ export class HouseholdsService {
             children_in_household: updated.counts.children ?? 0,
           },
         );
-        // Best-effort: sync the head user's full record to PantryTrak after counts changed
-        try {
-          if (this.pantryTrakClient) {
-            const userRepo = this.dataSource.getRepository(User);
-            const headUser = await userRepo.findOne({ where: { id: Number(headUserId) } });
-            if (headUser) await this.pantryTrakClient.createUser(headUser as any);
-          }
-        } catch (e) {
-          // swallow
-        }
+        // MOVED: PT createUser now triggered in UsersService/GuestAuthService on user update
       }
-    } catch (e) {
+    } catch {
       // Swallow to avoid blocking household update; surface via logs if a logger is configured
       // console.warn('Failed to sync user household counts', e);
     }
@@ -316,17 +305,9 @@ export class HouseholdsService {
       is_head_of_household: dto.is_head_of_household ?? false,
       is_active: dto.is_active ?? true,
       added_by: String(requesterUserId),
-    } as any);
-    const saved = (await this.membersRepo.save(member)) as unknown as HouseholdMember;
-    try {
-      if (this.pantryTrakClient && saved.user_id) {
-        const userRepo = this.dataSource.getRepository(User);
-        const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
-        if (user) await this.pantryTrakClient.createUser(user as any);
-      }
-    } catch (e) {
-      // swallow
-    }
+    } as Partial<HouseholdMember>);
+    const saved = await this.membersRepo.save(member);
+    // MOVED: PT createUser now triggered in UsersService/GuestAuthService on user update
     return saved;
   }
 
@@ -355,15 +336,7 @@ export class HouseholdsService {
       is_active: dto.is_active ?? member.is_active,
     });
     const saved = await this.membersRepo.save(member);
-    try {
-      if (this.pantryTrakClient && saved.user_id) {
-        const userRepo = this.dataSource.getRepository(User);
-        const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
-        if (user) await this.pantryTrakClient.createUser(user as any);
-      }
-    } catch (e) {
-      // swallow
-    }
+    // MOVED: PT createUser now triggered in UsersService/GuestAuthService on user update
     return saved;
   }
 
@@ -378,15 +351,7 @@ export class HouseholdsService {
     if (!member.is_active) return member;
     member.is_active = false;
     const saved = await this.membersRepo.save(member);
-    try {
-      if (this.pantryTrakClient && saved.user_id) {
-        const userRepo = this.dataSource.getRepository(User);
-        const user = await userRepo.findOne({ where: { id: Number(saved.user_id) } });
-        if (user) await this.pantryTrakClient.createUser(user as any);
-      }
-    } catch (e) {
-      // swallow
-    }
+    // MOVED: PT createUser now triggered in UsersService/GuestAuthService on user update
     return saved;
   }
 }
