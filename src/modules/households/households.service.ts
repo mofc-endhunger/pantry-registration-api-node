@@ -157,7 +157,7 @@ export class HouseholdsService {
         const newAddress: Partial<HouseholdAddress> = {
           household_id: householdId,
           line_1: proposed.line_1 ?? prevActive?.line_1 ?? '',
-          line_2: proposed.line_2 ?? prevActive?.line_2 ?? null,
+          line_2: proposed.line_2 ?? prevActive?.line_2 ?? undefined,
           city: proposed.city ?? prevActive?.city ?? '',
           state: proposed.state ?? prevActive?.state ?? '',
           zip_code: proposed.zip_code ?? prevActive?.zip_code ?? '',

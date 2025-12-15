@@ -14,7 +14,7 @@ type HouseholdWithCounts = {
 };
 
 // Type for createUserDto with household counts
-interface CreateUserDtoWithCounts extends CreateUserDto {
+interface CreateUserDtoWithCounts {
   seniors_in_household?: number | string;
   adults_in_household?: number | string;
   children_in_household?: number | string;
@@ -210,7 +210,7 @@ export class UsersService {
 
     // Remove cognito_uuid from the returned user object but preserve class instance
     try {
-      const savedUserRecord = savedUser as Record<string, unknown>;
+      const savedUserRecord = savedUser as unknown as Record<string, unknown>;
       delete savedUserRecord['cognito_uuid'];
     } catch {
       // ignore if read-only
