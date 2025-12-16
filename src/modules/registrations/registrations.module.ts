@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { JwtModule } from '@nestjs/jwt';
 import { Registration } from '../../entities/registration.entity';
 import { RegistrationAttendee } from '../../entities/registration-attendee.entity';
 import { Event } from '../../entities/event.entity';
@@ -13,6 +14,7 @@ import { UsersModule } from '../users/users.module';
 import { HouseholdsModule } from '../households/households.module';
 import { PublicScheduleModule } from '../public-schedule/public-schedule.module';
 import { Authentication } from '../../entities/authentication.entity';
+import { PantryTrakClient } from '../integrations/pantrytrak.client';
 
 @Module({
   imports: [
@@ -29,8 +31,9 @@ import { Authentication } from '../../entities/authentication.entity';
     forwardRef(() => UsersModule),
     forwardRef(() => HouseholdsModule),
     PublicScheduleModule,
+    JwtModule.register({}),
   ],
   controllers: [RegistrationsController],
-  providers: [RegistrationsService],
+  providers: [RegistrationsService, PantryTrakClient],
 })
 export class RegistrationsModule {}

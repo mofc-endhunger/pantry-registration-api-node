@@ -84,9 +84,9 @@ export class RegistrationsService {
         dbUserId = created.user.id;
       }
     }
-  if (!dbUserId) throw new ForbiddenException('User not found');
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
+    if (!dbUserId) throw new ForbiddenException('User not found');
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
     if (!household_id) throw new ForbiddenException('Household not resolved');
     return this.regsRepo.find({
       where: [
@@ -153,8 +153,8 @@ export class RegistrationsService {
           user_type: 'customer',
           cognito_uuid: sub,
         } as any);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-  dbUserId = created.user.id;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        dbUserId = created.user.id;
       }
     }
     if (!dbUserId) throw new ForbiddenException('User not found');
@@ -180,12 +180,35 @@ export class RegistrationsService {
     if (!household_id) throw new ForbiddenException('Household not resolved');
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const whereConditions = dto.event_date_id
+      ? [
+          {
+            event_id: dto.event_id,
+            public_event_date_id: dto.event_date_id,
+            household_id,
+            status: 'confirmed',
+          } as any,
+          {
+            event_id: dto.event_id,
+            public_event_date_id: dto.event_date_id,
+            household_id,
+            status: 'waitlisted',
+          } as any,
+          {
+            event_id: dto.event_id,
+            public_event_date_id: dto.event_date_id,
+            household_id,
+            status: 'checked_in',
+          } as any,
+        ]
+      : [
+          { event_id: dto.event_id, household_id, status: 'confirmed' } as any,
+          { event_id: dto.event_id, household_id, status: 'waitlisted' } as any,
+          { event_id: dto.event_id, household_id, status: 'checked_in' } as any,
+        ];
+
     const existing = await this.regsRepo.findOne({
-      where: [
-        { event_id: dto.event_id, household_id, status: 'confirmed' } as any,
-        { event_id: dto.event_id, household_id, status: 'waitlisted' } as any,
-        { event_id: dto.event_id, household_id, status: 'checked_in' } as any,
-      ],
+      where: whereConditions,
     });
     if (existing) throw new BadRequestException('Already registered');
 
@@ -283,7 +306,7 @@ export class RegistrationsService {
     if (!reg) throw new NotFoundException('Registration not found');
     // Resolve household via JWT sub
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    let dbUserId =
+    const dbUserId =
       user?.authType === 'guest' && typeof user.dbUserId === 'number'
         ? user.dbUserId
         : await (async () => {
