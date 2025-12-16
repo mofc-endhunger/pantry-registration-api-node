@@ -1,6 +1,5 @@
-import axios, { AxiosResponse } from 'axios';
-import jwt from 'jsonwebtoken';
 import { Injectable, Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 
 const logger = new Logger('PantryTrakClient');
 
@@ -10,6 +9,13 @@ export class PantryTrakClient {
   private readonly token = process.env.PANTRY_TRAK_TOKEN;
   private readonly secret = process.env.PANTRY_TRAK_SECRET;
   private readonly enabled = (process.env.PANTRY_TRAK_ENABLED || 'false').toLowerCase() === 'true';
+
+  constructor(private readonly jwtService: JwtService) {
+    logger.log(
+      `[init] PANTRY_TRAK_ENABLED="${process.env.PANTRY_TRAK_ENABLED}" -> enabled=${this.enabled}`,
+    );
+    logger.log(`[init] PANTRY_TRAK_API_URL="${this.baseUrl}"`);
+  }
 
   private static toErrorMessage(e: unknown): string {
     if (e && typeof e === 'object' && 'message' in e) {
@@ -23,7 +29,8 @@ export class PantryTrakClient {
     if (!this.token || !this.secret)
       throw new Error('PANTRY_TRAK_TOKEN or PANTRY_TRAK_SECRET not configured');
     const payload = { token: this.token, time: Math.floor(Date.now() / 1000) };
-    return `Bearer ${jwt.sign(payload, this.secret, { algorithm: 'HS256' })}`;
+    const signed = this.jwtService.sign(payload, { secret: this.secret, algorithm: 'HS256' });
+    return `Bearer ${signed}`;
   }
 
   private urlFor(path: string): string {
@@ -34,15 +41,32 @@ export class PantryTrakClient {
   async createUser(
     user: unknown,
   ): Promise<{ success: boolean; status?: number; body?: unknown; error?: string }> {
-    if (!this.enabled) return { success: false, error: 'disabled' };
+    if (!this.enabled) {
+      logger.log('[createUser] PantryTrak disabled, skipping');
+      return { success: false, error: 'disabled' };
+    }
+    const url = this.urlFor('api/create_freshtrak_user.php');
+    const payload = JSON.stringify(user);
+    logger.log(`[createUser] POST ${url}`);
+    logger.log(`[createUser] Payload: ${payload}`);
     try {
-      const url = this.urlFor('api/create_freshtrak_user.php');
-      const headers = { Authorization: this.makeBearer(), 'Content-Type': 'application/json' };
-      const r: AxiosResponse<unknown> = await axios.post<unknown>(url, user, { headers });
-      return { success: true, status: r.status, body: r.data };
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: this.makeBearer(),
+          'Content-Type': 'application/json',
+        },
+        body: payload,
+      });
+      const body: unknown = await response.json().catch(() => null);
+      logger.log(`[createUser] Response: status=${response.status}, body=${JSON.stringify(body)}`);
+      if (!response.ok) {
+        return { success: false, status: response.status, body, error: `HTTP ${response.status}` };
+      }
+      return { success: true, status: response.status, body };
     } catch (err: unknown) {
       const message = PantryTrakClient.toErrorMessage(err);
-      logger.warn(`createUser error: ${message}`);
+      logger.error(`[createUser] Error: ${message}`);
       return { success: false, error: message };
     }
   }
@@ -53,15 +77,34 @@ export class PantryTrakClient {
     event_date_id: number;
     event_slot_id?: number | null;
   }): Promise<{ success: boolean; status?: number; body?: unknown; error?: string }> {
-    if (!this.enabled) return { success: false, error: 'disabled' };
+    if (!this.enabled) {
+      logger.log('[createReservation] PantryTrak disabled, skipping');
+      return { success: false, error: 'disabled' };
+    }
+    const url = this.urlFor('api/create_freshtrak_reservation.php');
+    const payloadStr = JSON.stringify(payload);
+    logger.log(`[createReservation] POST ${url}`);
+    logger.log(`[createReservation] Payload: ${payloadStr}`);
     try {
-      const url = this.urlFor('api/create_freshtrak_reservation.php');
-      const headers = { Authorization: this.makeBearer(), 'Content-Type': 'application/json' };
-      const r: AxiosResponse<unknown> = await axios.post<unknown>(url, payload, { headers });
-      return { success: true, status: r.status, body: r.data };
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: this.makeBearer(),
+          'Content-Type': 'application/json',
+        },
+        body: payloadStr,
+      });
+      const body: unknown = await response.json().catch(() => null);
+      logger.log(
+        `[createReservation] Response: status=${response.status}, body=${JSON.stringify(body)}`,
+      );
+      if (!response.ok) {
+        return { success: false, status: response.status, body, error: `HTTP ${response.status}` };
+      }
+      return { success: true, status: response.status, body };
     } catch (err: unknown) {
       const message = PantryTrakClient.toErrorMessage(err);
-      logger.warn(`createReservation error: ${message}`);
+      logger.error(`[createReservation] Error: ${message}`);
       return { success: false, error: message };
     }
   }
