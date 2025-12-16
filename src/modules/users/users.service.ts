@@ -1,17 +1,24 @@
-import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../../entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserWithHouseholdDto } from './dto/update-user-with-household.dto';
 import { HouseholdsService } from '../households/households.service';
 import { UpsertMemberDto } from '../households/dto/upsert-member.dto';
+import { PantryTrakClient } from '../integrations/pantrytrak.client';
 
 // Minimal shape needed from HouseholdsService.getHouseholdById
 type HouseholdWithCounts = {
   counts: { seniors: number; adults: number; children: number };
 };
+
+// Type for createUserDto with household counts
+interface CreateUserDtoWithCounts {
+  seniors_in_household?: number | string;
+  adults_in_household?: number | string;
+  children_in_household?: number | string;
+}
 
 @Injectable()
 export class UsersService {
@@ -36,6 +43,7 @@ export class UsersService {
       permission_to_text: user.permission_to_text,
     };
   }
+
   async softDeleteUser(userId: number): Promise<User> {
     await this.userRepository.update(userId, { deleted_on: new Date() } as Partial<User>);
     return this.findById(userId);
@@ -45,9 +53,11 @@ export class UsersService {
     await this.userRepository.update(userId, { deleted_on: null } as Partial<User>);
     return this.findById(userId);
   }
+
   async getHouseholdIdForUser(userId: number): Promise<number | undefined> {
     return this.householdsService.findHouseholdIdByUserId(userId);
   }
+
   async findDbUserIdByCognitoUuid(cognitoUuid: string): Promise<number | null> {
     if (!cognitoUuid || typeof cognitoUuid !== 'string' || cognitoUuid.trim() === '') {
       throw new NotFoundException('Cognito UUID is missing or invalid');
@@ -62,11 +72,13 @@ export class UsersService {
     });
     return user ? user.id : null;
   }
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @Inject(forwardRef(() => HouseholdsService))
     private readonly householdsService: HouseholdsService,
+    @Optional() private readonly pantryTrakClient?: PantryTrakClient,
   ) {}
 
   async create(
@@ -172,9 +184,10 @@ export class UsersService {
       const n = typeof val === 'string' ? Number(val) : (val as number);
       return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
     };
-    const seniorsCount = toInt((createUserDto as any).seniors_in_household);
-    const adultsCount = toInt((createUserDto as any).adults_in_household);
-    const childrenCount = toInt((createUserDto as any).children_in_household);
+    const dtoWithCounts = createUserDto as CreateUserDtoWithCounts;
+    const seniorsCount = toInt(dtoWithCounts.seniors_in_household);
+    const adultsCount = toInt(dtoWithCounts.adults_in_household);
+    const childrenCount = toInt(dtoWithCounts.children_in_household);
     if (seniorsCount > 0) await addPlaceholders(seniorsCount, 'Senior');
     if (adultsCount > 0) await addPlaceholders(adultsCount, 'Adult');
     if (childrenCount > 0) await addPlaceholders(childrenCount, 'Child');
@@ -191,15 +204,15 @@ export class UsersService {
         adults_in_household: updatedHousehold.counts.adults ?? 0,
         children_in_household: updatedHousehold.counts.children ?? 0,
       } as Partial<User>);
-    } catch (_) {
+    } catch {
       // If counts sync fails, do not block user creation
     }
 
     // Remove cognito_uuid from the returned user object but preserve class instance
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      delete (savedUser as any).cognito_uuid;
-    } catch (_) {
+      const savedUserRecord = savedUser as unknown as Record<string, unknown>;
+      delete savedUserRecord['cognito_uuid'];
+    } catch {
       // ignore if read-only
     }
     return { user: savedUser, household_id: householdId };
@@ -217,7 +230,10 @@ export class UsersService {
     return user;
   }
 
-  async updateUserWithHousehold(id: number, dto: UpdateUserWithHouseholdDto): Promise<any> {
+  async updateUserWithHousehold(
+    id: number,
+    dto: UpdateUserWithHouseholdDto,
+  ): Promise<{ user: User; household: HouseholdWithCounts }> {
     // Update user fields (only those that exist on the user entity)
     const userUpdate: Partial<User> = {
       first_name: dto.members?.find((m) => m.user_id == id?.toString())?.first_name ?? undefined,
@@ -241,18 +257,35 @@ export class UsersService {
     // Find household for this user
     const householdId = (dto.household_id ?? dto.id) as number;
     // Delegate to household PATCH logic. Map user address fields to household address fields if present.
-    const householdPatch: any = { ...dto };
+    const householdPatch: Record<string, unknown> = { ...dto };
     // Map user-facing address fields to household address fields when needed
-    if (householdPatch.address_line_1 !== undefined && (householdPatch.line_1 === undefined || householdPatch.line_1 === '')) {
-      householdPatch['line_1'] = householdPatch.address_line_1 ?? '';
+    if (
+      householdPatch['address_line_1'] !== undefined &&
+      (householdPatch['line_1'] === undefined || householdPatch['line_1'] === '')
+    ) {
+      householdPatch['line_1'] = (householdPatch['address_line_1'] as string) ?? '';
     }
-    if (householdPatch.address_line_2 !== undefined && householdPatch.line_2 === undefined) {
-      householdPatch['line_2'] = householdPatch.address_line_2 ?? null;
+    if (householdPatch['address_line_2'] !== undefined && householdPatch['line_2'] === undefined) {
+      householdPatch['line_2'] = (householdPatch['address_line_2'] as string | null) ?? null;
     }
-    await this.householdsService.updateHousehold(householdId, id, householdPatch);
+    await this.householdsService.updateHousehold(
+      householdId,
+      id,
+      householdPatch as Parameters<typeof this.householdsService.updateHousehold>[2],
+    );
     // Return updated user and household
     const user = await this.findById(id);
     const household = await this.householdsService.getHouseholdById(householdId, id);
+
+    // Sync user to PantryTrak after update (matches old system after_commit on: :update)
+    try {
+      if (this.pantryTrakClient) {
+        await this.pantryTrakClient.createUser(user);
+      }
+    } catch {
+      // Best-effort sync, don't block user update
+    }
+
     return { user, household };
   }
 }
