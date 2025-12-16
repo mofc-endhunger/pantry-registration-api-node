@@ -8,6 +8,7 @@ import { CreateHouseholdDto } from './dto/create-household.dto';
 import { UpdateHouseholdDto } from './dto/update-household.dto';
 import { UpsertMemberDto } from './dto/upsert-member.dto';
 import { User } from '../../entities/user.entity';
+import { SafeRandom } from '../../common/utils/safe-random';
 
 
 type HouseholdWithComments = unknown; // placeholder to avoid type errors in modification context
@@ -28,6 +29,14 @@ export class HouseholdsService {
     @Optional() private readonly pantryTrakClient?: import('../integrations/pantrytrak.client').PantryTrakClient,
   ) {}
 
+  private async generateUniqueHouseholdCode(): Promise<string> {
+    let code: string;
+    do {
+      code = SafeRandom.generateCode(6);
+    } while (await this.householdsRepo.findOne({ where: { identification_code: code } }));
+    return code;
+  }
+
   async createHousehold(
     primaryUserId: number,
     dto: CreateHouseholdDto,
@@ -38,7 +47,7 @@ export class HouseholdsService {
       this.householdsRepo.create({
         number: 0,
         name: dto.primary_last_name ? `${dto.primary_last_name} Household` : 'Household',
-        identification_code: `${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        identification_code: await this.generateUniqueHouseholdCode(),
         added_by: primaryUserId,
         last_updated_by: primaryUserId,
       }),

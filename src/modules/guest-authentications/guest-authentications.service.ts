@@ -5,6 +5,7 @@ import { CreateGuestAuthenticationDto } from './dto/create-guest-authentication.
 import { User } from '../../entities/user.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { randomBytes } from 'crypto';
+import { SafeRandom } from '../../common/utils/safe-random';
 
 @Injectable()
 export class GuestAuthenticationsService {
@@ -17,7 +18,7 @@ export class GuestAuthenticationsService {
     // Generate unique identification code (6 chars, alphanumeric)
     let identification_code: string;
     do {
-      identification_code = randomBytes(3).toString('hex').slice(0, 6).toUpperCase();
+      identification_code = SafeRandom.generateCode(6);
     } while (await this.userRepo.findOne({ where: { identification_code } }));
 
     const user = this.userRepo.create({

@@ -77,7 +77,6 @@ export class RegistrationsService {
           first_name: username ?? undefined,
           last_name: undefined,
           date_of_birth: undefined as any,
-          identification_code: sub,
           user_type: 'customer',
           cognito_uuid: sub,
         } as any);
@@ -151,7 +150,6 @@ export class RegistrationsService {
           first_name: username ?? undefined,
           last_name: undefined,
           date_of_birth: undefined as any,
-          identification_code: sub,
           user_type: 'customer',
           cognito_uuid: sub,
         } as any);
@@ -345,7 +343,6 @@ export class RegistrationsService {
         first_name: username ?? undefined,
         last_name: undefined,
         date_of_birth: undefined as any,
-        identification_code: sub,
         user_type: 'customer',
         cognito_uuid: sub,
       } as any);
