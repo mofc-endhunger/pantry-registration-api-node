@@ -197,19 +197,20 @@ export class UsersService {
     if (childrenCount > 0) await addPlaceholders(childrenCount, 'Child');
 
     // After household creation (and optional placeholder members), ensure the user's snapshot
-    // counts reflect the actual household member distribution.
-    try {
-      const updatedHousehold: HouseholdWithCounts = await this.householdsService.getHouseholdById(
-        householdId,
-        userId,
-      );
-      await this.userRepository.update(userId, {
-        seniors_in_household: updatedHousehold.counts.seniors ?? 0,
-        adults_in_household: updatedHousehold.counts.adults ?? 0,
-        children_in_household: updatedHousehold.counts.children ?? 0,
-      } as Partial<User>);
-    } catch (_) {
-      // If counts sync fails, do not block user creation
+    // counts reflect the actual household member distribution. Only sync if any counts were provided.
+    const anyCountsProvided = seniorsCount > 0 || adultsCount > 0 || childrenCount > 0;
+    if (anyCountsProvided) {
+      try {
+        const updatedHousehold: HouseholdWithCounts =
+          await this.householdsService.getHouseholdById(householdId, userId);
+        await this.userRepository.update(userId, {
+          seniors_in_household: updatedHousehold.counts.seniors ?? 0,
+          adults_in_household: updatedHousehold.counts.adults ?? 0,
+          children_in_household: updatedHousehold.counts.children ?? 0,
+        } as Partial<User>);
+      } catch (_) {
+        // If counts sync fails, do not block user creation
+      }
     }
 
     // Remove cognito_uuid from the returned user object but preserve class instance
