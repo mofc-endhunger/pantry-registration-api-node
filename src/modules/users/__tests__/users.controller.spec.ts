@@ -72,7 +72,6 @@ describe('UsersController', () => {
         email: 'u@example.com',
         cognito_uuid: 'uuid-1',
         user_type: 'customer',
-        identification_code: 'uuid-1',
       }),
     );
     expect(res).toEqual({ id: 7 });

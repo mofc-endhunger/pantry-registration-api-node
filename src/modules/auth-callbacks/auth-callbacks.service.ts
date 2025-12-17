@@ -6,6 +6,7 @@ import { Identity } from '../../entities/identity.entity';
 import { User } from '../../entities/user.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { randomBytes } from 'crypto';
+import { SafeRandom } from '../../common/utils/safe-random';
 
 @Injectable()
 export class AuthCallbacksService {
@@ -69,7 +70,7 @@ export class AuthCallbacksService {
   private async generateUniqueCode(): Promise<string> {
     let code: string;
     do {
-      code = randomBytes(3).toString('hex').slice(0, 6).toUpperCase();
+      code = SafeRandom.generateCode(6);
     } while (await this.userRepo.findOne({ where: { identification_code: code } }));
     return code;
   }

@@ -6,6 +6,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserWithHouseholdDto } from './dto/update-user-with-household.dto';
 import { HouseholdsService } from '../households/households.service';
 import { UpsertMemberDto } from '../households/dto/upsert-member.dto';
+import { SafeRandom } from '../../common/utils/safe-random';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
 
 // Minimal shape needed from HouseholdsService.getHouseholdById
@@ -22,6 +23,13 @@ interface CreateUserDtoWithCounts {
 
 @Injectable()
 export class UsersService {
+  private async generateUniqueIdentificationCode(): Promise<string> {
+    let code: string;
+    do {
+      code = SafeRandom.generateCode(6);
+    } while (await this.userRepository.findOne({ where: { identification_code: code } }));
+    return code;
+  }
   async getHouseholdTemplateForUser(userId: number) {
     // Find household for this user (as head or member)
     const householdId = await this.getHouseholdIdForUser(userId);
@@ -92,6 +100,15 @@ export class UsersService {
       if (/^[a-fA-F0-9]{32}$/.test(normalizedUuid)) {
         bufferUuid = Buffer.from(normalizedUuid, 'hex');
       }
+    }
+    // Ensure identification_code is a short internal code if missing or a GUID-like value
+    const maybeCode = createUserDto.identification_code;
+    const isUuidLike =
+      typeof maybeCode === 'string' &&
+      ((/^[a-fA-F0-9-]{36}$/.test(maybeCode) && maybeCode.includes('-')) ||
+        /^[a-fA-F0-9]{32}$/.test(maybeCode));
+    if (!maybeCode || isUuidLike) {
+      createUserDto.identification_code = await this.generateUniqueIdentificationCode();
     }
     // Check for existing user by cognito_uuid or identification_code
     let existingUser: User | undefined = undefined;

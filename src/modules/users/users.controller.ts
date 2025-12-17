@@ -54,13 +54,11 @@ export class UsersController {
       email: string;
       cognito_uuid: string;
       user_type: string;
-      identification_code: string;
     } = {
       ...createUserDto,
       email,
       cognito_uuid: userId,
       user_type,
-      identification_code: createUserDto.identification_code ?? userId,
     };
     return this.usersService.create(dto);
   }
