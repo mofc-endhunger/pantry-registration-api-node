@@ -14,6 +14,7 @@ import { PasswordResetToken } from '../../entities/password-reset-token.entity';
 import { MailerService } from './mailer.service';
 import { TwilioService } from '../../modules/notifications/twilio.service';
 import { JwtService } from '@nestjs/jwt';
+import { SafeRandom } from '../../common/utils/safe-random';
 
 @Injectable()
 export class AuthService {
@@ -30,11 +31,20 @@ export class AuthService {
     private readonly credentialRepository: Repository<Credential>,
     @Optional() private readonly twilioService?: TwilioService,
   ) {}
+
+  private async generateUniqueIdentificationCode(): Promise<string> {
+    let code: string;
+    do {
+      code = SafeRandom.generateCode(6);
+    } while (await this.userRepository.findOne({ where: { identification_code: code } }));
+    return code;
+  }
+
   async registerGuest() {
     // Create a new guest user
     const guestUser = this.userRepository.create({
       user_type: 'guest',
-      identification_code: `guest_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+      identification_code: await this.generateUniqueIdentificationCode(),
     });
     await this.userRepository.save(guestUser);
 

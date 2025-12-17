@@ -48,8 +48,11 @@ describe('HouseholdsService', () => {
 		householdsRepo.save.mockResolvedValue({ id: 10 } as any);
 		membersRepo.create.mockImplementation((x: any) => ({ id: 20, ...x }));
 		membersRepo.save.mockResolvedValue({ id: 20 } as any);
-		// getHouseholdById called internally -> mock findOne to return household with members
-		householdsRepo.findOne.mockResolvedValue({ id: 10, added_by: 1, members: [{ id: 20, is_active: true, date_of_birth: '1980-01-01' }] } as any);
+		// generateUniqueHouseholdCode needs findOne to return null (no collision)
+		// then getHouseholdById called internally -> mock findOne to return household with members
+		householdsRepo.findOne
+			.mockResolvedValueOnce(null as any) // First call: code uniqueness check
+			.mockResolvedValue({ id: 10, added_by: 1, members: [{ id: 20, is_active: true, date_of_birth: '1980-01-01' }] } as any);
 		const res = await service.createHousehold(1, { primary_first_name: 'A', primary_last_name: 'B' } as any);
 		expect(householdsRepo.save).toHaveBeenCalled();
 		expect(membersRepo.save).toHaveBeenCalled();
