@@ -189,9 +189,16 @@ export class UsersService {
       const n = typeof val === 'string' ? Number(val) : (val as number);
       return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
     };
-    const seniorsCount = toInt((createUserDto as any).seniors_in_household);
-    const adultsCount = toInt((createUserDto as any).adults_in_household);
-    const childrenCount = toInt((createUserDto as any).children_in_household);
+    // Accept multiple possible field names from clients (registered vs guest vs legacy)
+    const seniorsCount = toInt(
+      (createUserDto as any).seniors_in_household ?? (createUserDto as any).seniors,
+    );
+    const adultsCount = toInt(
+      (createUserDto as any).adults_in_household ?? (createUserDto as any).adults,
+    );
+    const childrenCount = toInt(
+      (createUserDto as any).children_in_household ?? (createUserDto as any).children,
+    );
     if (seniorsCount > 0) await addPlaceholders(seniorsCount, 'Senior');
     if (adultsCount > 0) await addPlaceholders(adultsCount, 'Adult');
     if (childrenCount > 0) await addPlaceholders(childrenCount, 'Child');
