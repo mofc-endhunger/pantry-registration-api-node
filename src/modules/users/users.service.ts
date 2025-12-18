@@ -273,6 +273,76 @@ export class UsersService {
     await this.userRepository.update(id, userUpdate);
     // Find household for this user
     const householdId = (dto.household_id ?? dto.id) as number;
+    // If counts were provided without explicit members, add placeholder members to match requested counts
+    try {
+      const wantsCounts =
+        (dto as any)?.counts ||
+        (dto as any)?.seniors_in_household != null ||
+        (dto as any)?.adults_in_household != null ||
+        (dto as any)?.children_in_household != null ||
+        (dto as any)?.seniors != null ||
+        (dto as any)?.adults != null ||
+        (dto as any)?.children != null;
+      const providedMembers = Array.isArray(dto.members) && dto.members.length > 0;
+      if (householdId && wantsCounts && !providedMembers) {
+        // Determine desired counts
+        const toInt = (val: unknown): number => {
+          if (val === undefined || val === null) return 0;
+          const n = typeof val === 'string' ? Number(val) : (val as number);
+          return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+        };
+        const desiredSeniors =
+          toInt((dto as any)?.counts?.seniors) ||
+          toInt((dto as any)?.seniors_in_household) ||
+          toInt((dto as any)?.seniors);
+        const desiredAdults =
+          toInt((dto as any)?.counts?.adults) ||
+          toInt((dto as any)?.adults_in_household) ||
+          toInt((dto as any)?.adults);
+        const desiredChildren =
+          toInt((dto as any)?.counts?.children) ||
+          toInt((dto as any)?.children_in_household) ||
+          toInt((dto as any)?.children);
+        const current = await this.householdsService.getHouseholdById(householdId, id);
+        const currentSeniors = current.counts?.seniors ?? 0;
+        const currentAdults = current.counts?.adults ?? 0;
+        const currentChildren = current.counts?.children ?? 0;
+        const needSeniors = Math.max(0, desiredSeniors - currentSeniors);
+        const needAdults = Math.max(0, desiredAdults - currentAdults);
+        const needChildren = Math.max(0, desiredChildren - currentChildren);
+        const dateStringYearsAgo = (years: number): string => {
+          const d = new Date();
+          d.setFullYear(d.getFullYear() - years);
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          return `${yyyy}-${mm}-${dd}`;
+        };
+        const addPlaceholders = async (count: number, label: 'Senior' | 'Adult' | 'Child') => {
+          const dob =
+            label === 'Senior'
+              ? dateStringYearsAgo(70)
+              : label === 'Adult'
+                ? dateStringYearsAgo(30)
+                : dateStringYearsAgo(10);
+          for (let i = 1; i <= count; i++) {
+            const member: UpsertMemberDto = {
+              first_name: `${label} ${i}`,
+              last_name: label,
+              date_of_birth: dob,
+              is_head_of_household: false,
+              is_active: true,
+            };
+            await this.householdsService.addMember(householdId, id, member);
+          }
+        };
+        if (needSeniors > 0) await addPlaceholders(needSeniors, 'Senior');
+        if (needAdults > 0) await addPlaceholders(needAdults, 'Adult');
+        if (needChildren > 0) await addPlaceholders(needChildren, 'Child');
+      }
+    } catch {
+      // best-effort; if placeholder add fails we still proceed to update household
+    }
     // Delegate to household PATCH logic. Map user address fields to household address fields if present.
     const householdPatch: Record<string, unknown> = { ...dto };
     // Map user-facing address fields to household address fields when needed
