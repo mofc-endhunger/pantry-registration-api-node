@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateGuestAuthenticationDto } from './dto/create-guest-authentication.dto';
@@ -6,12 +6,14 @@ import { User } from '../../entities/user.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { randomBytes } from 'crypto';
 import { SafeRandom } from '../../common/utils/safe-random';
+import { PantryTrakClient } from '../integrations/pantrytrak.client';
 
 @Injectable()
 export class GuestAuthenticationsService {
   constructor(
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
+    @Optional() private readonly pantryTrakClient?: PantryTrakClient,
   ) {}
 
   async createGuest(createGuestDto: CreateGuestAuthenticationDto) {
@@ -66,21 +68,28 @@ export class GuestAuthenticationsService {
     if (dto.state !== undefined) user.state = dto.state;
     if (dto.zip_code !== undefined) user.zip_code = dto.zip_code;
     if (dto.seniors_in_household !== undefined)
-      user.seniors_in_household = dto.seniors_in_household as number;
-    if (dto.adults_in_household !== undefined)
-      user.adults_in_household = dto.adults_in_household as number;
+      user.seniors_in_household = dto.seniors_in_household;
+    if (dto.adults_in_household !== undefined) user.adults_in_household = dto.adults_in_household;
     if (dto.children_in_household !== undefined)
-      user.children_in_household = dto.children_in_household as number;
-    if (dto.permission_to_email !== undefined)
-      user.permission_to_email = dto.permission_to_email as boolean;
-    if (dto.permission_to_text !== undefined)
-      user.permission_to_text = dto.permission_to_text as boolean;
+      user.children_in_household = dto.children_in_household;
+    if (dto.permission_to_email !== undefined) user.permission_to_email = dto.permission_to_email;
+    if (dto.permission_to_text !== undefined) user.permission_to_text = dto.permission_to_text;
     // Optional flags stored in user_detail in some systems; we map them to nulling contact fields if true
     if (dto.no_phone_number === true) user.phone = null;
     if (dto.no_email === true) user.email = null;
     if (dto.identification_code !== undefined) user.identification_code = dto.identification_code;
 
     await this.userRepo.save(user);
+
+    // Sync user to PantryTrak after update (matches old system after_commit on: :update)
+    try {
+      if (this.pantryTrakClient) {
+        await this.pantryTrakClient.createUser(user);
+      }
+    } catch {
+      // Best-effort sync, don't block guest update
+    }
+
     return { updated: true };
   }
 }
