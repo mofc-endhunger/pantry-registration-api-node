@@ -265,7 +265,7 @@ export class UsersService {
     await this.userRepository.update(id, userUpdate);
     // Find household for this user
     const householdId = (dto.household_id ?? dto.id) as number;
-    // If counts were provided without explicit members, add placeholder members to match requested counts
+    // If counts were provided, add placeholder members to match requested counts (even if members array present)
     try {
       const wantsCounts =
         (dto as any)?.counts ||
@@ -275,8 +275,7 @@ export class UsersService {
         (dto as any)?.seniors != null ||
         (dto as any)?.adults != null ||
         (dto as any)?.children != null;
-      const providedMembers = Array.isArray(dto.members) && dto.members.length > 0;
-      if (householdId && wantsCounts && !providedMembers) {
+      if (householdId && wantsCounts) {
         // Determine desired counts
         const toInt = (val: unknown): number => {
           if (val === undefined || val === null) return 0;

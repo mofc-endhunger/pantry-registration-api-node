@@ -1,5 +1,31 @@
-import { IsArray, IsInt, IsOptional, ArrayNotEmpty, ArrayUnique } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { IsArray, IsInt, IsOptional, ArrayNotEmpty, ArrayUnique, ValidateNested, IsObject } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+
+export class RegisterHouseholdCountsDto {
+  @IsOptional()
+  @IsInt()
+  @Transform(({ value, obj }) => {
+    const v = (obj as any)?.seniors ?? (obj as any)?.seniors_count ?? (obj as any)?.seniors_in_household ?? value;
+    return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
+  })
+  seniors?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Transform(({ value, obj }) => {
+    const v = (obj as any)?.adults ?? (obj as any)?.adults_count ?? (obj as any)?.adults_in_household ?? value;
+    return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
+  })
+  adults?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Transform(({ value, obj }) => {
+    const v = (obj as any)?.children ?? (obj as any)?.children_count ?? (obj as any)?.children_in_household ?? value;
+    return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
+  })
+  children?: number;
+}
 
 export class RegisterDto {
   @IsInt()
@@ -39,8 +65,41 @@ export class RegisterDto {
   @ArrayNotEmpty()
   @ArrayUnique()
   @Transform(({ value, obj }) => {
-    const v = obj?.attendees ?? obj?.attendeeIds ?? value;
+    const v = obj?.attendees ?? obj?.attendeeIds ?? (obj as any)?.attendee_ids ?? value;
     return v === '' ? undefined : v;
   })
   attendees?: number[]; // household_member_id list
+
+  // Optional household counts as a nested object (me-format)
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Transform(({ value }) => (typeof value === 'object' ? value : undefined))
+  @Type(() => RegisterHouseholdCountsDto)
+  counts?: RegisterHouseholdCountsDto;
+
+  // Optional top-level aliases (simple format)
+  @IsOptional()
+  @IsInt()
+  @Transform(({ value, obj }) => {
+    const v = (obj as any)?.synth_seniors ?? (obj as any)?.seniors ?? (obj as any)?.seniors_count ?? (obj as any)?.seniors_in_household ?? value;
+    return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
+  })
+  seniors?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Transform(({ value, obj }) => {
+    const v = (obj as any)?.synth_adults ?? (obj as any)?.adults ?? (obj as any)?.adults_count ?? (obj as any)?.adults_in_household ?? value;
+    return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
+  })
+  adults?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Transform(({ value, obj }) => {
+    const v = (obj as any)?.synth_children ?? (obj as any)?.children ?? (obj as any)?.children_count ?? (obj as any)?.children_in_household ?? value;
+    return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
+  })
+  children?: number;
 }

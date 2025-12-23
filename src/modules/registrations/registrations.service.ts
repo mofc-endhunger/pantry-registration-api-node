@@ -88,6 +88,7 @@ export class RegistrationsService {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
     if (!household_id) throw new ForbiddenException('Household not resolved');
+
     return this.regsRepo.find({
       where: [
         { household_id, status: 'confirmed' } as any,
@@ -178,6 +179,46 @@ export class RegistrationsService {
       }
     }
     if (!household_id) throw new ForbiddenException('Household not resolved');
+
+    // If household counts were provided as part of registration (common for first-time Cognito users),
+    // materialize additional household members to match the requested counts and update snapshot counts.
+    try {
+      // Normalize possible field names from UI
+      const toInt = (v: unknown) => {
+        if (v === undefined || v === null || v === '') return 0;
+        const n = typeof v === 'string' ? Number(v) : (v as number);
+        return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+      };
+      const desiredSeniors = toInt(
+        (dto as any)?.counts?.seniors ??
+          (dto as any).seniors ??
+          (dto as any).seniors_in_household ??
+          (dto as any).seniors_count,
+      );
+      const desiredAdults = toInt(
+        (dto as any)?.counts?.adults ??
+          (dto as any).adults ??
+          (dto as any).adults_in_household ??
+          (dto as any).adults_count,
+      );
+      const desiredChildren = toInt(
+        (dto as any)?.counts?.children ??
+          (dto as any).children ??
+          (dto as any).children_in_household ??
+          (dto as any).children_count,
+      );
+      const hasAnyCount = (desiredSeniors ?? 0) + (desiredAdults ?? 0) + (desiredChildren ?? 0) > 0;
+      if (hasAnyCount) {
+        await this.usersService.updateUserWithHousehold(dbUserId, {
+          household_id: household_id as number,
+          seniors_in_household: desiredSeniors,
+          adults_in_household: desiredAdults,
+          children_in_household: desiredChildren,
+        } as any);
+      }
+    } catch {
+      // best-effort; continue on failure
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const existing = await this.regsRepo.findOne({
