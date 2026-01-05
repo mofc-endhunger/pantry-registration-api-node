@@ -1,5 +1,11 @@
 import { Credential } from '../../entities/credential.entity';
-import { Injectable, BadRequestException, UnauthorizedException, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  UnauthorizedException,
+  Optional,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../../entities/user.entity';
@@ -181,5 +187,64 @@ export class AuthService {
     // TODO: Implement Facebook token verification and user lookup/creation
     // dto: { userID, graphDomain, accessToken }
     return { message: 'Facebook auth not yet implemented', received: dto };
+  }
+
+  // Upgrade an existing guest (identified by guest token) into the currently authenticated Cognito user (JWT).
+  // - Does NOT change users.id; it attaches cognito_uuid/email to the existing guest user and flips user_type to 'customer'.
+  // - If another user is already linked to this cognito sub, abort with conflict.
+  async upgradeGuest(opts: { guestToken: string; cognitoSub: string; email?: string }) {
+    const { guestToken, cognitoSub, email } = opts;
+    if (!guestToken || typeof guestToken !== 'string') {
+      throw new BadRequestException('Missing or invalid guest token');
+    }
+    if (!cognitoSub || typeof cognitoSub !== 'string') {
+      throw new BadRequestException('Missing or invalid authenticated user');
+    }
+    const auth = await this.authenticationRepository.findOne({ where: { token: guestToken } });
+    if (!auth) {
+      throw new BadRequestException('Guest token not found or already used');
+    }
+    if (auth.expires_at && auth.expires_at < new Date()) {
+      throw new BadRequestException('Guest token expired');
+    }
+    const guestUser = await this.userRepository.findOne({ where: { id: auth.user_id } });
+    if (!guestUser) {
+      throw new BadRequestException('Guest user not found for token');
+    }
+    // Normalize Cognito sub into 16-byte buffer (UUID without dashes, hex)
+    const normalized = String(cognitoSub).replace(/-/g, '');
+    if (!/^[a-fA-F0-9]{32}$/.test(normalized)) {
+      throw new BadRequestException('Invalid Cognito subject format');
+    }
+    const targetUuid = Buffer.from(normalized, 'hex');
+    // If another user already linked to this cognito_uuid, do not merge silently
+    const existingLinked = await this.userRepository.findOne({
+      where: { cognito_uuid: targetUuid },
+    });
+    if (existingLinked && existingLinked.id !== guestUser.id) {
+      throw new ConflictException('This sign-in is already linked to another account');
+    }
+    // Attach cognito to the guest user (upgrade in place)
+    guestUser.cognito_uuid = targetUuid;
+    guestUser.user_type = 'customer';
+    if (email && !guestUser.email) {
+      guestUser.email = email;
+    }
+    await this.userRepository.save(guestUser);
+    // Invalidate the guest token (delete or expire it)
+    try {
+      await this.authenticationRepository.delete({ id: auth.id });
+    } catch {
+      try {
+        const patch: Partial<Authentication> = { expires_at: new Date(0) };
+        await this.authenticationRepository.update(auth.id, patch);
+      } catch {
+        // swallow
+      }
+    }
+    return {
+      upgraded: true,
+      user_id: guestUser.id,
+    };
   }
 }

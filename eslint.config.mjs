@@ -33,6 +33,7 @@ export default tseslint.config(
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^_'
       }],
+      'prettier/prettier': ['warn', { endOfLine: 'auto' }],
     },
   },
   {
