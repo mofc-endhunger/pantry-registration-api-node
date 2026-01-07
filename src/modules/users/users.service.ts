@@ -273,35 +273,57 @@ export class UsersService {
     await this.userRepository.update(id, userUpdate);
     // Find household for this user
     const householdId = (dto.household_id ?? dto.id) as number;
-    // If counts were provided, add placeholder members to match requested counts (even if members array present)
+    // Delegate to household PATCH logic first (handles member deactivation when members array present).
+    // Map user address fields to household address fields if present.
+    const householdPatch: Record<string, unknown> = { ...dto };
+    // Map user-facing address fields to household address fields when needed
+    if (
+      householdPatch['address_line_1'] !== undefined &&
+      (householdPatch['line_1'] === undefined || householdPatch['line_1'] === '')
+    ) {
+      householdPatch['line_1'] = (householdPatch['address_line_1'] as string) ?? '';
+    }
+    if (householdPatch['address_line_2'] !== undefined && householdPatch['line_2'] === undefined) {
+      householdPatch['line_2'] = (householdPatch['address_line_2'] as string | null) ?? null;
+    }
+    await this.householdsService.updateHousehold(
+      householdId,
+      id,
+      householdPatch as Parameters<typeof this.householdsService.updateHousehold>[2],
+    );
+
+    // After household update, add placeholder members to reach desired counts (if provided).
     try {
       const wantsCounts =
-        (dto as any)?.counts ||
-        (dto as any)?.seniors_in_household != null ||
-        (dto as any)?.adults_in_household != null ||
-        (dto as any)?.children_in_household != null ||
-        (dto as any)?.seniors != null ||
-        (dto as any)?.adults != null ||
-        (dto as any)?.children != null;
+        !!dto.counts ||
+        dto.seniors_in_household != null ||
+        dto.adults_in_household != null ||
+        dto.children_in_household != null ||
+        (dto as { seniors?: number }).seniors != null ||
+        (dto as { adults?: number }).adults != null ||
+        (dto as { children?: number }).children != null;
       if (householdId && wantsCounts) {
-        // Determine desired counts
         const toInt = (val: unknown): number => {
           if (val === undefined || val === null) return 0;
           const n = typeof val === 'string' ? Number(val) : (val as number);
           return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
         };
-        const desiredSeniors =
-          toInt((dto as any)?.counts?.seniors) ||
-          toInt((dto as any)?.seniors_in_household) ||
-          toInt((dto as any)?.seniors);
-        const desiredAdults =
-          toInt((dto as any)?.counts?.adults) ||
-          toInt((dto as any)?.adults_in_household) ||
-          toInt((dto as any)?.adults);
-        const desiredChildren =
-          toInt((dto as any)?.counts?.children) ||
-          toInt((dto as any)?.children_in_household) ||
-          toInt((dto as any)?.children);
+        const desiredSeniors = toInt(
+          (dto.counts && dto.counts.seniors) ??
+            dto.seniors_in_household ??
+            (dto as { seniors?: number }).seniors,
+        );
+        const desiredAdults = toInt(
+          (dto.counts && dto.counts.adults) ??
+            dto.adults_in_household ??
+            (dto as { adults?: number }).adults,
+        );
+        const desiredChildren = toInt(
+          (dto.counts && dto.counts.children) ??
+            dto.children_in_household ??
+            (dto as { children?: number }).children,
+        );
+
         const current = await this.householdsService.getHouseholdById(householdId, id);
         const currentSeniors = current.counts?.seniors ?? 0;
         const currentAdults = current.counts?.adults ?? 0;
@@ -309,6 +331,7 @@ export class UsersService {
         const needSeniors = Math.max(0, desiredSeniors - currentSeniors);
         const needAdults = Math.max(0, desiredAdults - currentAdults);
         const needChildren = Math.max(0, desiredChildren - currentChildren);
+
         const dateStringYearsAgo = (years: number): string => {
           const d = new Date();
           d.setFullYear(d.getFullYear() - years);
@@ -340,36 +363,31 @@ export class UsersService {
         if (needChildren > 0) await addPlaceholders(needChildren, 'Child');
       }
     } catch {
-      // best-effort; if placeholder add fails we still proceed to update household
+      // best-effort; if placeholder add fails we still proceed
     }
-    // Delegate to household PATCH logic. Map user address fields to household address fields if present.
-    const householdPatch: Record<string, unknown> = { ...dto };
-    // Map user-facing address fields to household address fields when needed
-    if (
-      householdPatch['address_line_1'] !== undefined &&
-      (householdPatch['line_1'] === undefined || householdPatch['line_1'] === '')
-    ) {
-      householdPatch['line_1'] = (householdPatch['address_line_1'] as string) ?? '';
-    }
-    if (householdPatch['address_line_2'] !== undefined && householdPatch['line_2'] === undefined) {
-      householdPatch['line_2'] = (householdPatch['address_line_2'] as string | null) ?? null;
-    }
-    await this.householdsService.updateHousehold(
-      householdId,
-      id,
-      householdPatch as Parameters<typeof this.householdsService.updateHousehold>[2],
-    );
-    // Return updated user and household
-    const user = await this.findById(id);
+    // Fetch updated household after potential placeholder additions
     const household = await this.householdsService.getHouseholdById(householdId, id);
 
-    // Sync user to PantryTrak after update (matches old system after_commit on: :update)
+    // Sync aggregate counts from household back to head-of-household user snapshot
+    try {
+      await this.userRepository.update({ id }, {
+        seniors_in_household: household.counts?.seniors ?? 0,
+        adults_in_household: household.counts?.adults ?? 0,
+        children_in_household: household.counts?.children ?? 0,
+      } as Partial<User>);
+    } catch {
+      // ignore snapshot sync errors
+    }
+
+    const user = await this.findById(id);
+
+    // Best-effort sync to PantryTrak after update
     try {
       if (this.pantryTrakClient) {
         await this.pantryTrakClient.createUser(user);
       }
     } catch {
-      // Best-effort sync, don't block user update
+      // Best-effort: swallow
     }
 
     return { user, household };
