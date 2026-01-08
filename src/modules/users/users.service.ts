@@ -324,10 +324,70 @@ export class UsersService {
             (dto as { children?: number }).children,
         );
 
-        const current = await this.householdsService.getHouseholdById(householdId, id);
-        const currentSeniors = current.counts?.seniors ?? 0;
-        const currentAdults = current.counts?.adults ?? 0;
-        const currentChildren = current.counts?.children ?? 0;
+        // Load current counts and reconcile placeholders: remove excess first, then add deficits
+        let current = await this.householdsService.getHouseholdById(householdId, id);
+        let currentSeniors = current.counts?.seniors ?? 0;
+        let currentAdults = current.counts?.adults ?? 0;
+        let currentChildren = current.counts?.children ?? 0;
+
+        // Remove excess placeholders if counts decreased
+        const removeExcess = async (label: 'Senior' | 'Adult' | 'Child', excess: number) => {
+          if (excess <= 0) return;
+          // Get all members to identify placeholders
+          const membersRaw = await this.householdsService.listMembers(householdId, id);
+          const members: Array<{
+            id: number;
+            first_name?: string;
+            last_name?: string;
+            is_head_of_household?: number;
+            is_active?: number;
+            created_at?: Date | string;
+          }> = Array.isArray(membersRaw)
+            ? (membersRaw as Array<unknown>).map(
+                (m) =>
+                  m as {
+                    id: number;
+                    first_name?: string;
+                    last_name?: string;
+                    is_head_of_household?: number;
+                    is_active?: number;
+                    created_at?: Date | string;
+                  },
+              )
+            : [];
+          // Find newest placeholders first
+          const candidates = members
+            .filter((m) => {
+              const fn = m.first_name ?? '';
+              return (
+                (m.is_active ?? 0) === 1 &&
+                (m.is_head_of_household ?? 0) !== 1 &&
+                (m.last_name ?? '') === label &&
+                typeof fn === 'string' &&
+                fn.startsWith(`${label} `)
+              );
+            })
+            .sort((a, b) => {
+              const at = a.created_at ? new Date(a.created_at as any).getTime() : 0;
+              const bt = b.created_at ? new Date(b.created_at as any).getTime() : 0;
+              return bt - at;
+            })
+            .slice(0, excess);
+          for (const m of candidates) {
+            await this.householdsService.deactivateMember(householdId, Number(m.id), id);
+          }
+        };
+
+        await removeExcess('Senior', Math.max(0, currentSeniors - desiredSeniors));
+        await removeExcess('Adult', Math.max(0, currentAdults - desiredAdults));
+        await removeExcess('Child', Math.max(0, currentChildren - desiredChildren));
+
+        // Refresh counts after removals
+        current = await this.householdsService.getHouseholdById(householdId, id);
+        currentSeniors = current.counts?.seniors ?? 0;
+        currentAdults = current.counts?.adults ?? 0;
+        currentChildren = current.counts?.children ?? 0;
+
         const needSeniors = Math.max(0, desiredSeniors - currentSeniors);
         const needAdults = Math.max(0, desiredAdults - currentAdults);
         const needChildren = Math.max(0, desiredChildren - currentChildren);
@@ -347,6 +407,20 @@ export class UsersService {
               : label === 'Adult'
                 ? dateStringYearsAgo(30)
                 : dateStringYearsAgo(10);
+          // Stamp placeholders with HOH gender if available
+          const members2Raw = await this.householdsService.listMembers(householdId, id);
+          const members2: Array<{ is_head_of_household?: number; gender_id?: number | null }> =
+            Array.isArray(members2Raw)
+              ? (members2Raw as Array<unknown>).map(
+                  (m) =>
+                    m as {
+                      is_head_of_household?: number;
+                      gender_id?: number | null;
+                    },
+                )
+              : [];
+          const hoh = members2.find((m) => (m.is_head_of_household ?? 0) === 1);
+          const hohGenderId = hoh?.gender_id ?? null;
           for (let i = 1; i <= count; i++) {
             const member: UpsertMemberDto = {
               first_name: `${label} ${i}`,
@@ -354,6 +428,7 @@ export class UsersService {
               date_of_birth: dob,
               is_head_of_household: false,
               is_active: true,
+              gender_id: hohGenderId ?? undefined,
             };
             await this.householdsService.addMember(householdId, id, member);
           }
