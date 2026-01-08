@@ -174,6 +174,36 @@ export class RegistrationsService {
         } as any);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
+
+        // Best-effort: set HOH gender_id from user's gender string if available
+        try {
+          if (household_id) {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            const members = await this.householdsService.listMembers(household_id, dbUserId);
+            const hoh = Array.isArray(members)
+              ? (
+                  members as Array<{
+                    id: number;
+                    is_head_of_household?: boolean;
+                    gender_id?: number | null;
+                  }>
+                ).find((m) => !!m.is_head_of_household)
+              : undefined;
+            const g = (userEntity.gender || '').toString().trim().toLowerCase();
+            const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
+            if (
+              hoh &&
+              mappedGenderId !== undefined &&
+              (hoh.gender_id == null || Number.isNaN(hoh.gender_id))
+            ) {
+              await this.householdsService.updateMember(household_id, hoh.id, dbUserId, {
+                gender_id: mappedGenderId,
+              } as any);
+            }
+          }
+        } catch {
+          // ignore gender sync failures
+        }
       } catch (_) {
         // ignore and fall through to error
       }

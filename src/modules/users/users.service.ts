@@ -437,18 +437,24 @@ export class UsersService {
                 : dateStringYearsAgo(10);
           // Stamp placeholders with HOH gender if available
           const members2Raw = await this.householdsService.listMembers(householdId, id);
-          const members2: Array<{ is_head_of_household?: number; gender_id?: number | null }> =
+          const members2: Array<{ is_head_of_household?: boolean; gender_id?: number | null }> =
             Array.isArray(members2Raw)
               ? (members2Raw as Array<unknown>).map(
                   (m) =>
                     m as {
-                      is_head_of_household?: number;
+                      is_head_of_household?: boolean;
                       gender_id?: number | null;
                     },
                 )
               : [];
-          const hoh = members2.find((m) => (m.is_head_of_household ?? 0) === 1);
-          const hohGenderId = hoh?.gender_id ?? null;
+          const hoh = members2.find((m) => !!m.is_head_of_household);
+          let hohGenderId = hoh?.gender_id ?? null;
+          if (hohGenderId == null) {
+            // Fallback: map user's gender string
+            const headUser = await this.findById(id);
+            const g = (headUser.gender || '').toString().trim().toLowerCase();
+            hohGenderId = g === 'male' ? 1 : g === 'female' ? 2 : null;
+          }
           for (let i = 1; i <= count; i++) {
             const member: UpsertMemberDto = {
               first_name: `${label} ${i}`,
