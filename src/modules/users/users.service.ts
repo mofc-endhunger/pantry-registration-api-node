@@ -292,6 +292,34 @@ export class UsersService {
       householdPatch as Parameters<typeof this.householdsService.updateHousehold>[2],
     );
 
+    // Ensure head-of-household has gender_id set from user's gender if available
+    try {
+      const membersForGender = await this.householdsService.listMembers(householdId, id);
+      const hohMember = Array.isArray(membersForGender)
+        ? (
+            membersForGender as Array<{
+              id: number;
+              is_head_of_household?: boolean;
+              gender_id?: number | null;
+            }>
+          ).find((m) => !!m.is_head_of_household)
+        : undefined;
+      if (hohMember && (hohMember.gender_id == null || Number.isNaN(hohMember.gender_id))) {
+        // Map user's string gender to a numeric gender_id commonly used downstream
+        // 1 = male, 2 = female (fallback: leave unset)
+        const headUser = await this.findById(id);
+        const g = (headUser.gender || '').toString().trim().toLowerCase();
+        const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
+        if (mappedGenderId !== undefined) {
+          await this.householdsService.updateMember(householdId, hohMember.id, id, {
+            gender_id: mappedGenderId,
+          } as any);
+        }
+      }
+    } catch {
+      // best-effort; do not block on gender sync
+    }
+
     // After household update, add placeholder members to reach desired counts (if provided).
     try {
       const wantsCounts =
