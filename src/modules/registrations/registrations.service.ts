@@ -191,33 +191,56 @@ export class RegistrationsService {
       };
       const desiredSeniors = toInt(
         (dto as any)?.counts?.seniors ??
+          (dto as any)?.counts?.synth_seniors ??
           (dto as any).seniors ??
           (dto as any).seniors_in_household ??
           (dto as any).seniors_count,
       );
       const desiredAdults = toInt(
         (dto as any)?.counts?.adults ??
+          (dto as any)?.counts?.synth_adults ??
           (dto as any).adults ??
           (dto as any).adults_in_household ??
           (dto as any).adults_count,
       );
       const desiredChildren = toInt(
         (dto as any)?.counts?.children ??
+          (dto as any)?.counts?.synth_children ??
           (dto as any).children ??
           (dto as any).children_in_household ??
           (dto as any).children_count,
       );
       const hasAnyCount = (desiredSeniors ?? 0) + (desiredAdults ?? 0) + (desiredChildren ?? 0) > 0;
+
+      // Debug logging
+      console.log('[registerForEvent] Household counts check:', {
+        dto: JSON.stringify(dto),
+        desiredSeniors,
+        desiredAdults,
+        desiredChildren,
+        hasAnyCount,
+        household_id,
+        dbUserId,
+      });
+
       if (hasAnyCount) {
+        console.log('[registerForEvent] Calling updateUserWithHousehold with counts');
         await this.usersService.updateUserWithHousehold(dbUserId, {
-          household_id: household_id as number,
+          household_id: household_id,
           seniors_in_household: desiredSeniors,
           adults_in_household: desiredAdults,
           children_in_household: desiredChildren,
         } as any);
+        console.log('[registerForEvent] Successfully updated household counts');
+      } else {
+        console.log('[registerForEvent] No counts provided, skipping household expansion');
       }
-    } catch {
-      // best-effort; continue on failure
+    } catch (err) {
+      // best-effort; continue on failure but log the error
+      console.error(
+        '[registerForEvent] Failed to update household counts during registration:',
+        err,
+      );
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
