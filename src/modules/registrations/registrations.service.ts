@@ -221,6 +221,7 @@ export class RegistrationsService {
       };
       const desiredSeniors = toInt(
         (dto as any)?.counts?.seniors ??
+          (dto as any)?.counts?.seniors_count ??
           (dto as any)?.counts?.synth_seniors ??
           (dto as any).seniors ??
           (dto as any).seniors_in_household ??
@@ -228,6 +229,7 @@ export class RegistrationsService {
       );
       const desiredAdults = toInt(
         (dto as any)?.counts?.adults ??
+          (dto as any)?.counts?.adults_count ??
           (dto as any)?.counts?.synth_adults ??
           (dto as any).adults ??
           (dto as any).adults_in_household ??
@@ -235,6 +237,7 @@ export class RegistrationsService {
       );
       const desiredChildren = toInt(
         (dto as any)?.counts?.children ??
+          (dto as any)?.counts?.children_count ??
           (dto as any)?.counts?.synth_children ??
           (dto as any).children ??
           (dto as any).children_in_household ??

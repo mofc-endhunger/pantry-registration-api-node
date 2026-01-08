@@ -18,6 +18,7 @@ export class RegisterHouseholdCountsDto {
       obj?.synth_seniors ??
       obj?.seniors ??
       obj?.seniors_count ??
+      obj?.seniors_count ??
       obj?.seniors_in_household ??
       value;
     return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
@@ -28,7 +29,12 @@ export class RegisterHouseholdCountsDto {
   @IsInt()
   @Transform(({ value, obj }) => {
     const v =
-      obj?.synth_adults ?? obj?.adults ?? obj?.adults_count ?? obj?.adults_in_household ?? value;
+      obj?.synth_adults ??
+      obj?.adults ??
+      obj?.adults_count ??
+      obj?.adults_count ??
+      obj?.adults_in_household ??
+      value;
     return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
   })
   adults?: number;
@@ -39,6 +45,7 @@ export class RegisterHouseholdCountsDto {
     const v =
       obj?.synth_children ??
       obj?.children ??
+      obj?.children_count ??
       obj?.children_count ??
       obj?.children_in_household ??
       value;
