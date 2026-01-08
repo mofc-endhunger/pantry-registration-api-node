@@ -243,7 +243,7 @@ export class RegistrationsService {
           (dto as any).children_in_household ??
           (dto as any).children_count,
       );
-      const hasAnyCount = (desiredSeniors ?? 0) + (desiredAdults ?? 0) + (desiredChildren ?? 0) > 0;
+      let hasAnyCount = (desiredSeniors ?? 0) + (desiredAdults ?? 0) + (desiredChildren ?? 0) > 0;
 
       // Debug logging
       console.log('[registerForEvent] Household counts check:', {
@@ -255,6 +255,38 @@ export class RegistrationsService {
         household_id,
         dbUserId,
       });
+
+      if (!hasAnyCount) {
+        // Fallback: if registration payload omitted counts, use user's snapshot counts
+        try {
+          const userEntity = await this.usersService.findById(dbUserId);
+          const snapS = toInt((userEntity as any).seniors_in_household);
+          const snapA = toInt((userEntity as any).adults_in_household);
+          const snapC = toInt((userEntity as any).children_in_household);
+          const hasSnap = snapS + snapA + snapC > 0;
+          console.log('[registerForEvent] No counts in payload; snapshot fallback:', {
+            snapS,
+            snapA,
+            snapC,
+            hasSnap,
+          });
+          if (hasSnap) {
+            hasAnyCount = true;
+            await this.usersService.updateUserWithHousehold(dbUserId, {
+              household_id: household_id,
+              seniors_in_household: snapS,
+              adults_in_household: snapA,
+              children_in_household: snapC,
+            } as any);
+            console.log('[registerForEvent] Household expanded using snapshot counts');
+          }
+        } catch (e) {
+          console.warn(
+            '[registerForEvent] Snapshot fallback failed',
+            e instanceof Error ? e.message : String(e),
+          );
+        }
+      }
 
       if (hasAnyCount) {
         console.log('[registerForEvent] Calling updateUserWithHousehold with counts');
