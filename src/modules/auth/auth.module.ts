@@ -16,6 +16,7 @@ import { PasswordResetToken } from '../../entities/password-reset-token.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { Credential } from '../../entities/credential.entity';
 import { GuestOrJwtAuthGuard } from './guest-or-jwt.guard';
+import { HouseholdsModule } from '../households/households.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { GuestOrJwtAuthGuard } from './guest-or-jwt.guard';
     }),
     TypeOrmModule.forFeature([User, PasswordResetToken, Authentication, Credential]),
     NotificationsModule,
+    HouseholdsModule,
   ],
   controllers: [AuthController],
   providers: [

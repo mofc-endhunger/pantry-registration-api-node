@@ -1,11 +1,26 @@
-import { IsArray, IsInt, IsOptional, ArrayNotEmpty, ArrayUnique, ValidateNested, IsObject } from 'class-validator';
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
+import {
+  IsArray,
+  IsInt,
+  IsOptional,
+  ArrayNotEmpty,
+  ArrayUnique,
+  ValidateNested,
+  IsObject,
+} from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 export class RegisterHouseholdCountsDto {
   @IsOptional()
   @IsInt()
   @Transform(({ value, obj }) => {
-    const v = (obj as any)?.seniors ?? (obj as any)?.seniors_count ?? (obj as any)?.seniors_in_household ?? value;
+    const v =
+      obj?.synth_seniors ??
+      obj?.seniors ??
+      obj?.seniors_count ??
+      obj?.seniors_count ??
+      obj?.seniors_in_household ??
+      value;
     return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
   })
   seniors?: number;
@@ -13,7 +28,13 @@ export class RegisterHouseholdCountsDto {
   @IsOptional()
   @IsInt()
   @Transform(({ value, obj }) => {
-    const v = (obj as any)?.adults ?? (obj as any)?.adults_count ?? (obj as any)?.adults_in_household ?? value;
+    const v =
+      obj?.synth_adults ??
+      obj?.adults ??
+      obj?.adults_count ??
+      obj?.adults_count ??
+      obj?.adults_in_household ??
+      value;
     return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
   })
   adults?: number;
@@ -21,7 +42,13 @@ export class RegisterHouseholdCountsDto {
   @IsOptional()
   @IsInt()
   @Transform(({ value, obj }) => {
-    const v = (obj as any)?.children ?? (obj as any)?.children_count ?? (obj as any)?.children_in_household ?? value;
+    const v =
+      obj?.synth_children ??
+      obj?.children ??
+      obj?.children_count ??
+      obj?.children_count ??
+      obj?.children_in_household ??
+      value;
     return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
   })
   children?: number;
@@ -65,7 +92,7 @@ export class RegisterDto {
   @ArrayNotEmpty()
   @ArrayUnique()
   @Transform(({ value, obj }) => {
-    const v = obj?.attendees ?? obj?.attendeeIds ?? (obj as any)?.attendee_ids ?? value;
+    const v = obj?.attendees ?? obj?.attendeeIds ?? obj?.attendee_ids ?? value;
     return v === '' ? undefined : v;
   })
   attendees?: number[]; // household_member_id list
@@ -82,7 +109,12 @@ export class RegisterDto {
   @IsOptional()
   @IsInt()
   @Transform(({ value, obj }) => {
-    const v = (obj as any)?.synth_seniors ?? (obj as any)?.seniors ?? (obj as any)?.seniors_count ?? (obj as any)?.seniors_in_household ?? value;
+    const v =
+      obj?.synth_seniors ??
+      obj?.seniors ??
+      obj?.seniors_count ??
+      obj?.seniors_in_household ??
+      value;
     return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
   })
   seniors?: number;
@@ -90,7 +122,8 @@ export class RegisterDto {
   @IsOptional()
   @IsInt()
   @Transform(({ value, obj }) => {
-    const v = (obj as any)?.synth_adults ?? (obj as any)?.adults ?? (obj as any)?.adults_count ?? (obj as any)?.adults_in_household ?? value;
+    const v =
+      obj?.synth_adults ?? obj?.adults ?? obj?.adults_count ?? obj?.adults_in_household ?? value;
     return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
   })
   adults?: number;
@@ -98,7 +131,12 @@ export class RegisterDto {
   @IsOptional()
   @IsInt()
   @Transform(({ value, obj }) => {
-    const v = (obj as any)?.synth_children ?? (obj as any)?.children ?? (obj as any)?.children_count ?? (obj as any)?.children_in_household ?? value;
+    const v =
+      obj?.synth_children ??
+      obj?.children ??
+      obj?.children_count ??
+      obj?.children_in_household ??
+      value;
     return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
   })
   children?: number;
