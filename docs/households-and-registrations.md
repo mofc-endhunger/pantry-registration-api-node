@@ -34,6 +34,13 @@ It aims to eliminate confusion around the term “registration,” which can mea
 - Endpoint:
   - POST `/registrations` — create reservation (JWT for registered users or `X-Guest-Token` for guests)
 
+## High‑level model
+
+- A household is owned by a single “head of household” (HOH) user; all household operations authorize against that HOH’s `users.id`.
+- Active household members determine computed counts:
+  - Seniors (age ≥ 60), Children (age < 18), Adults = Total − Seniors − Children.
+- Counts are recomputed on every fetch/update from active members only via DOB thresholds; category flags are not persisted.
+
 ## Household model (applies to both guests and registered users)
 
 - Each household is owned by a head‑of‑household (HOH). We authorize household operations against that HOH’s `users.id`.
@@ -73,6 +80,15 @@ Expansion happens during POST `/registrations` and ensures the household member 
   - Representative DOBs: ~70 / 30 / 10 years ago
   - `gender_id`: inherited from HOH; if HOH lacks `gender_id`, best‑effort map from user `gender` (male→1, female→2)
 - Sync computed counts back to `users.seniors_in_household|adults_in_household|children_in_household`.
+
+## Updating households and members outside registration
+
+- PATCH to the household (internal service) supports:
+  - Address history: new addresses create a new active row and soft‑delete the previous one.
+  - Members array upsert:
+    - Members omitted from the payload (non‑HOH) are deactivated.
+    - Provided members are updated (or created) with given fields.
+- PATCH `/users/:id` (UI profile updates) adjusts user basics and can pass address fields that map into household addresses; it will not expand members unless counts are explicitly provided and routed to the reconcile logic.
 
 ## What each flow does (and doesn’t do)
 
@@ -120,6 +136,15 @@ Expansion happens during POST `/registrations` and ensures the household member 
 - Do not send `*_in_household: 0` in a profile update immediately before event registration unless you intend to reset counts (it will suppress expansion).
 - For guests, always include `X-Guest-Token` so expansion applies to the correct household.
 - The head‑of‑household remains active; we never auto‑deactivate HOH.
+
+## Summary of endpoints to remember
+
+- Guest lifecycle
+  - Create guest: POST `/guest-authentications` → returns token
+  - Update guest: PATCH `/guest-authentications` with `X-Guest-Token`
+  - Register (expand): POST `/registrations` with `X-Guest-Token` and counts (or rely on snapshot fallback)
+- Registered lifecycle
+  - Register (expand): POST `/registrations` with JWT and counts (or rely on snapshot fallback)
 
 ## Examples
 
