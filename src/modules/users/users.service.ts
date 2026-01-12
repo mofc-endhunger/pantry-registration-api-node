@@ -359,6 +359,71 @@ export class UsersService {
             (dto as { children?: number }).children,
         );
 
+        // Treat provided counts as EXCLUDING the head-of-household (HOH).
+        // Determine HOH age category and add 1 to that category so desired totals include HOH.
+        try {
+          // Prefer HOH DOB from household members; fallback to user record
+          const membersForHohRaw = await this.householdsService.listMembers(householdId, id);
+          const membersForHoh: Array<{
+            is_head_of_household?: boolean;
+            date_of_birth?: string | null;
+            is_active?: number | boolean;
+          }> = Array.isArray(membersForHohRaw)
+            ? (membersForHohRaw as Array<unknown>).map(
+                (m) =>
+                  m as {
+                    is_head_of_household?: boolean;
+                    date_of_birth?: string | null;
+                    is_active?: number | boolean;
+                  },
+              )
+            : [];
+          const hohMember = membersForHoh.find((m) => !!m.is_head_of_household) ?? undefined;
+
+          // Compute HOH age category
+          const dobStr =
+            (hohMember?.date_of_birth &&
+              typeof hohMember.date_of_birth === 'string' &&
+              hohMember.date_of_birth) ||
+            (await this.findById(id)).date_of_birth ||
+            null;
+          const computeAge = (dob: string | null): number | null => {
+            if (!dob) return null;
+            const d = new Date(dob);
+            if (Number.isNaN(d.getTime())) return null;
+            const now = new Date();
+            let age = now.getFullYear() - d.getFullYear();
+            const mDiff = now.getMonth() - d.getMonth();
+            if (mDiff < 0 || (mDiff === 0 && now.getDate() < d.getDate())) age--;
+            return age;
+          };
+          const hohAge = computeAge(dobStr);
+          // Default HOH category to Adult when age unknown
+          const addTo: 'seniors' | 'adults' | 'children' =
+            hohAge == null
+              ? 'adults'
+              : hohAge >= 60
+                ? 'seniors'
+                : hohAge < 18
+                  ? 'children'
+                  : 'adults';
+
+          if (addTo === 'seniors') {
+            // eslint-disable-next-line no-param-reassign
+            desiredSeniors = (desiredSeniors ?? 0) + 1;
+          } else if (addTo === 'children') {
+            // eslint-disable-next-line no-param-reassign
+            desiredChildren = (desiredChildren ?? 0) + 1;
+          } else {
+            // eslint-disable-next-line no-param-reassign
+            desiredAdults = (desiredAdults ?? 0) + 1;
+          }
+        } catch {
+          // If HOH detection fails, assume adult and include +1 to adults
+          // eslint-disable-next-line no-param-reassign
+          desiredAdults = (desiredAdults ?? 0) + 1;
+        }
+
         // Load current counts and reconcile placeholders: remove excess first, then add deficits
         let current = await this.householdsService.getHouseholdById(householdId, id);
         let currentSeniors = current.counts?.seniors ?? 0;

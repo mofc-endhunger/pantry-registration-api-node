@@ -67,6 +67,8 @@ Expansion happens during POST `/registrations` and ensures the household member 
 - Also accepted nested variants: `counts.synth_*`, `counts.*_count`
 - Flat variants: `seniors|adults|children`, `*_count`, `*_in_household`
 
+Important: Counts are NON‑inclusive of the head‑of‑household (HOH). The HOH is always included automatically based on their age category (senior/adult/child). Provide counts for additional members beyond the HOH.
+
 2. If counts are missing in the registration payload, we attempt a snapshot fallback:
 
 - Use `users.seniors_in_household|adults_in_household|children_in_household` if their sum > 0.

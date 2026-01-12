@@ -272,11 +272,36 @@ export class RegistrationsService {
           });
           if (hasSnap) {
             hasAnyCount = true;
+            // Convert snapshot (inclusive of HOH) to exclusive counts by subtracting HOH category
+            const computeAge = (dob?: string | null): number | null => {
+              if (!dob) return null;
+              const d = new Date(dob);
+              if (Number.isNaN(d.getTime())) return null;
+              const now = new Date();
+              let age = now.getFullYear() - d.getFullYear();
+              const mDiff = now.getMonth() - d.getMonth();
+              if (mDiff < 0 || (mDiff === 0 && now.getDate() < d.getDate())) age--;
+              return age;
+            };
+            const hohDob = (userEntity as any).date_of_birth as string | null;
+            const hohAge = computeAge(hohDob);
+            let exclS = snapS;
+            let exclA = snapA;
+            let exclC = snapC;
+            if (hohAge == null) {
+              exclA = Math.max(0, snapA - 1);
+            } else if (hohAge >= 60) {
+              exclS = Math.max(0, snapS - 1);
+            } else if (hohAge < 18) {
+              exclC = Math.max(0, snapC - 1);
+            } else {
+              exclA = Math.max(0, snapA - 1);
+            }
             await this.usersService.updateUserWithHousehold(dbUserId, {
               household_id: household_id,
-              seniors_in_household: snapS,
-              adults_in_household: snapA,
-              children_in_household: snapC,
+              seniors_in_household: exclS,
+              adults_in_household: exclA,
+              children_in_household: exclC,
             } as any);
             console.log('[registerForEvent] Household expanded using snapshot counts');
           }
