@@ -270,7 +270,14 @@ export class UsersService {
         typeof dto.permission_to_text === 'boolean' ? dto.permission_to_text : undefined,
       // Add more user fields as needed
     };
-    await this.userRepository.update(id, userUpdate);
+    // Only perform update when at least one field is actually defined to avoid
+    // UpdateValuesMissingError from TypeORM when no SET values are provided.
+    const cleanUserUpdate = Object.fromEntries(
+      Object.entries(userUpdate).filter(([, v]) => v !== undefined),
+    ) as Partial<User>;
+    if (Object.keys(cleanUserUpdate).length > 0) {
+      await this.userRepository.update(id, cleanUserUpdate);
+    }
     // Find household for this user
     const householdId = (dto.household_id ?? dto.id) as number;
     // Delegate to household PATCH logic first (handles member deactivation when members array present).
