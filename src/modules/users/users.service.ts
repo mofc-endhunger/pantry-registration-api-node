@@ -359,6 +359,11 @@ export class UsersService {
             (dto as { children?: number }).children,
         );
 
+        // Work with adjustable copies since desired* are constants
+        let adjDesiredSeniors = desiredSeniors;
+        let adjDesiredAdults = desiredAdults;
+        let adjDesiredChildren = desiredChildren;
+
         // Treat provided counts as EXCLUDING the head-of-household (HOH).
         // Determine HOH age category and add 1 to that category so desired totals include HOH.
         try {
@@ -409,19 +414,15 @@ export class UsersService {
                   : 'adults';
 
           if (addTo === 'seniors') {
-            // eslint-disable-next-line no-param-reassign
-            desiredSeniors = (desiredSeniors ?? 0) + 1;
+            adjDesiredSeniors = (adjDesiredSeniors ?? 0) + 1;
           } else if (addTo === 'children') {
-            // eslint-disable-next-line no-param-reassign
-            desiredChildren = (desiredChildren ?? 0) + 1;
+            adjDesiredChildren = (adjDesiredChildren ?? 0) + 1;
           } else {
-            // eslint-disable-next-line no-param-reassign
-            desiredAdults = (desiredAdults ?? 0) + 1;
+            adjDesiredAdults = (adjDesiredAdults ?? 0) + 1;
           }
         } catch {
           // If HOH detection fails, assume adult and include +1 to adults
-          // eslint-disable-next-line no-param-reassign
-          desiredAdults = (desiredAdults ?? 0) + 1;
+          adjDesiredAdults = (adjDesiredAdults ?? 0) + 1;
         }
 
         // Load current counts and reconcile placeholders: remove excess first, then add deficits
@@ -478,9 +479,9 @@ export class UsersService {
           }
         };
 
-        await removeExcess('Senior', Math.max(0, currentSeniors - desiredSeniors));
-        await removeExcess('Adult', Math.max(0, currentAdults - desiredAdults));
-        await removeExcess('Child', Math.max(0, currentChildren - desiredChildren));
+        await removeExcess('Senior', Math.max(0, currentSeniors - adjDesiredSeniors));
+        await removeExcess('Adult', Math.max(0, currentAdults - adjDesiredAdults));
+        await removeExcess('Child', Math.max(0, currentChildren - adjDesiredChildren));
 
         // Refresh counts after removals
         current = await this.householdsService.getHouseholdById(householdId, id);
@@ -488,9 +489,9 @@ export class UsersService {
         currentAdults = current.counts?.adults ?? 0;
         currentChildren = current.counts?.children ?? 0;
 
-        const needSeniors = Math.max(0, desiredSeniors - currentSeniors);
-        const needAdults = Math.max(0, desiredAdults - currentAdults);
-        const needChildren = Math.max(0, desiredChildren - currentChildren);
+        const needSeniors = Math.max(0, adjDesiredSeniors - currentSeniors);
+        const needAdults = Math.max(0, adjDesiredAdults - currentAdults);
+        const needChildren = Math.max(0, adjDesiredChildren - currentChildren);
 
         const dateStringYearsAgo = (years: number): string => {
           const d = new Date();
