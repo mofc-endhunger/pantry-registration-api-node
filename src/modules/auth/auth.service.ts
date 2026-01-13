@@ -21,6 +21,7 @@ import { MailerService } from './mailer.service';
 import { TwilioService } from '../../modules/notifications/twilio.service';
 import { JwtService } from '@nestjs/jwt';
 import { SafeRandom } from '../../common/utils/safe-random';
+import { HouseholdsService } from '../households/households.service';
 
 @Injectable()
 export class AuthService {
@@ -35,6 +36,7 @@ export class AuthService {
     private readonly authenticationRepository: Repository<Authentication>,
     @InjectRepository(Credential)
     private readonly credentialRepository: Repository<Credential>,
+    @Optional() private readonly householdsService?: HouseholdsService,
     @Optional() private readonly twilioService?: TwilioService,
   ) {}
 
@@ -231,6 +233,28 @@ export class AuthService {
       guestUser.email = email;
     }
     await this.userRepository.save(guestUser);
+
+    // Ensure this user has a household; create a minimal one if missing
+    let householdId = this.householdsService
+      ? await this.householdsService.findHouseholdIdByUserId(guestUser.id)
+      : undefined;
+    let householdCreated = false;
+    if (!householdId && this.householdsService) {
+      try {
+        await this.householdsService.createHousehold(guestUser.id, {
+          primary_first_name: guestUser.first_name || 'Guest',
+          primary_last_name: guestUser.last_name || 'User',
+          primary_date_of_birth: (guestUser.date_of_birth as unknown as string) || '1900-01-01',
+          primary_phone: guestUser.phone ?? undefined,
+          primary_email: guestUser.email ?? undefined,
+        } as any);
+        householdId = await this.householdsService.findHouseholdIdByUserId(guestUser.id);
+        householdCreated = !!householdId;
+      } catch {
+        // If creation fails, proceed; downstream flows still can create on demand
+      }
+    }
+
     // Invalidate the guest token (delete or expire it)
     try {
       await this.authenticationRepository.delete({ id: auth.id });
@@ -245,6 +269,8 @@ export class AuthService {
     return {
       upgraded: true,
       user_id: guestUser.id,
+      household_id: householdId ?? null,
+      household_created: householdCreated,
     };
   }
 }
