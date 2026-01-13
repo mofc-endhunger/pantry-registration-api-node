@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsBoolean, IsInt } from 'class-validator';
 import { UpdateHouseholdDto } from '../../households/dto/update-household.dto';
 
 export class UpdateUserWithHouseholdDto extends UpdateHouseholdDto {
@@ -37,4 +37,30 @@ export class UpdateUserWithHouseholdDto extends UpdateHouseholdDto {
   @IsOptional()
   @IsBoolean()
   permission_to_text?: boolean;
+
+  // Optional snapshot counts (used when syncing household counts to user)
+  @IsOptional()
+  @IsInt()
+  seniors_in_household?: number;
+
+  @IsOptional()
+  @IsInt()
+  adults_in_household?: number;
+
+  @IsOptional()
+  @IsInt()
+  children_in_household?: number;
+
+  // Optional alternative aliases that may be provided by clients
+  @IsOptional()
+  @IsInt()
+  seniors?: number;
+
+  @IsOptional()
+  @IsInt()
+  adults?: number;
+
+  @IsOptional()
+  @IsInt()
+  children?: number;
 }

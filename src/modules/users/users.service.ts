@@ -270,79 +270,18 @@ export class UsersService {
         typeof dto.permission_to_text === 'boolean' ? dto.permission_to_text : undefined,
       // Add more user fields as needed
     };
-    await this.userRepository.update(id, userUpdate);
+    // Only perform update when at least one field is actually defined to avoid
+    // UpdateValuesMissingError from TypeORM when no SET values are provided.
+    const cleanUserUpdate = Object.fromEntries(
+      Object.entries(userUpdate).filter(([, v]) => v !== undefined),
+    ) as Partial<User>;
+    if (Object.keys(cleanUserUpdate).length > 0) {
+      await this.userRepository.update(id, cleanUserUpdate);
+    }
     // Find household for this user
     const householdId = (dto.household_id ?? dto.id) as number;
-    // If counts were provided, add placeholder members to match requested counts (even if members array present)
-    try {
-      const wantsCounts =
-        (dto as any)?.counts ||
-        (dto as any)?.seniors_in_household != null ||
-        (dto as any)?.adults_in_household != null ||
-        (dto as any)?.children_in_household != null ||
-        (dto as any)?.seniors != null ||
-        (dto as any)?.adults != null ||
-        (dto as any)?.children != null;
-      if (householdId && wantsCounts) {
-        // Determine desired counts
-        const toInt = (val: unknown): number => {
-          if (val === undefined || val === null) return 0;
-          const n = typeof val === 'string' ? Number(val) : (val as number);
-          return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
-        };
-        const desiredSeniors =
-          toInt((dto as any)?.counts?.seniors) ||
-          toInt((dto as any)?.seniors_in_household) ||
-          toInt((dto as any)?.seniors);
-        const desiredAdults =
-          toInt((dto as any)?.counts?.adults) ||
-          toInt((dto as any)?.adults_in_household) ||
-          toInt((dto as any)?.adults);
-        const desiredChildren =
-          toInt((dto as any)?.counts?.children) ||
-          toInt((dto as any)?.children_in_household) ||
-          toInt((dto as any)?.children);
-        const current = await this.householdsService.getHouseholdById(householdId, id);
-        const currentSeniors = current.counts?.seniors ?? 0;
-        const currentAdults = current.counts?.adults ?? 0;
-        const currentChildren = current.counts?.children ?? 0;
-        const needSeniors = Math.max(0, desiredSeniors - currentSeniors);
-        const needAdults = Math.max(0, desiredAdults - currentAdults);
-        const needChildren = Math.max(0, desiredChildren - currentChildren);
-        const dateStringYearsAgo = (years: number): string => {
-          const d = new Date();
-          d.setFullYear(d.getFullYear() - years);
-          const yyyy = d.getFullYear();
-          const mm = String(d.getMonth() + 1).padStart(2, '0');
-          const dd = String(d.getDate()).padStart(2, '0');
-          return `${yyyy}-${mm}-${dd}`;
-        };
-        const addPlaceholders = async (count: number, label: 'Senior' | 'Adult' | 'Child') => {
-          const dob =
-            label === 'Senior'
-              ? dateStringYearsAgo(70)
-              : label === 'Adult'
-                ? dateStringYearsAgo(30)
-                : dateStringYearsAgo(10);
-          for (let i = 1; i <= count; i++) {
-            const member: UpsertMemberDto = {
-              first_name: `${label} ${i}`,
-              last_name: label,
-              date_of_birth: dob,
-              is_head_of_household: false,
-              is_active: true,
-            };
-            await this.householdsService.addMember(householdId, id, member);
-          }
-        };
-        if (needSeniors > 0) await addPlaceholders(needSeniors, 'Senior');
-        if (needAdults > 0) await addPlaceholders(needAdults, 'Adult');
-        if (needChildren > 0) await addPlaceholders(needChildren, 'Child');
-      }
-    } catch {
-      // best-effort; if placeholder add fails we still proceed to update household
-    }
-    // Delegate to household PATCH logic. Map user address fields to household address fields if present.
+    // Delegate to household PATCH logic first (handles member deactivation when members array present).
+    // Map user address fields to household address fields if present.
     const householdPatch: Record<string, unknown> = { ...dto };
     // Map user-facing address fields to household address fields when needed
     if (
@@ -359,17 +298,278 @@ export class UsersService {
       id,
       householdPatch as Parameters<typeof this.householdsService.updateHousehold>[2],
     );
-    // Return updated user and household
-    const user = await this.findById(id);
+
+    // Ensure head-of-household has gender_id set from user's gender if available
+    try {
+      const membersForGender = await this.householdsService.listMembers(householdId, id);
+      const hohMember = Array.isArray(membersForGender)
+        ? (
+            membersForGender as Array<{
+              id: number;
+              is_head_of_household?: boolean;
+              gender_id?: number | null;
+            }>
+          ).find((m) => !!m.is_head_of_household)
+        : undefined;
+      if (hohMember && (hohMember.gender_id == null || Number.isNaN(hohMember.gender_id))) {
+        // Map user's string gender to a numeric gender_id commonly used downstream
+        // 1 = male, 2 = female (fallback: leave unset)
+        const headUser = await this.findById(id);
+        const g = (headUser.gender || '').toString().trim().toLowerCase();
+        const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
+        if (mappedGenderId !== undefined) {
+          await this.householdsService.updateMember(householdId, hohMember.id, id, {
+            gender_id: mappedGenderId,
+          } as any);
+        }
+      }
+    } catch {
+      // best-effort; do not block on gender sync
+    }
+
+    // After household update, add placeholder members to reach desired counts (if provided).
+    try {
+      const wantsCounts =
+        !!dto.counts ||
+        dto.seniors_in_household != null ||
+        dto.adults_in_household != null ||
+        dto.children_in_household != null ||
+        (dto as { seniors?: number }).seniors != null ||
+        (dto as { adults?: number }).adults != null ||
+        (dto as { children?: number }).children != null;
+      if (householdId && wantsCounts) {
+        const toInt = (val: unknown): number => {
+          if (val === undefined || val === null) return 0;
+          const n = typeof val === 'string' ? Number(val) : (val as number);
+          return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+        };
+        const desiredSeniors = toInt(
+          (dto.counts && dto.counts.seniors) ??
+            dto.seniors_in_household ??
+            (dto as { seniors?: number }).seniors,
+        );
+        const desiredAdults = toInt(
+          (dto.counts && dto.counts.adults) ??
+            dto.adults_in_household ??
+            (dto as { adults?: number }).adults,
+        );
+        const desiredChildren = toInt(
+          (dto.counts && dto.counts.children) ??
+            dto.children_in_household ??
+            (dto as { children?: number }).children,
+        );
+
+        // Work with adjustable copies since desired* are constants
+        let adjDesiredSeniors = desiredSeniors;
+        let adjDesiredAdults = desiredAdults;
+        let adjDesiredChildren = desiredChildren;
+
+        // Treat provided counts as EXCLUDING the head-of-household (HOH).
+        // Determine HOH age category and add 1 to that category so desired totals include HOH.
+        try {
+          // Prefer HOH DOB from household members; fallback to user record
+          const membersForHohRaw = await this.householdsService.listMembers(householdId, id);
+          const membersForHoh: Array<{
+            is_head_of_household?: boolean;
+            date_of_birth?: string | null;
+            is_active?: number | boolean;
+          }> = Array.isArray(membersForHohRaw)
+            ? (membersForHohRaw as Array<unknown>).map(
+                (m) =>
+                  m as {
+                    is_head_of_household?: boolean;
+                    date_of_birth?: string | null;
+                    is_active?: number | boolean;
+                  },
+              )
+            : [];
+          const hohMember = membersForHoh.find((m) => !!m.is_head_of_household) ?? undefined;
+
+          // Compute HOH age category
+          const dobStr =
+            (hohMember?.date_of_birth &&
+              typeof hohMember.date_of_birth === 'string' &&
+              hohMember.date_of_birth) ||
+            (await this.findById(id)).date_of_birth ||
+            null;
+          const computeAge = (dob: string | null): number | null => {
+            if (!dob) return null;
+            const d = new Date(dob);
+            if (Number.isNaN(d.getTime())) return null;
+            const now = new Date();
+            let age = now.getFullYear() - d.getFullYear();
+            const mDiff = now.getMonth() - d.getMonth();
+            if (mDiff < 0 || (mDiff === 0 && now.getDate() < d.getDate())) age--;
+            return age;
+          };
+          const hohAge = computeAge(dobStr);
+          // Default HOH category to Adult when age unknown
+          const addTo: 'seniors' | 'adults' | 'children' =
+            hohAge == null
+              ? 'adults'
+              : hohAge >= 60
+                ? 'seniors'
+                : hohAge < 18
+                  ? 'children'
+                  : 'adults';
+
+          if (addTo === 'seniors') {
+            adjDesiredSeniors = (adjDesiredSeniors ?? 0) + 1;
+          } else if (addTo === 'children') {
+            adjDesiredChildren = (adjDesiredChildren ?? 0) + 1;
+          } else {
+            adjDesiredAdults = (adjDesiredAdults ?? 0) + 1;
+          }
+        } catch {
+          // If HOH detection fails, assume adult and include +1 to adults
+          adjDesiredAdults = (adjDesiredAdults ?? 0) + 1;
+        }
+
+        // Load current counts and reconcile placeholders: remove excess first, then add deficits
+        let current = await this.householdsService.getHouseholdById(householdId, id);
+        let currentSeniors = current.counts?.seniors ?? 0;
+        let currentAdults = current.counts?.adults ?? 0;
+        let currentChildren = current.counts?.children ?? 0;
+
+        // Remove excess placeholders if counts decreased
+        const removeExcess = async (label: 'Senior' | 'Adult' | 'Child', excess: number) => {
+          if (excess <= 0) return;
+          // Get all members to identify placeholders
+          const membersRaw = await this.householdsService.listMembers(householdId, id);
+          const members: Array<{
+            id: number;
+            first_name?: string;
+            last_name?: string;
+            is_head_of_household?: number;
+            is_active?: number;
+            created_at?: Date | string;
+          }> = Array.isArray(membersRaw)
+            ? (membersRaw as Array<unknown>).map(
+                (m) =>
+                  m as {
+                    id: number;
+                    first_name?: string;
+                    last_name?: string;
+                    is_head_of_household?: number;
+                    is_active?: number;
+                    created_at?: Date | string;
+                  },
+              )
+            : [];
+          // Find newest placeholders first
+          const candidates = members
+            .filter((m) => {
+              const fn = m.first_name ?? '';
+              return (
+                (m.is_active ?? 0) === 1 &&
+                (m.is_head_of_household ?? 0) !== 1 &&
+                (m.last_name ?? '') === label &&
+                typeof fn === 'string' &&
+                fn.startsWith(`${label} `)
+              );
+            })
+            .sort((a, b) => {
+              const at = a.created_at ? new Date(a.created_at as any).getTime() : 0;
+              const bt = b.created_at ? new Date(b.created_at as any).getTime() : 0;
+              return bt - at;
+            })
+            .slice(0, excess);
+          for (const m of candidates) {
+            await this.householdsService.deactivateMember(householdId, Number(m.id), id);
+          }
+        };
+
+        await removeExcess('Senior', Math.max(0, currentSeniors - adjDesiredSeniors));
+        await removeExcess('Adult', Math.max(0, currentAdults - adjDesiredAdults));
+        await removeExcess('Child', Math.max(0, currentChildren - adjDesiredChildren));
+
+        // Refresh counts after removals
+        current = await this.householdsService.getHouseholdById(householdId, id);
+        currentSeniors = current.counts?.seniors ?? 0;
+        currentAdults = current.counts?.adults ?? 0;
+        currentChildren = current.counts?.children ?? 0;
+
+        const needSeniors = Math.max(0, adjDesiredSeniors - currentSeniors);
+        const needAdults = Math.max(0, adjDesiredAdults - currentAdults);
+        const needChildren = Math.max(0, adjDesiredChildren - currentChildren);
+
+        const dateStringYearsAgo = (years: number): string => {
+          const d = new Date();
+          d.setFullYear(d.getFullYear() - years);
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          return `${yyyy}-${mm}-${dd}`;
+        };
+        const addPlaceholders = async (count: number, label: 'Senior' | 'Adult' | 'Child') => {
+          const dob =
+            label === 'Senior'
+              ? dateStringYearsAgo(70)
+              : label === 'Adult'
+                ? dateStringYearsAgo(30)
+                : dateStringYearsAgo(10);
+          // Stamp placeholders with HOH gender if available
+          const members2Raw = await this.householdsService.listMembers(householdId, id);
+          const members2: Array<{ is_head_of_household?: boolean; gender_id?: number | null }> =
+            Array.isArray(members2Raw)
+              ? (members2Raw as Array<unknown>).map(
+                  (m) =>
+                    m as {
+                      is_head_of_household?: boolean;
+                      gender_id?: number | null;
+                    },
+                )
+              : [];
+          const hoh = members2.find((m) => !!m.is_head_of_household);
+          let hohGenderId = hoh?.gender_id ?? null;
+          if (hohGenderId == null) {
+            // Fallback: map user's gender string
+            const headUser = await this.findById(id);
+            const g = (headUser.gender || '').toString().trim().toLowerCase();
+            hohGenderId = g === 'male' ? 1 : g === 'female' ? 2 : null;
+          }
+          for (let i = 1; i <= count; i++) {
+            const member: UpsertMemberDto = {
+              first_name: `${label} ${i}`,
+              last_name: label,
+              date_of_birth: dob,
+              is_head_of_household: false,
+              is_active: true,
+              gender_id: hohGenderId ?? undefined,
+            };
+            await this.householdsService.addMember(householdId, id, member);
+          }
+        };
+        if (needSeniors > 0) await addPlaceholders(needSeniors, 'Senior');
+        if (needAdults > 0) await addPlaceholders(needAdults, 'Adult');
+        if (needChildren > 0) await addPlaceholders(needChildren, 'Child');
+      }
+    } catch {
+      // best-effort; if placeholder add fails we still proceed
+    }
+    // Fetch updated household after potential placeholder additions
     const household = await this.householdsService.getHouseholdById(householdId, id);
 
-    // Sync user to PantryTrak after update (matches old system after_commit on: :update)
+    // Sync aggregate counts from household back to head-of-household user snapshot
+    try {
+      await this.userRepository.update({ id }, {
+        seniors_in_household: household.counts?.seniors ?? 0,
+        adults_in_household: household.counts?.adults ?? 0,
+        children_in_household: household.counts?.children ?? 0,
+      } as Partial<User>);
+    } catch {
+      // ignore snapshot sync errors
+    }
+
+    const user = await this.findById(id);
+
+    // Best-effort sync to PantryTrak after update
     try {
       if (this.pantryTrakClient) {
         await this.pantryTrakClient.createUser(user);
       }
     } catch {
-      // Best-effort sync, don't block user update
+      // Best-effort: swallow
     }
 
     return { user, household };

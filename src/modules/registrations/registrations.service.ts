@@ -174,6 +174,36 @@ export class RegistrationsService {
         } as any);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
+
+        // Best-effort: set HOH gender_id from user's gender string if available
+        try {
+          if (household_id) {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            const members = await this.householdsService.listMembers(household_id, dbUserId);
+            const hoh = Array.isArray(members)
+              ? (
+                  members as Array<{
+                    id: number;
+                    is_head_of_household?: boolean;
+                    gender_id?: number | null;
+                  }>
+                ).find((m) => !!m.is_head_of_household)
+              : undefined;
+            const g = (userEntity.gender || '').toString().trim().toLowerCase();
+            const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
+            if (
+              hoh &&
+              mappedGenderId !== undefined &&
+              (hoh.gender_id == null || Number.isNaN(hoh.gender_id))
+            ) {
+              await this.householdsService.updateMember(household_id, hoh.id, dbUserId, {
+                gender_id: mappedGenderId,
+              } as any);
+            }
+          }
+        } catch {
+          // ignore gender sync failures
+        }
       } catch (_) {
         // ignore and fall through to error
       }
@@ -191,33 +221,116 @@ export class RegistrationsService {
       };
       const desiredSeniors = toInt(
         (dto as any)?.counts?.seniors ??
+          (dto as any)?.counts?.seniors_count ??
+          (dto as any)?.counts?.synth_seniors ??
           (dto as any).seniors ??
           (dto as any).seniors_in_household ??
           (dto as any).seniors_count,
       );
       const desiredAdults = toInt(
         (dto as any)?.counts?.adults ??
+          (dto as any)?.counts?.adults_count ??
+          (dto as any)?.counts?.synth_adults ??
           (dto as any).adults ??
           (dto as any).adults_in_household ??
           (dto as any).adults_count,
       );
       const desiredChildren = toInt(
         (dto as any)?.counts?.children ??
+          (dto as any)?.counts?.children_count ??
+          (dto as any)?.counts?.synth_children ??
           (dto as any).children ??
           (dto as any).children_in_household ??
           (dto as any).children_count,
       );
-      const hasAnyCount = (desiredSeniors ?? 0) + (desiredAdults ?? 0) + (desiredChildren ?? 0) > 0;
+      let hasAnyCount = (desiredSeniors ?? 0) + (desiredAdults ?? 0) + (desiredChildren ?? 0) > 0;
+
+      // Debug logging
+      console.log('[registerForEvent] Household counts check:', {
+        dto: JSON.stringify(dto),
+        desiredSeniors,
+        desiredAdults,
+        desiredChildren,
+        hasAnyCount,
+        household_id,
+        dbUserId,
+      });
+
+      if (!hasAnyCount) {
+        // Fallback: if registration payload omitted counts, use user's snapshot counts
+        try {
+          const userEntity = await this.usersService.findById(dbUserId);
+          const snapS = toInt((userEntity as any).seniors_in_household);
+          const snapA = toInt((userEntity as any).adults_in_household);
+          const snapC = toInt((userEntity as any).children_in_household);
+          const hasSnap = snapS + snapA + snapC > 0;
+          console.log('[registerForEvent] No counts in payload; snapshot fallback:', {
+            snapS,
+            snapA,
+            snapC,
+            hasSnap,
+          });
+          if (hasSnap) {
+            hasAnyCount = true;
+            // Convert snapshot (inclusive of HOH) to exclusive counts by subtracting HOH category
+            const computeAge = (dob?: string | null): number | null => {
+              if (!dob) return null;
+              const d = new Date(dob);
+              if (Number.isNaN(d.getTime())) return null;
+              const now = new Date();
+              let age = now.getFullYear() - d.getFullYear();
+              const mDiff = now.getMonth() - d.getMonth();
+              if (mDiff < 0 || (mDiff === 0 && now.getDate() < d.getDate())) age--;
+              return age;
+            };
+            const hohDob = (userEntity as any).date_of_birth as string | null;
+            const hohAge = computeAge(hohDob);
+            let exclS = snapS;
+            let exclA = snapA;
+            let exclC = snapC;
+            if (hohAge == null) {
+              exclA = Math.max(0, snapA - 1);
+            } else if (hohAge >= 60) {
+              exclS = Math.max(0, snapS - 1);
+            } else if (hohAge < 18) {
+              exclC = Math.max(0, snapC - 1);
+            } else {
+              exclA = Math.max(0, snapA - 1);
+            }
+            await this.usersService.updateUserWithHousehold(dbUserId, {
+              household_id: household_id,
+              seniors_in_household: exclS,
+              adults_in_household: exclA,
+              children_in_household: exclC,
+            } as any);
+            console.log('[registerForEvent] Household expanded using snapshot counts');
+          }
+        } catch (e) {
+          console.warn(
+            '[registerForEvent] Snapshot fallback failed',
+            e instanceof Error ? e.message : String(e),
+          );
+        }
+      }
+
       if (hasAnyCount) {
+        console.log('[registerForEvent] Calling updateUserWithHousehold with counts');
         await this.usersService.updateUserWithHousehold(dbUserId, {
-          household_id: household_id as number,
+          household_id: household_id,
           seniors_in_household: desiredSeniors,
           adults_in_household: desiredAdults,
           children_in_household: desiredChildren,
         } as any);
+        console.log('[registerForEvent] Successfully updated household counts');
+      } else {
+        console.log('[registerForEvent] No counts provided, skipping household expansion');
       }
-    } catch {
-      // best-effort; continue on failure
+    } catch (err) {
+      // best-effort; continue on failure but log the error
+      console.error(
+        '[registerForEvent] Failed to update household counts during registration:',
+        err,
+      );
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
