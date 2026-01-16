@@ -64,7 +64,6 @@ export class ReservationsService {
   }
 
   async listForMe(params: ListParams) {
-    const type = params.type ?? 'all';
     const limit = Math.min(Math.max(params.limit ?? 50, 1), 200);
     const offset = Math.max(params.offset ?? 0, 0);
 
@@ -80,31 +79,8 @@ export class ReservationsService {
       .where('r.household_id = :household_id', { household_id })
       .andWhere("r.status IN ('confirmed','checked_in')"); // local-only visible states
 
-    // Compute a virtual start column = COALESCE(t.start_at, e.start_at)
-    // Use raw where conditions for date filters
-    if (params.fromDate) {
-      qb.andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) >= :from) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) >= :from) )',
-        { from: params.fromDate },
-      );
-    }
-    if (params.toDate) {
-      qb.andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) <= :to) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) <= :to) )',
-        { to: params.toDate },
-      );
-    }
-    if (type === 'upcoming') {
-      qb.andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) >= CURRENT_DATE) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) >= CURRENT_DATE) )',
-      );
-    } else if (type === 'past') {
-      qb.andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) < CURRENT_DATE) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) < CURRENT_DATE) )',
-      );
-    }
-
-    qb.orderBy('COALESCE(t.start_at, e.start_at)', 'DESC').limit(limit).offset(offset);
+    // Temporarily ignore date/time filters until local data is populated
+    qb.orderBy('r.created_at', 'DESC').limit(limit).offset(offset);
 
     const rows = await qb.getRawAndEntities();
 
@@ -116,78 +92,29 @@ export class ReservationsService {
       .where('r.household_id = :household_id', { household_id })
       .andWhere("r.status IN ('confirmed','checked_in')");
 
-    if (params.fromDate) {
-      totalQb.andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) >= :from) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) >= :from) )',
-        { from: params.fromDate },
-      );
-    }
-    if (params.toDate) {
-      totalQb.andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) <= :to) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) <= :to) )',
-        { to: params.toDate },
-      );
-    }
-    if (type === 'upcoming') {
-      totalQb.andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) >= CURRENT_DATE) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) >= CURRENT_DATE) )',
-      );
-    } else if (type === 'past') {
-      totalQb.andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) < CURRENT_DATE) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) < CURRENT_DATE) )',
-      );
-    }
     const total = await totalQb.getCount();
 
-    // Upcoming/past counts across all (ignoring type filter but honoring from/to)
-    const baseCountQb = this.regsRepo
-      .createQueryBuilder('r')
-      .leftJoin(Event, 'e', 'e.id = r.event_id')
-      .leftJoin(EventTimeslot, 't', 't.id = r.timeslot_id')
-      .where('r.household_id = :household_id', { household_id })
-      .andWhere("r.status IN ('confirmed','checked_in')");
-    if (params.fromDate) {
-      baseCountQb.andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) >= :from) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) >= :from) )',
-        { from: params.fromDate },
-      );
-    }
-    if (params.toDate) {
-      baseCountQb.andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) <= :to) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) <= :to) )',
-        { to: params.toDate },
-      );
-    }
-    const upcomingCount = await baseCountQb
-      .clone()
-      .andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) >= CURRENT_DATE) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) >= CURRENT_DATE) )',
-      )
-      .getCount();
-    const pastCount = await baseCountQb
-      .clone()
-      .andWhere(
-        '( (t.start_at IS NOT NULL AND DATE(t.start_at) < CURRENT_DATE) OR (t.start_at IS NULL AND e.start_at IS NOT NULL AND DATE(e.start_at) < CURRENT_DATE) )',
-      )
-      .getCount();
+    // Stub counts while time-based classification is disabled
+    const upcomingCount = 0;
+    const pastCount = 0;
 
     // Map entities to read model
     const reservations = rows.entities.map((r) => {
-      // Prefer timeslot dates
-      const startAt = (r as any).timeslot?.start_at ?? (r as any).event?.start_at ?? null;
-      const endAt = (r as any).timeslot?.end_at ?? null;
+      // Temporarily omit time (will be restored when data is available locally)
+      const startAt = null as unknown as Date | null;
+      const endAt = null as unknown as Date | null;
       return {
         id: r.id,
         event: {
           id: r.event_id,
           name: (r as any).event?.name ?? undefined,
         },
-        date: this.coerceDateOnly(startAt),
-        timeslot: startAt
+        date: null,
+        timeslot: r.timeslot_id
           ? {
               id: r.timeslot_id ?? null,
-              start_time: new Date(startAt).toISOString(),
-              end_time: endAt ? new Date(endAt).toISOString() : null,
+              start_time: null,
+              end_time: null,
             }
           : null,
         public_event_slot_id: r.public_event_slot_id ?? null,
@@ -221,8 +148,9 @@ export class ReservationsService {
       ? await this.timesRepo.findOne({ where: { id: r.timeslot_id } })
       : null;
 
-    const startAt = timeslot?.start_at ?? event?.start_at ?? null;
-    const endAt = timeslot?.end_at ?? null;
+    // Temporarily omit time (will be restored when data is available locally)
+    const startAt = null as unknown as Date | null;
+    const endAt = null as unknown as Date | null;
 
     return {
       reservation: {
@@ -231,12 +159,12 @@ export class ReservationsService {
           id: r.event_id,
           name: event?.name ?? undefined,
         },
-        date: this.coerceDateOnly(startAt),
-        timeslot: startAt
+        date: null,
+        timeslot: r.timeslot_id
           ? {
               id: r.timeslot_id ?? null,
-              start_time: new Date(startAt).toISOString(),
-              end_time: endAt ? new Date(endAt).toISOString() : null,
+              start_time: null,
+              end_time: null,
             }
           : null,
         public_event_slot_id: r.public_event_slot_id ?? null,
