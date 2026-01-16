@@ -185,10 +185,13 @@ export class ReservationsService {
         date: this.coerceDateOnly(startAt),
         timeslot: startAt
           ? {
+              id: r.timeslot_id ?? null,
               start_time: new Date(startAt).toISOString(),
               end_time: endAt ? new Date(endAt).toISOString() : null,
             }
           : null,
+        public_event_slot_id: r.public_event_slot_id ?? null,
+        public_event_date_id: r.public_event_date_id ?? null,
         household_id: r.household_id,
         created_at: r.created_at.toISOString(),
         updated_at: r.updated_at.toISOString(),
@@ -231,10 +234,13 @@ export class ReservationsService {
         date: this.coerceDateOnly(startAt),
         timeslot: startAt
           ? {
+              id: r.timeslot_id ?? null,
               start_time: new Date(startAt).toISOString(),
               end_time: endAt ? new Date(endAt).toISOString() : null,
             }
           : null,
+        public_event_slot_id: r.public_event_slot_id ?? null,
+        public_event_date_id: r.public_event_date_id ?? null,
         household_id: r.household_id,
         created_at: r.created_at.toISOString(),
         updated_at: r.updated_at.toISOString(),
