@@ -198,7 +198,13 @@ export class PublicScheduleService {
       return hours * 60 + minutes;
     };
 
-    type SimpleSlot = { open_slots?: number; capacity?: number };
+    type SimpleSlot = {
+      event_slot_id?: number;
+      capacity?: number;
+      open_slots?: number;
+      start_time?: string | null;
+      end_time?: string | null;
+    };
     const slotsByHour: Record<number, SimpleSlot[]> = {};
     for (const hr of hours) {
       const slotsRows: Array<{
