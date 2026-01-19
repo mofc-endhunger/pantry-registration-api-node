@@ -8,12 +8,14 @@ import { EventTimeslot } from '../../entities/event-timeslot.entity';
 import { UsersModule } from '../users/users.module';
 import { HouseholdsModule } from '../households/households.module';
 import { Authentication } from '../../entities/authentication.entity';
+import { PublicScheduleModule } from '../public-schedule/public-schedule.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Registration, Event, EventTimeslot, Authentication]),
     forwardRef(() => UsersModule),
     forwardRef(() => HouseholdsModule),
+    PublicScheduleModule,
   ],
   controllers: [ReservationsController],
   providers: [ReservationsService],

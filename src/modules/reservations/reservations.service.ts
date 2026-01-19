@@ -8,6 +8,7 @@ import { EventTimeslot } from '../../entities/event-timeslot.entity';
 import { UsersService } from '../users/users.service';
 import { HouseholdsService } from '../households/households.service';
 import { Authentication } from '../../entities/authentication.entity';
+import { PublicScheduleService } from '../public-schedule/public-schedule.service';
 
 type AuthUser = {
   authType?: string;
@@ -37,6 +38,7 @@ export class ReservationsService {
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
     private readonly usersService: UsersService,
     private readonly householdsService: HouseholdsService,
+    private readonly publicSchedule: PublicScheduleService,
   ) {}
 
   private async resolveDbUserId(user: AuthUser, guestToken?: string): Promise<number> {
@@ -79,37 +81,79 @@ export class ReservationsService {
       .where('r.household_id = :household_id', { household_id })
       .andWhere("r.status IN ('confirmed','checked_in')"); // local-only visible states
 
-    // Temporarily ignore date/time filters until local data is populated
+    // Fetch without time-based filters; we'll compute using public dates where available
     qb.orderBy('r.created_at', 'DESC').limit(limit).offset(offset);
 
     const rows = await qb.getRawAndEntities();
 
-    // Total counts (filtered) and type breakdowns (across all for this household)
-    const totalQb = this.regsRepo
-      .createQueryBuilder('r')
-      .leftJoin(Event, 'e', 'e.id = r.event_id')
-      .leftJoin(EventTimeslot, 't', 't.id = r.timeslot_id')
-      .where('r.household_id = :household_id', { household_id })
-      .andWhere("r.status IN ('confirmed','checked_in')");
+    // Compute date ISO using public IDs first, else fall back to local event/timeslot dates
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const computeDateIso = async (r: Registration): Promise<string | null> => {
+      if ((r as any).public_event_date_id) {
+        return this.publicSchedule.getDateIsoForDateId((r as any).public_event_date_id as number);
+      }
+      if ((r as any).public_event_slot_id) {
+        return this.publicSchedule.getDateIsoForSlotId((r as any).public_event_slot_id as number);
+      }
+      const timeslotId = (r as any).timeslot_id as number | null;
+      if (timeslotId) {
+        const t = await this.timesRepo.findOne({ where: { id: timeslotId } });
+        if (t?.start_at) return new Date(t.start_at).toISOString().slice(0, 10);
+      }
+      const ev = await this.eventsRepo.findOne({ where: { id: r.event_id } });
+      if (ev?.start_at) return new Date(ev.start_at).toISOString().slice(0, 10);
+      return null;
+    };
 
-    const total = await totalQb.getCount();
+    // Resolve dates for all rows (batch sequentially; typical counts are small)
+    const withDates = await Promise.all(
+      rows.entities.map(async (r) => ({ r, dateIso: await computeDateIso(r) })),
+    );
 
-    // Stub counts while time-based classification is disabled
-    const upcomingCount = 0;
-    const pastCount = 0;
+    // Apply client filters using computed dateIso
+    const inRange = (d: string | null): boolean => {
+      if (!d) return params.fromDate == null && params.toDate == null;
+      if (params.fromDate && d < params.fromDate) return false;
+      if (params.toDate && d > params.toDate) return false;
+      return true;
+    };
+    const byType = (d: string | null): boolean => {
+      const type = params.type ?? 'all';
+      if (type === 'all') return true;
+      if (!d) return false;
+      return type === 'upcoming' ? d >= todayIso : d < todayIso;
+    };
+
+    const filtered = withDates.filter(({ dateIso }) => inRange(dateIso) && byType(dateIso));
+
+    // Counts for upcoming/past across same date window
+    const baseWindow = withDates.filter(({ dateIso }) => inRange(dateIso));
+    const upcomingCount = baseWindow.filter(
+      ({ dateIso }) => dateIso != null && dateIso >= todayIso,
+    ).length;
+    const pastCount = baseWindow.filter(
+      ({ dateIso }) => dateIso != null && dateIso < todayIso,
+    ).length;
+    const total = filtered.length;
 
     // Map entities to read model
-    const reservations = rows.entities.map((r) => {
-      // Temporarily omit time (will be restored when data is available locally)
-      const startAt = null as unknown as Date | null;
-      const endAt = null as unknown as Date | null;
+    // Sort by date desc then created_at desc
+    filtered.sort((a, b) => {
+      if (a.dateIso && b.dateIso) return b.dateIso.localeCompare(a.dateIso);
+      if (a.dateIso) return -1;
+      if (b.dateIso) return 1;
+      return new Date(b.r.created_at).getTime() - new Date(a.r.created_at).getTime();
+    });
+    const page = filtered.slice(0, limit); // basic paging since qb already limited
+
+    const reservations = page.map(({ r, dateIso }) => {
       return {
         id: r.id,
         event: {
           id: r.event_id,
           name: (r as any).event?.name ?? undefined,
         },
-        date: null,
+        date: dateIso,
         timeslot: r.timeslot_id
           ? {
               id: r.timeslot_id ?? null,
@@ -142,15 +186,14 @@ export class ReservationsService {
     if (!r) throw new NotFoundException('Reservation not found');
     if (String(r.household_id) !== String(household_id)) throw new ForbiddenException();
 
-    // Load event and timeslot for display
+    // Load event for display
     const event = await this.eventsRepo.findOne({ where: { id: r.event_id } });
-    const timeslot = r.timeslot_id
-      ? await this.timesRepo.findOne({ where: { id: r.timeslot_id } })
-      : null;
 
-    // Temporarily omit time (will be restored when data is available locally)
-    const startAt = null as unknown as Date | null;
-    const endAt = null as unknown as Date | null;
+    const dateIso = (r as any).public_event_date_id
+      ? await this.publicSchedule.getDateIsoForDateId((r as any).public_event_date_id as number)
+      : (r as any).public_event_slot_id
+        ? await this.publicSchedule.getDateIsoForSlotId((r as any).public_event_slot_id as number)
+        : null;
 
     return {
       reservation: {
@@ -159,7 +202,7 @@ export class ReservationsService {
           id: r.event_id,
           name: event?.name ?? undefined,
         },
-        date: null,
+        date: dateIso,
         timeslot: r.timeslot_id
           ? {
               id: r.timeslot_id ?? null,

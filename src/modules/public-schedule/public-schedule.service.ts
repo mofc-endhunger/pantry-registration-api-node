@@ -1,9 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-base-to-string */
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PublicEventSlot } from '../../entities-public/event-slot.public.entity';
 import { PublicEventDate } from '../../entities-public/event-date.public.entity';
-import { PublicEventHour } from '../../entities-public/event-hour.public.entity';
 
 @Injectable()
 export class PublicScheduleService {
@@ -132,6 +132,37 @@ export class PublicScheduleService {
     return recent ? (recent.event_date_id as number) : null;
   }
 
+  // Utility: Resolve ISO date (YYYY-MM-DD) for a given public event_date_id
+  async getDateIsoForDateId(eventDateId: number): Promise<string | null> {
+    const row = (
+      await this.datesRepo.query(
+        'SELECT event_date_key FROM event_dates WHERE event_date_id = ? LIMIT 1',
+        [eventDateId],
+      )
+    )?.[0];
+    const key: number | undefined = row?.event_date_key as number | undefined;
+    if (!key) return null;
+    const keyStr = String(key).padStart(8, '0');
+    return `${keyStr.slice(0, 4)}-${keyStr.slice(4, 6)}-${keyStr.slice(6, 8)}`;
+  }
+
+  // Utility: Resolve ISO date for a public slot id by following slot -> hour -> date
+  async getDateIsoForSlotId(slotId: number): Promise<string | null> {
+    const hourRows: Array<{ event_hour_id: number }> = await this.slotsRepo.query(
+      'SELECT event_hour_id FROM event_slots WHERE event_slot_id = ? LIMIT 1',
+      [slotId],
+    );
+    const hourRow = hourRows?.[0];
+    if (!hourRow?.event_hour_id) return null;
+    const dateRows: Array<{ event_date_id: number }> = await this.slotsRepo.query(
+      'SELECT event_date_id FROM event_hours WHERE event_hour_id = ? LIMIT 1',
+      [hourRow.event_hour_id],
+    );
+    const dateRow = dateRows?.[0];
+    if (!dateRow?.event_date_id) return null;
+    return this.getDateIsoForDateId(dateRow.event_date_id);
+  }
+
   // Build legacy-style structure for a single event_date with nested hours and slots
   async buildEventDateStructure(eventDateId: number) {
     const [dateRow] = await this.datesRepo.query(
@@ -140,10 +171,11 @@ export class PublicScheduleService {
     );
     if (!dateRow) return { event_date: null };
 
-    const hours = await this.datesRepo.query(
-      'SELECT event_hour_id, event_date_id, capacity FROM event_hours WHERE event_date_id = ? ORDER BY event_hour_id ASC',
-      [eventDateId],
-    );
+    const hours: Array<{ event_hour_id: number; event_date_id: number; capacity?: number | null }> =
+      await this.datesRepo.query(
+        'SELECT event_hour_id, event_date_id, capacity FROM event_hours WHERE event_date_id = ? ORDER BY event_hour_id ASC',
+        [eventDateId],
+      );
 
     const parseTimeToMinutes = (raw: unknown): number => {
       if (raw == null) return Number.POSITIVE_INFINITY;
@@ -166,31 +198,51 @@ export class PublicScheduleService {
       return hours * 60 + minutes;
     };
 
-    const slotsByHour: Record<number, any[]> = {};
+    type SimpleSlot = { open_slots?: number; capacity?: number };
+    const slotsByHour: Record<number, SimpleSlot[]> = {};
     for (const hr of hours) {
-      const slots = await this.slotsRepo.query(
+      const slotsRows: Array<{
+        event_slot_id: number;
+        event_hour_id: number;
+        capacity?: number | null;
+        reserved?: number | null;
+      }> = await this.slotsRepo.query(
         'SELECT event_slot_id, event_hour_id, capacity, reserved FROM event_slots WHERE event_hour_id = ? ORDER BY event_slot_id ASC',
         [hr.event_hour_id],
       );
-      slotsByHour[hr.event_hour_id] = slots.map((s: any) => ({
-        event_slot_id: s.event_slot_id,
-        capacity: s.capacity,
-        start_time: null,
-        end_time: null,
-        open_slots: Math.max(0, (s.capacity ?? 0) - (s.reserved ?? 0)),
-      }));
+      slotsByHour[hr.event_hour_id] = slotsRows.map(
+        (s): SimpleSlot => ({
+          event_slot_id: s.event_slot_id,
+          capacity: s.capacity,
+          start_time: null,
+          end_time: null,
+          open_slots: Math.max(0, (s.capacity ?? 0) - (s.reserved ?? 0)),
+        }),
+      );
     }
 
-    const event_hours = hours.map((h: any) => {
-      const slotList = slotsByHour[h.event_hour_id] ?? [];
-      const hourOpen = slotList.reduce((sum: number, s: any) => sum + (s.open_slots ?? 0), 0);
+    type EventHourAgg = {
+      event_hour_id: number;
+      capacity: number;
+      start_time: string | null;
+      end_time: string | null;
+      open_slots: number;
+      event_slots: SimpleSlot[];
+    };
+
+    const event_hours: EventHourAgg[] = hours.map((h): EventHourAgg => {
+      const slotList: SimpleSlot[] = slotsByHour[h.event_hour_id] ?? [];
+      const hourOpen = slotList.reduce(
+        (sum: number, s: SimpleSlot) => sum + (s.open_slots ?? 0),
+        0,
+      );
       // No time columns available; keep null start/end for hour as well
-      let hourStart: string | null = null;
-      let hourEnd: string | null = null;
+      const hourStart: string | null = null;
+      const hourEnd: string | null = null;
       return {
         event_hour_id: h.event_hour_id,
         capacity:
-          h.capacity ?? slotList.reduce((sum: number, s: any) => sum + (s.capacity ?? 0), 0),
+          h.capacity ?? slotList.reduce((sum: number, s: SimpleSlot) => sum + (s.capacity ?? 0), 0),
         start_time: hourStart,
         end_time: hourEnd,
         open_slots: hourOpen,
@@ -198,23 +250,32 @@ export class PublicScheduleService {
       };
     });
 
-    const totalOpen = event_hours.reduce((sum: number, hr: any) => sum + (hr.open_slots ?? 0), 0);
+    const totalOpen = event_hours.reduce(
+      (sum: number, hr: EventHourAgg) => sum + (hr.open_slots ?? 0),
+      0,
+    );
 
     // Derive date-level start/end and date string from key
-    const allStartCandidates = event_hours.map((h: any) => h.start_time).filter(Boolean);
-    const allEndCandidates = event_hours.map((h: any) => h.end_time).filter(Boolean);
-    const dateStart = allStartCandidates.length
-      ? allStartCandidates.reduce(
-          (min: string, v: string) => (parseTimeToMinutes(v) < parseTimeToMinutes(min) ? v : min),
-          allStartCandidates[0] as string,
-        )
-      : null;
-    const dateEnd = allEndCandidates.length
-      ? allEndCandidates.reduce(
-          (max: string, v: string) => (parseTimeToMinutes(v) > parseTimeToMinutes(max) ? v : max),
-          allEndCandidates[0] as string,
-        )
-      : null;
+    const allStartCandidates: string[] = event_hours
+      .map((h: any) => h.start_time as string | null)
+      .filter((v: string | null): v is string => typeof v === 'string' && v.length > 0);
+    const allEndCandidates: string[] = event_hours
+      .map((h: any) => h.end_time as string | null)
+      .filter((v: string | null): v is string => typeof v === 'string' && v.length > 0);
+
+    const dateStart: string | null =
+      allStartCandidates.length > 0
+        ? allStartCandidates.reduce((min: string, v: string) => {
+            return parseTimeToMinutes(v) < parseTimeToMinutes(min) ? v : min;
+          }, allStartCandidates[0])
+        : null;
+
+    const dateEnd: string | null =
+      allEndCandidates.length > 0
+        ? allEndCandidates.reduce((max: string, v: string) => {
+            return parseTimeToMinutes(v) > parseTimeToMinutes(max) ? v : max;
+          }, allEndCandidates[0])
+        : null;
 
     const key: number | undefined = dateRow.event_date_key as number | undefined;
     const keyStr = key ? String(key).padStart(8, '0') : undefined;
