@@ -213,7 +213,7 @@ export class PublicScheduleService {
       slotsByHour[hr.event_hour_id] = slotsRows.map(
         (s): SimpleSlot => ({
           event_slot_id: s.event_slot_id,
-          capacity: s.capacity,
+          capacity: s.capacity ?? undefined,
           start_time: null,
           end_time: null,
           open_slots: Math.max(0, (s.capacity ?? 0) - (s.reserved ?? 0)),
