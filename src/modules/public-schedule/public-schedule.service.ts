@@ -132,6 +132,56 @@ export class PublicScheduleService {
     return recent ? (recent.event_date_id as number) : null;
   }
 
+  // Resolve start/end times from event_dates via dim_times
+  async getTimesForDateId(
+    eventDateId: number,
+  ): Promise<{ start_time: string | null; end_time: string | null }> {
+    const rows: Array<{ start_time_key: number; end_time_key: number }> =
+      await this.datesRepo.query(
+        'SELECT start_time_key, end_time_key FROM event_dates WHERE event_date_id = ? LIMIT 1',
+        [eventDateId],
+      );
+    const row = rows?.[0];
+    if (!row) return { start_time: null, end_time: null };
+    const [startRow] = await this.datesRepo.query(
+      'SELECT mysql_time FROM dim_times WHERE time_key = ? LIMIT 1',
+      [row.start_time_key],
+    );
+    const [endRow] = await this.datesRepo.query(
+      'SELECT mysql_time FROM dim_times WHERE time_key = ? LIMIT 1',
+      [row.end_time_key],
+    );
+    return {
+      start_time: startRow?.mysql_time ?? null,
+      end_time: endRow?.mysql_time ?? null,
+    };
+  }
+
+  // Resolve start/end times from event_slots via dim_times
+  async getTimesForSlotId(
+    slotId: number,
+  ): Promise<{ start_time: string | null; end_time: string | null }> {
+    const rows: Array<{ start_time_key: number; end_time_key: number }> =
+      await this.slotsRepo.query(
+        'SELECT start_time_key, end_time_key FROM event_slots WHERE event_slot_id = ? LIMIT 1',
+        [slotId],
+      );
+    const row = rows?.[0];
+    if (!row) return { start_time: null, end_time: null };
+    const [startRow] = await this.datesRepo.query(
+      'SELECT mysql_time FROM dim_times WHERE time_key = ? LIMIT 1',
+      [row.start_time_key],
+    );
+    const [endRow] = await this.datesRepo.query(
+      'SELECT mysql_time FROM dim_times WHERE time_key = ? LIMIT 1',
+      [row.end_time_key],
+    );
+    return {
+      start_time: startRow?.mysql_time ?? null,
+      end_time: endRow?.mysql_time ?? null,
+    };
+  }
+
   // Utility: Resolve ISO date (YYYY-MM-DD) for a given public event_date_id
   async getDateIsoForDateId(eventDateId: number): Promise<string | null> {
     const row = (

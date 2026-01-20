@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Registration } from '../../entities/registration.entity';
 import { Event } from '../../entities/event.entity';
 import { EventTimeslot } from '../../entities/event-timeslot.entity';
@@ -146,28 +146,63 @@ export class ReservationsService {
     });
     const page = filtered.slice(0, limit); // basic paging since qb already limited
 
-    const reservations = page.map(({ r, dateIso }) => {
-      return {
-        id: r.id,
-        event: {
-          id: r.event_id,
-          name: (r as any).event?.name ?? undefined,
-        },
-        date: dateIso,
-        timeslot: r.timeslot_id
-          ? {
-              id: r.timeslot_id ?? null,
-              start_time: null,
-              end_time: null,
-            }
-          : null,
-        public_event_slot_id: r.public_event_slot_id ?? null,
-        public_event_date_id: r.public_event_date_id ?? null,
-        household_id: r.household_id,
-        created_at: r.created_at.toISOString(),
-        updated_at: r.updated_at.toISOString(),
-      };
-    });
+    // Resolve event names (avoid relying on join mapping)
+    const uniqueEventIds = Array.from(new Set(page.map(({ r }) => r.event_id)));
+    const events = uniqueEventIds.length
+      ? await this.eventsRepo.findBy({ id: In(uniqueEventIds) } as any)
+      : [];
+    const eventIdToName = new Map<number, string>();
+    for (const ev of events) {
+      eventIdToName.set(ev.id, ev.name);
+    }
+
+    // Resolve times using public IDs first, else local
+    const reservations = await Promise.all(
+      page.map(async ({ r, dateIso }) => {
+        let startTime: string | null = null;
+        let endTime: string | null = null;
+        if ((r as any).public_event_slot_id) {
+          const t = await this.publicSchedule.getTimesForSlotId(
+            (r as any).public_event_slot_id as number,
+          );
+          startTime = t.start_time;
+          endTime = t.end_time;
+        } else if ((r as any).public_event_date_id) {
+          const t = await this.publicSchedule.getTimesForDateId(
+            (r as any).public_event_date_id as number,
+          );
+          startTime = t.start_time;
+          endTime = t.end_time;
+        } else if ((r as any).timeslot_id) {
+          const t = await this.timesRepo.findOne({ where: { id: (r as any).timeslot_id } });
+          startTime = t?.start_at ? new Date(t.start_at).toISOString().slice(11, 19) : null;
+          endTime = t?.end_at ? new Date(t.end_at).toISOString().slice(11, 19) : null;
+        }
+        return {
+          id: r.id,
+          event: {
+            id: r.event_id,
+            name: eventIdToName.get(r.event_id) ?? undefined,
+          },
+          date: dateIso,
+          timeslot:
+            (r as any).timeslot_id ||
+            (r as any).public_event_slot_id ||
+            (r as any).public_event_date_id
+              ? {
+                  id: (r as any).timeslot_id ?? null,
+                  start_time: startTime,
+                  end_time: endTime,
+                }
+              : null,
+          public_event_slot_id: (r as any).public_event_slot_id ?? null,
+          public_event_date_id: (r as any).public_event_date_id ?? null,
+          household_id: r.household_id,
+          created_at: r.created_at.toISOString(),
+          updated_at: r.updated_at.toISOString(),
+        };
+      }),
+    );
 
     return {
       reservations,
@@ -195,6 +230,27 @@ export class ReservationsService {
         ? await this.publicSchedule.getDateIsoForSlotId((r as any).public_event_slot_id as number)
         : null;
 
+    // Resolve times similar to list
+    let startTime: string | null = null;
+    let endTime: string | null = null;
+    if ((r as any).public_event_slot_id) {
+      const t = await this.publicSchedule.getTimesForSlotId(
+        (r as any).public_event_slot_id as number,
+      );
+      startTime = t.start_time;
+      endTime = t.end_time;
+    } else if ((r as any).public_event_date_id) {
+      const t = await this.publicSchedule.getTimesForDateId(
+        (r as any).public_event_date_id as number,
+      );
+      startTime = t.start_time;
+      endTime = t.end_time;
+    } else if ((r as any).timeslot_id) {
+      const t = await this.timesRepo.findOne({ where: { id: (r as any).timeslot_id } });
+      startTime = t?.start_at ? new Date(t.start_at).toISOString().slice(11, 19) : null;
+      endTime = t?.end_at ? new Date(t.end_at).toISOString().slice(11, 19) : null;
+    }
+
     return {
       reservation: {
         id: r.id,
@@ -203,13 +259,16 @@ export class ReservationsService {
           name: event?.name ?? undefined,
         },
         date: dateIso,
-        timeslot: r.timeslot_id
-          ? {
-              id: r.timeslot_id ?? null,
-              start_time: null,
-              end_time: null,
-            }
-          : null,
+        timeslot:
+          (r as any).timeslot_id ||
+          (r as any).public_event_slot_id ||
+          (r as any).public_event_date_id
+            ? {
+                id: r.timeslot_id ?? null,
+                start_time: startTime,
+                end_time: endTime,
+              }
+            : null,
         public_event_slot_id: r.public_event_slot_id ?? null,
         public_event_date_id: r.public_event_date_id ?? null,
         household_id: r.household_id,
