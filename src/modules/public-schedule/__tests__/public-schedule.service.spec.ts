@@ -4,6 +4,9 @@ import { Repository, ObjectLiteral } from 'typeorm';
 import { PublicScheduleService } from '../public-schedule.service';
 import { PublicEventSlot } from '../../../entities-public/event-slot.public.entity';
 import { PublicEventDate } from '../../../entities-public/event-date.public.entity';
+import { PublicEvent } from '../../../entities-public/event.public.entity';
+import { PublicEventHour } from '../../../entities-public/event-hour.public.entity';
+import { PublicDimTime } from '../../../entities-public/dim-time.public.entity';
 
 function createRepoMock<T extends ObjectLiteral>(): jest.Mocked<Repository<T>> {
   return {
@@ -23,6 +26,9 @@ describe('PublicScheduleService', () => {
   let service: PublicScheduleService;
   let slotsRepo: jest.Mocked<Repository<PublicEventSlot>>;
   let datesRepo: jest.Mocked<Repository<PublicEventDate>>;
+  let hoursRepo: jest.Mocked<Repository<PublicEventHour>>;
+  let dimTimesRepo: jest.Mocked<Repository<PublicDimTime>>;
+  let eventsRepo: jest.Mocked<Repository<PublicEvent>>;
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -36,19 +42,36 @@ describe('PublicScheduleService', () => {
           provide: getRepositoryToken(PublicEventDate, 'public'),
           useValue: createRepoMock<PublicEventDate>(),
         },
+        {
+          provide: getRepositoryToken(PublicEventHour, 'public'),
+          useValue: createRepoMock<PublicEventHour>(),
+        },
+        {
+          provide: getRepositoryToken(PublicDimTime, 'public'),
+          useValue: createRepoMock<PublicDimTime>(),
+        },
+        {
+          provide: getRepositoryToken(PublicEvent, 'public'),
+          useValue: createRepoMock<PublicEvent>(),
+        },
       ],
     }).compile();
 
     service = moduleRef.get(PublicScheduleService);
     slotsRepo = moduleRef.get(getRepositoryToken(PublicEventSlot, 'public'));
     datesRepo = moduleRef.get(getRepositoryToken(PublicEventDate, 'public'));
+    hoursRepo = moduleRef.get(getRepositoryToken(PublicEventHour, 'public'));
+    dimTimesRepo = moduleRef.get(getRepositoryToken(PublicDimTime, 'public'));
+    eventsRepo = moduleRef.get(getRepositoryToken(PublicEvent, 'public'));
   });
 
   it('incrementSlotAndDate increments both when available', async () => {
-    slotsRepo.findOne.mockResolvedValue({ event_slot_id: 10, reserved: 1 } as any);
-    slotsRepo.query
-      .mockResolvedValueOnce([{ event_hour_id: 5 }] as any) // event_slots -> hour
-      .mockResolvedValueOnce([{ event_date_id: 7 }] as any); // event_hours -> date
+    slotsRepo.findOne.mockResolvedValue({
+      event_slot_id: 10,
+      event_hour_id: 5,
+      reserved: 1,
+    } as any);
+    hoursRepo.findOne.mockResolvedValue({ event_hour_id: 5, event_date_id: 7 } as any);
     datesRepo.findOne.mockResolvedValue({ event_date_id: 7, reserved: 2 } as any);
 
     await service.incrementSlotAndDate(10);
@@ -58,10 +81,12 @@ describe('PublicScheduleService', () => {
   });
 
   it('decrementSlotAndDate decrements and does not go below zero', async () => {
-    slotsRepo.findOne.mockResolvedValue({ event_slot_id: 11, reserved: 0 } as any);
-    slotsRepo.query
-      .mockResolvedValueOnce([{ event_hour_id: 6 }] as any)
-      .mockResolvedValueOnce([{ event_date_id: 8 }] as any);
+    slotsRepo.findOne.mockResolvedValue({
+      event_slot_id: 11,
+      event_hour_id: 6,
+      reserved: 0,
+    } as any);
+    hoursRepo.findOne.mockResolvedValue({ event_hour_id: 6, event_date_id: 8 } as any);
     datesRepo.findOne.mockResolvedValue({ event_date_id: 8, reserved: 0 } as any);
 
     await service.decrementSlotAndDate(11);
@@ -97,48 +122,50 @@ describe('PublicScheduleService', () => {
     expect(id).toBe(77);
   });
 
-	it('getEventDateIdDefault returns upcoming when present', async () => {
-		// upcoming exists
-		datesRepo.query
-			.mockResolvedValueOnce([{ event_date_id: 123 }] as any) // upcoming
-			.mockResolvedValueOnce([] as any); // recent not used
-		const id = await service.getEventDateIdDefault(1);
-		expect(id).toBe(123);
-	});
+  it('getEventDateIdDefault returns upcoming when present', async () => {
+    // upcoming exists
+    datesRepo.query
+      .mockResolvedValueOnce([{ event_date_id: 123 }] as any) // upcoming
+      .mockResolvedValueOnce([] as any); // recent not used
+    const id = await service.getEventDateIdDefault(1);
+    expect(id).toBe(123);
+  });
 
-	it('incrementSlotAndDate returns early when slot not found', async () => {
-		slotsRepo.findOne.mockResolvedValue(null as any);
-		await service.incrementSlotAndDate(999);
-		expect(slotsRepo.update).not.toHaveBeenCalled();
-	});
+  it('incrementSlotAndDate returns early when slot not found', async () => {
+    slotsRepo.findOne.mockResolvedValue(null as any);
+    await service.incrementSlotAndDate(999);
+    expect(slotsRepo.update).not.toHaveBeenCalled();
+  });
 
-	it('decrementSlotAndDate returns early when slot not found', async () => {
-		slotsRepo.findOne.mockResolvedValue(null as any);
-		await service.decrementSlotAndDate(999);
-		expect(slotsRepo.update).not.toHaveBeenCalled();
-	});
+  it('decrementSlotAndDate returns early when slot not found', async () => {
+    slotsRepo.findOne.mockResolvedValue(null as any);
+    await service.decrementSlotAndDate(999);
+    expect(slotsRepo.update).not.toHaveBeenCalled();
+  });
 
-	it('buildEventDateStructure returns {event_date:null} when not found', async () => {
-		datesRepo.query.mockResolvedValueOnce([] as any);
-		const res = await service.buildEventDateStructure(55);
-		expect(res).toEqual({ event_date: null });
-	});
+  it('buildEventDateStructure returns {event_date:null} when not found', async () => {
+    datesRepo.query.mockResolvedValueOnce([] as any);
+    const res = await service.buildEventDateStructure(55);
+    expect(res).toEqual({ event_date: null });
+  });
 
-	it('buildEventDateStructure assembles hours and slots and formats date', async () => {
-		// dateRow with key 20251105
-		datesRepo.query
-			.mockResolvedValueOnce([{ id: 1, event_id: 2, capacity: 100, reserved: 10, event_date_key: 20251105 }] as any)
-			.mockResolvedValueOnce([{ event_hour_id: 50, event_date_id: 1, capacity: null }] as any);
-		// slots for hour 50
-		slotsRepo.query.mockResolvedValueOnce([
-			{ event_slot_id: 500, event_hour_id: 50, capacity: 5, reserved: 2 },
-			{ event_slot_id: 501, event_hour_id: 50, capacity: 10, reserved: 3 },
-		] as any);
-		const res = await service.buildEventDateStructure(1);
-		expect(res.event_date).toBeTruthy();
-		const ed = res.event_date as any;
-		expect(ed.date).toBe('2025-11-05');
-		expect(ed.event_hours[0].event_slots.length).toBe(2);
-		expect(ed.open_slots).toBe(10); // (5-2)+(10-3)=10
-	});
+  it('buildEventDateStructure assembles hours and slots and formats date', async () => {
+    // dateRow with key 20251105
+    datesRepo.query
+      .mockResolvedValueOnce([
+        { id: 1, event_id: 2, capacity: 100, reserved: 10, event_date_key: 20251105 },
+      ] as any)
+      .mockResolvedValueOnce([{ event_hour_id: 50, event_date_id: 1, capacity: null }] as any);
+    // slots for hour 50
+    slotsRepo.query.mockResolvedValueOnce([
+      { event_slot_id: 500, event_hour_id: 50, capacity: 5, reserved: 2 },
+      { event_slot_id: 501, event_hour_id: 50, capacity: 10, reserved: 3 },
+    ] as any);
+    const res = await service.buildEventDateStructure(1);
+    expect(res.event_date).toBeTruthy();
+    const ed = res.event_date as any;
+    expect(ed.date).toBe('2025-11-05');
+    expect(ed.event_hours[0].event_slots.length).toBe(2);
+    expect(ed.open_slots).toBe(10); // (5-2)+(10-3)=10
+  });
 });

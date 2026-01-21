@@ -381,22 +381,22 @@ export class RegistrationsService {
     if (dto.event_slot_id) {
       const slot = await this.publicSchedule.getSlot(dto.event_slot_id);
       capacity = slot?.capacity ?? null;
-      if (slot && slot.capacity !== null && slot.reserved >= slot.capacity) {
+      if (slot && slot.capacity !== null && (slot.reserved ?? 0) >= (slot.capacity ?? 0)) {
         // Mark as full → will create waitlisted registration (no counters incremented)
-        confirmedCount = slot.capacity;
+        confirmedCount = slot.capacity ?? 0;
       }
     } else if (dto.timeslot_id) {
       const timeslot = await this.timesRepo.findOne({ where: { id: dto.timeslot_id } });
       capacity = timeslot?.capacity ?? null;
       confirmedCount = await this.regsRepo.count({
-        where: { timeslot_id: dto.timeslot_id, status: 'confirmed' } as any,
+        where: { timeslot_id: dto.event_slot_id, status: 'confirmed' } as any,
       });
     } else if (dto.event_date_id) {
       const date = await this.publicSchedule.getDate(dto.event_date_id);
       capacity = date?.capacity ?? null;
-      if (date && date.capacity !== null && date.reserved >= date.capacity) {
+      if (date && date.capacity !== null && (date.reserved ?? 0) >= (date.capacity ?? 0)) {
         // Mark as full → will create waitlisted registration
-        confirmedCount = date.capacity;
+        confirmedCount = date.capacity ?? 0;
       }
     } else {
       // No public slot/date or local timeslot provided — treat capacity as unbounded
