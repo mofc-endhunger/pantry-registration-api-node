@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Event } from '../../entities/event.entity';
@@ -7,31 +7,36 @@ import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { CreateTimeslotDto } from './dto/create-timeslot.dto';
 import { UpdateTimeslotDto } from './dto/update-timeslot.dto';
+import { PublicScheduleService } from '../public-schedule/public-schedule.service';
 
 @Injectable()
 export class EventsService {
   constructor(
     @InjectRepository(Event) private readonly eventsRepo: Repository<Event>,
     @InjectRepository(EventTimeslot) private readonly timeslotsRepo: Repository<EventTimeslot>,
+    @Optional() private readonly publicSchedule?: PublicScheduleService,
   ) {}
 
   async list(params: { active?: boolean; from?: string; to?: string }) {
+    if (this.publicSchedule?.listEvents) {
+      return this.publicSchedule.listEvents(params);
+    }
     const qb = this.eventsRepo.createQueryBuilder('e');
-    if (params.active !== undefined) {
+    if (params.active !== undefined)
       qb.andWhere('e.is_active = :active', { active: params.active });
-    }
-    if (params.from) {
+    if (params.from)
       qb.andWhere('(e.start_at IS NULL OR e.start_at >= :from)', { from: params.from });
-    }
-    if (params.to) {
-      qb.andWhere('(e.end_at IS NULL OR e.end_at <= :to)', { to: params.to });
-    }
-    // MySQL doesn't support 'NULLS LAST'; emulate by ordering nulls last, then ascending by value
+    if (params.to) qb.andWhere('(e.end_at IS NULL OR e.end_at <= :to)', { to: params.to });
     qb.orderBy('e.start_at IS NULL', 'ASC').addOrderBy('e.start_at', 'ASC');
     return qb.getMany();
   }
 
   async get(id: number) {
+    if (this.publicSchedule?.getEvent) {
+      const pub = await this.publicSchedule.getEvent(id);
+      if (!pub) throw new NotFoundException('Event not found');
+      return { id: pub.id, name: pub.name };
+    }
     const event = await this.eventsRepo.findOne({ where: { id } });
     if (!event) throw new NotFoundException('Event not found');
     return event;

@@ -3,7 +3,6 @@ import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Registration } from '../../entities/registration.entity';
-import { Event } from '../../entities/event.entity';
 import { EventTimeslot } from '../../entities/event-timeslot.entity';
 import { UsersService } from '../users/users.service';
 import { HouseholdsService } from '../households/households.service';
@@ -33,7 +32,6 @@ type ListParams = {
 export class ReservationsService {
   constructor(
     @InjectRepository(Registration) private readonly regsRepo: Repository<Registration>,
-    @InjectRepository(Event) private readonly eventsRepo: Repository<Event>,
     @InjectRepository(EventTimeslot) private readonly timesRepo: Repository<EventTimeslot>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
     private readonly usersService: UsersService,
@@ -73,11 +71,9 @@ export class ReservationsService {
     const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
     if (!household_id) throw new ForbiddenException('Household not resolved');
 
-    // Build a query that left-joins event and timeslot to derive a sortable/filterable start_at
+    // Build base query for user's reservations
     const qb = this.regsRepo
       .createQueryBuilder('r')
-      .leftJoinAndSelect(Event, 'e', 'e.id = r.event_id')
-      .leftJoinAndSelect(EventTimeslot, 't', 't.id = r.timeslot_id')
       .where('r.household_id = :household_id', { household_id })
       .andWhere("r.status IN ('confirmed','checked_in')"); // local-only visible states
 
@@ -86,7 +82,7 @@ export class ReservationsService {
 
     const rows = await qb.getRawAndEntities();
 
-    // Compute date ISO using public IDs first, else fall back to local event/timeslot dates
+    // Compute date ISO using public IDs
     const todayIso = new Date().toISOString().slice(0, 10);
     const computeDateIso = async (r: Registration): Promise<string | null> => {
       if ((r as any).public_event_date_id) {
@@ -95,13 +91,6 @@ export class ReservationsService {
       if ((r as any).public_event_slot_id) {
         return this.publicSchedule.getDateIsoForSlotId((r as any).public_event_slot_id as number);
       }
-      const timeslotId = (r as any).timeslot_id as number | null;
-      if (timeslotId) {
-        const t = await this.timesRepo.findOne({ where: { id: timeslotId } });
-        if (t?.start_at) return new Date(t.start_at).toISOString().slice(0, 10);
-      }
-      const ev = await this.eventsRepo.findOne({ where: { id: r.event_id } });
-      if (ev?.start_at) return new Date(ev.start_at).toISOString().slice(0, 10);
       return null;
     };
 
@@ -146,22 +135,12 @@ export class ReservationsService {
     });
     const page = filtered.slice(0, limit); // basic paging since qb already limited
 
-    // Resolve event names (avoid relying on join mapping)
-    const uniqueEventIds = Array.from(new Set(page.map(({ r }) => r.event_id)));
-    const events = uniqueEventIds.length
-      ? await this.eventsRepo.findBy({ id: In(uniqueEventIds) } as any)
-      : [];
-    const eventIdToName = new Map<number, string>();
-    for (const ev of events) {
-      eventIdToName.set(ev.id, ev.name);
-    }
-
     // Resolve times using public IDs first, else local; also fallback event name from public
     const reservations = await Promise.all(
       page.map(async ({ r, dateIso }) => {
         let startTime: string | null = null;
         let endTime: string | null = null;
-        let eventName: string | undefined = eventIdToName.get(r.event_id) ?? undefined;
+        let eventName: string | undefined = undefined;
         if ((r as any).public_event_slot_id) {
           const t = await this.publicSchedule.getTimesForSlotId(
             (r as any).public_event_slot_id as number,
@@ -186,10 +165,6 @@ export class ReservationsService {
             );
             eventName = n ?? undefined;
           }
-        } else if ((r as any).timeslot_id) {
-          const t = await this.timesRepo.findOne({ where: { id: (r as any).timeslot_id } });
-          startTime = t?.start_at ? new Date(t.start_at).toISOString().slice(11, 19) : null;
-          endTime = t?.end_at ? new Date(t.end_at).toISOString().slice(11, 19) : null;
         }
         return {
           id: r.id,
@@ -234,9 +209,6 @@ export class ReservationsService {
     if (!r) throw new NotFoundException('Reservation not found');
     if (String(r.household_id) !== String(household_id)) throw new ForbiddenException();
 
-    // Load event for display (fallback to public if missing)
-    const event = await this.eventsRepo.findOne({ where: { id: r.event_id } });
-
     const dateIso = (r as any).public_event_date_id
       ? await this.publicSchedule.getDateIsoForDateId((r as any).public_event_date_id as number)
       : (r as any).public_event_slot_id
@@ -258,14 +230,10 @@ export class ReservationsService {
       );
       startTime = t.start_time;
       endTime = t.end_time;
-    } else if ((r as any).timeslot_id) {
-      const t = await this.timesRepo.findOne({ where: { id: (r as any).timeslot_id } });
-      startTime = t?.start_at ? new Date(t.start_at).toISOString().slice(11, 19) : null;
-      endTime = t?.end_at ? new Date(t.end_at).toISOString().slice(11, 19) : null;
     }
 
     // Fallback event name from public schema if local missing
-    let eventName: string | undefined = event?.name ?? undefined;
+    let eventName: string | undefined = undefined;
     if (!eventName) {
       if ((r as any).public_event_slot_id) {
         const n = await this.publicSchedule.getEventNameForSlotId(

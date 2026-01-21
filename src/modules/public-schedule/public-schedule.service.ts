@@ -269,6 +269,65 @@ export class PublicScheduleService {
     return this.getEventNameForEventId(eventId);
   }
 
+  async eventExists(eventId: number): Promise<boolean> {
+    const rows = await this.datesRepo.query('SELECT 1 FROM events WHERE event_id = ? LIMIT 1', [
+      eventId,
+    ]);
+    return Array.isArray(rows) && rows.length > 0;
+  }
+
+  async listEvents(params: { active?: boolean; from?: string; to?: string }) {
+    // Derive optional key filters
+    const where: string[] = [];
+    const args: Array<string | number> = [];
+    if (params.from) {
+      const key = parseInt(params.from.replace(/-/g, ''), 10);
+      if (!Number.isNaN(key)) {
+        where.push('d.event_date_key >= ?');
+        args.push(key);
+      }
+    }
+    if (params.to) {
+      const key = parseInt(params.to.replace(/-/g, ''), 10);
+      if (!Number.isNaN(key)) {
+        where.push('d.event_date_key <= ?');
+        args.push(key);
+      }
+    }
+    if (params.active !== undefined) {
+      const d = new Date();
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      const todayKey = parseInt(`${yyyy}${mm}${dd}`, 10);
+      if (params.active) {
+        where.push('d.event_date_key >= ?');
+        args.push(todayKey);
+      } else {
+        // if inactive requested, simply allow any; upstream can filter further if desired
+      }
+    }
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const rows: Array<{ event_id: number; name: string }> = await this.datesRepo.query(
+      `SELECT DISTINCT e.event_id, e.name
+       FROM events e
+       JOIN event_dates d ON d.event_id = e.event_id
+       ${whereSql}
+       ORDER BY e.event_id ASC`,
+      args,
+    );
+    return rows.map((r) => ({ id: r.event_id, name: r.name }));
+  }
+
+  async getEvent(eventId: number): Promise<{ id: number; name: string } | null> {
+    const rows: Array<{ event_id: number; name: string }> = await this.datesRepo.query(
+      'SELECT event_id, name FROM events WHERE event_id = ? LIMIT 1',
+      [eventId],
+    );
+    const row = rows?.[0];
+    return row ? { id: row.event_id, name: row.name } : null;
+  }
+
   // Build legacy-style structure for a single event_date with nested hours and slots
   async buildEventDateStructure(eventDateId: number) {
     const [dateRow] = await this.datesRepo.query(

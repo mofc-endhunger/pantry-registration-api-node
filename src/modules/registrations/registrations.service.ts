@@ -35,7 +35,7 @@ export class RegistrationsService {
     @InjectRepository(Registration) private readonly regsRepo: Repository<Registration>,
     @InjectRepository(RegistrationAttendee)
     private readonly attendeesRepo: Repository<RegistrationAttendee>,
-    @InjectRepository(Event) private readonly eventsRepo: Repository<Event>,
+    @Optional() @InjectRepository(Event) private readonly eventsRepo?: Repository<Event>,
     @InjectRepository(EventTimeslot) private readonly timesRepo: Repository<EventTimeslot>,
     @InjectRepository(CheckInAudit) private readonly checkinsRepo: Repository<CheckInAudit>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
@@ -110,21 +110,30 @@ export class RegistrationsService {
     },
     guestToken?: string,
   ) {
-    let event = await this.eventsRepo.findOne({ where: { id: dto.event_id, is_active: true } });
-    if (!event) {
-      // Fallback: fetch by id only and validate active flag in JS
-      const byId = await this.eventsRepo.findOne({ where: { id: dto.event_id } });
-      if (!byId || !byId.is_active) {
-        throw new NotFoundException('Event not found');
-      }
-      event = byId;
-    }
+    // Do not validate against private events table; real DB does not have it.
     if (dto.timeslot_id) {
       const timeslot = await this.timesRepo.findOne({
         where: { id: dto.timeslot_id, event_id: dto.event_id, is_active: true },
       });
       if (!timeslot) throw new NotFoundException('Timeslot not found');
     }
+    // Validate event existence using public (or legacy local eventsRepo if available) when no slot/date/timeslot provided
+    if (!dto.timeslot_id && !dto.event_slot_id && !dto.event_date_id) {
+      if (this.eventsRepo) {
+        const byActive = await this.eventsRepo.findOne({
+          where: { id: dto.event_id, is_active: true } as any,
+        });
+        if (!byActive) {
+          const byId = await this.eventsRepo.findOne({ where: { id: dto.event_id } as any });
+          if (!byId) throw new NotFoundException('Event not found');
+        }
+      } else if (typeof (this.publicSchedule as any).eventExists === 'function') {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+        const exists = await (this.publicSchedule as any).eventExists(dto.event_id);
+        if (!exists) throw new NotFoundException('Event not found');
+      }
+    }
+
     // Resolve household (prefer explicit guest token if provided)
     let dbUserId: number | null = null;
     if (guestToken) {
@@ -390,7 +399,8 @@ export class RegistrationsService {
         confirmedCount = date.capacity;
       }
     } else {
-      capacity = event.capacity ?? null;
+      // No public slot/date or local timeslot provided — treat capacity as unbounded
+      capacity = null;
       confirmedCount = await this.regsRepo.count({
         where: { event_id: dto.event_id, status: 'confirmed', timeslot_id: null } as any,
       });
