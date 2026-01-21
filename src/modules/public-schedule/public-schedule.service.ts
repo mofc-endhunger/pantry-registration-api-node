@@ -213,6 +213,62 @@ export class PublicScheduleService {
     return this.getDateIsoForDateId(dateRow.event_date_id);
   }
 
+  // Resolve public event_id from a date id
+  async getEventIdForDateId(eventDateId: number): Promise<number | null> {
+    const row = (
+      await this.datesRepo.query(
+        'SELECT event_id FROM event_dates WHERE event_date_id = ? LIMIT 1',
+        [eventDateId],
+      )
+    )?.[0];
+    return row?.event_id ?? null;
+  }
+
+  // Resolve public event_id from a slot id
+  async getEventIdForSlotId(slotId: number): Promise<number | null> {
+    const hourRows: Array<{ event_hour_id: number }> = await this.slotsRepo.query(
+      'SELECT event_hour_id FROM event_slots WHERE event_slot_id = ? LIMIT 1',
+      [slotId],
+    );
+    const hourRow = hourRows?.[0];
+    if (!hourRow?.event_hour_id) return null;
+    const dateRows: Array<{ event_date_id: number; event_id: number }> = await this.slotsRepo.query(
+      'SELECT d.event_date_id, d.event_id FROM event_hours h JOIN event_dates d ON d.event_date_id = h.event_date_id WHERE h.event_hour_id = ? LIMIT 1',
+      [hourRow.event_hour_id],
+    );
+    const dateRow = dateRows?.[0];
+    return dateRow?.event_id ?? null;
+  }
+
+  // Resolve public event name from public events table
+  async getEventNameForEventId(eventId: number): Promise<string | null> {
+    // Try common column names in case of schema variance
+    const rows = await this.datesRepo.query('SELECT name FROM events WHERE event_id = ? LIMIT 1', [
+      eventId,
+    ]);
+    const row = rows?.[0];
+    if (row?.name != null) return String(row.name);
+    // Fallback: sometimes column might be event_name
+    const alt = await this.datesRepo.query(
+      'SELECT event_name FROM events WHERE event_id = ? LIMIT 1',
+      [eventId],
+    );
+    const altRow = alt?.[0];
+    return altRow?.event_name != null ? String(altRow.event_name) : null;
+  }
+
+  async getEventNameForDateId(eventDateId: number): Promise<string | null> {
+    const eventId = await this.getEventIdForDateId(eventDateId);
+    if (!eventId) return null;
+    return this.getEventNameForEventId(eventId);
+  }
+
+  async getEventNameForSlotId(slotId: number): Promise<string | null> {
+    const eventId = await this.getEventIdForSlotId(slotId);
+    if (!eventId) return null;
+    return this.getEventNameForEventId(eventId);
+  }
+
   // Build legacy-style structure for a single event_date with nested hours and slots
   async buildEventDateStructure(eventDateId: number) {
     const [dateRow] = await this.datesRepo.query(

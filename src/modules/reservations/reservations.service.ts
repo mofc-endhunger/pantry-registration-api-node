@@ -156,23 +156,36 @@ export class ReservationsService {
       eventIdToName.set(ev.id, ev.name);
     }
 
-    // Resolve times using public IDs first, else local
+    // Resolve times using public IDs first, else local; also fallback event name from public
     const reservations = await Promise.all(
       page.map(async ({ r, dateIso }) => {
         let startTime: string | null = null;
         let endTime: string | null = null;
+        let eventName: string | undefined = eventIdToName.get(r.event_id) ?? undefined;
         if ((r as any).public_event_slot_id) {
           const t = await this.publicSchedule.getTimesForSlotId(
             (r as any).public_event_slot_id as number,
           );
           startTime = t.start_time;
           endTime = t.end_time;
+          if (!eventName) {
+            const n = await this.publicSchedule.getEventNameForSlotId(
+              (r as any).public_event_slot_id as number,
+            );
+            eventName = n ?? undefined;
+          }
         } else if ((r as any).public_event_date_id) {
           const t = await this.publicSchedule.getTimesForDateId(
             (r as any).public_event_date_id as number,
           );
           startTime = t.start_time;
           endTime = t.end_time;
+          if (!eventName) {
+            const n = await this.publicSchedule.getEventNameForDateId(
+              (r as any).public_event_date_id as number,
+            );
+            eventName = n ?? undefined;
+          }
         } else if ((r as any).timeslot_id) {
           const t = await this.timesRepo.findOne({ where: { id: (r as any).timeslot_id } });
           startTime = t?.start_at ? new Date(t.start_at).toISOString().slice(11, 19) : null;
@@ -182,7 +195,7 @@ export class ReservationsService {
           id: r.id,
           event: {
             id: r.event_id,
-            name: eventIdToName.get(r.event_id) ?? undefined,
+            name: eventName,
           },
           date: dateIso,
           timeslot:
@@ -221,7 +234,7 @@ export class ReservationsService {
     if (!r) throw new NotFoundException('Reservation not found');
     if (String(r.household_id) !== String(household_id)) throw new ForbiddenException();
 
-    // Load event for display
+    // Load event for display (fallback to public if missing)
     const event = await this.eventsRepo.findOne({ where: { id: r.event_id } });
 
     const dateIso = (r as any).public_event_date_id
@@ -251,12 +264,28 @@ export class ReservationsService {
       endTime = t?.end_at ? new Date(t.end_at).toISOString().slice(11, 19) : null;
     }
 
+    // Fallback event name from public schema if local missing
+    let eventName: string | undefined = event?.name ?? undefined;
+    if (!eventName) {
+      if ((r as any).public_event_slot_id) {
+        const n = await this.publicSchedule.getEventNameForSlotId(
+          (r as any).public_event_slot_id as number,
+        );
+        eventName = n ?? undefined;
+      } else if ((r as any).public_event_date_id) {
+        const n = await this.publicSchedule.getEventNameForDateId(
+          (r as any).public_event_date_id as number,
+        );
+        eventName = n ?? undefined;
+      }
+    }
+
     return {
       reservation: {
         id: r.id,
         event: {
           id: r.event_id,
-          name: event?.name ?? undefined,
+          name: eventName,
         },
         date: dateIso,
         timeslot:
