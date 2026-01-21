@@ -5,6 +5,7 @@ export class PublicEvent {
   @PrimaryGeneratedColumn({ type: 'int', unsigned: true, name: 'event_id' })
   event_id!: number;
 
-  @Column({ type: 'varchar', length: 255 })
+  // Some FreshTrak schemas use 'event_name' instead of 'name'
+  @Column({ type: 'varchar', length: 255, name: 'event_name' })
   name!: string;
 }
