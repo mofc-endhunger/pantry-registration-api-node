@@ -35,13 +35,13 @@ export class RegistrationsService {
     @InjectRepository(Registration) private readonly regsRepo: Repository<Registration>,
     @InjectRepository(RegistrationAttendee)
     private readonly attendeesRepo: Repository<RegistrationAttendee>,
-    @Optional() @InjectRepository(Event) private readonly eventsRepo?: Repository<Event>,
     @InjectRepository(EventTimeslot) private readonly timesRepo: Repository<EventTimeslot>,
     @InjectRepository(CheckInAudit) private readonly checkinsRepo: Repository<CheckInAudit>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
     private readonly usersService: UsersService,
     private readonly householdsService: HouseholdsService,
     private readonly publicSchedule: PublicScheduleService,
+    @Optional() @InjectRepository(Event) private readonly eventsRepo?: Repository<Event>,
     @Optional() private readonly pantryTrakClient?: PantryTrakClient,
   ) {}
 
@@ -213,7 +213,7 @@ export class RegistrationsService {
         } catch {
           // ignore gender sync failures
         }
-      } catch (_) {
+      } catch {
         // ignore and fall through to error
       }
     }

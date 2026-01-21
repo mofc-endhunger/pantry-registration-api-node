@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-base-to-string */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-base-to-string, @typescript-eslint/no-unsafe-call */
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -136,21 +136,14 @@ export class PublicScheduleService {
   async getTimesForDateId(
     eventDateId: number,
   ): Promise<{ start_time: string | null; end_time: string | null }> {
-    const rows: Array<{ start_time_key: number; end_time_key: number }> =
-      await this.datesRepo.query(
-        'SELECT start_time_key, end_time_key FROM event_dates WHERE event_date_id = ? LIMIT 1',
-        [eventDateId],
-      );
-    const row = rows?.[0];
+    const row = await this.datesRepo.findOne({ where: { event_date_id: eventDateId } });
     if (!row) return { start_time: null, end_time: null };
-    const [startRow] = await this.datesRepo.query(
-      'SELECT mysql_time FROM dim_times WHERE time_key = ? LIMIT 1',
-      [row.start_time_key],
-    );
-    const [endRow] = await this.datesRepo.query(
-      'SELECT mysql_time FROM dim_times WHERE time_key = ? LIMIT 1',
-      [row.end_time_key],
-    );
+    const startRow = row.start_time_key
+      ? await this.dimTimesRepo.findOne({ where: { time_key: row.start_time_key } })
+      : null;
+    const endRow = row.end_time_key
+      ? await this.dimTimesRepo.findOne({ where: { time_key: row.end_time_key } })
+      : null;
     return {
       start_time: startRow?.mysql_time ?? null,
       end_time: endRow?.mysql_time ?? null,
@@ -161,21 +154,14 @@ export class PublicScheduleService {
   async getTimesForSlotId(
     slotId: number,
   ): Promise<{ start_time: string | null; end_time: string | null }> {
-    const rows: Array<{ start_time_key: number; end_time_key: number }> =
-      await this.slotsRepo.query(
-        'SELECT start_time_key, end_time_key FROM event_slots WHERE event_slot_id = ? LIMIT 1',
-        [slotId],
-      );
-    const row = rows?.[0];
+    const row = await this.slotsRepo.findOne({ where: { event_slot_id: slotId } });
     if (!row) return { start_time: null, end_time: null };
-    const [startRow] = await this.datesRepo.query(
-      'SELECT mysql_time FROM dim_times WHERE time_key = ? LIMIT 1',
-      [row.start_time_key],
-    );
-    const [endRow] = await this.datesRepo.query(
-      'SELECT mysql_time FROM dim_times WHERE time_key = ? LIMIT 1',
-      [row.end_time_key],
-    );
+    const startRow = row.start_time_key
+      ? await this.dimTimesRepo.findOne({ where: { time_key: row.start_time_key } })
+      : null;
+    const endRow = row.end_time_key
+      ? await this.dimTimesRepo.findOne({ where: { time_key: row.end_time_key } })
+      : null;
     return {
       start_time: startRow?.mysql_time ?? null,
       end_time: endRow?.mysql_time ?? null,
@@ -198,19 +184,11 @@ export class PublicScheduleService {
 
   // Utility: Resolve ISO date for a public slot id by following slot -> hour -> date
   async getDateIsoForSlotId(slotId: number): Promise<string | null> {
-    const hourRows: Array<{ event_hour_id: number }> = await this.slotsRepo.query(
-      'SELECT event_hour_id FROM event_slots WHERE event_slot_id = ? LIMIT 1',
-      [slotId],
-    );
-    const hourRow = hourRows?.[0];
-    if (!hourRow?.event_hour_id) return null;
-    const dateRows: Array<{ event_date_id: number }> = await this.slotsRepo.query(
-      'SELECT event_date_id FROM event_hours WHERE event_hour_id = ? LIMIT 1',
-      [hourRow.event_hour_id],
-    );
-    const dateRow = dateRows?.[0];
-    if (!dateRow?.event_date_id) return null;
-    return this.getDateIsoForDateId(dateRow.event_date_id);
+    const slot = await this.slotsRepo.findOne({ where: { event_slot_id: slotId } });
+    if (!slot?.event_hour_id) return null;
+    const hour = await this.hoursRepo.findOne({ where: { event_hour_id: slot.event_hour_id } });
+    if (!hour?.event_date_id) return null;
+    return this.getDateIsoForDateId(hour.event_date_id);
   }
 
   // Resolve public event_id from a date id
@@ -226,35 +204,18 @@ export class PublicScheduleService {
 
   // Resolve public event_id from a slot id
   async getEventIdForSlotId(slotId: number): Promise<number | null> {
-    const hourRows: Array<{ event_hour_id: number }> = await this.slotsRepo.query(
-      'SELECT event_hour_id FROM event_slots WHERE event_slot_id = ? LIMIT 1',
-      [slotId],
-    );
-    const hourRow = hourRows?.[0];
-    if (!hourRow?.event_hour_id) return null;
-    const dateRows: Array<{ event_date_id: number; event_id: number }> = await this.slotsRepo.query(
-      'SELECT d.event_date_id, d.event_id FROM event_hours h JOIN event_dates d ON d.event_date_id = h.event_date_id WHERE h.event_hour_id = ? LIMIT 1',
-      [hourRow.event_hour_id],
-    );
-    const dateRow = dateRows?.[0];
-    return dateRow?.event_id ?? null;
+    const slot = await this.slotsRepo.findOne({ where: { event_slot_id: slotId } });
+    if (!slot?.event_hour_id) return null;
+    const hour = await this.hoursRepo.findOne({ where: { event_hour_id: slot.event_hour_id } });
+    if (!hour?.event_date_id) return null;
+    const date = await this.datesRepo.findOne({ where: { event_date_id: hour.event_date_id } });
+    return date?.event_id ?? null;
   }
 
   // Resolve public event name from public events table
   async getEventNameForEventId(eventId: number): Promise<string | null> {
-    // Try common column names in case of schema variance
-    const rows = await this.datesRepo.query('SELECT name FROM events WHERE event_id = ? LIMIT 1', [
-      eventId,
-    ]);
-    const row = rows?.[0];
-    if (row?.name != null) return String(row.name);
-    // Fallback: sometimes column might be event_name
-    const alt = await this.datesRepo.query(
-      'SELECT event_name FROM events WHERE event_id = ? LIMIT 1',
-      [eventId],
-    );
-    const altRow = alt?.[0];
-    return altRow?.event_name != null ? String(altRow.event_name) : null;
+    const ev = await this.eventsRepo.findOne({ where: { event_id: eventId } });
+    return ev?.name ?? null;
   }
 
   async getEventNameForDateId(eventDateId: number): Promise<string | null> {
@@ -270,10 +231,8 @@ export class PublicScheduleService {
   }
 
   async eventExists(eventId: number): Promise<boolean> {
-    const rows = await this.datesRepo.query('SELECT 1 FROM events WHERE event_id = ? LIMIT 1', [
-      eventId,
-    ]);
-    return Array.isArray(rows) && rows.length > 0;
+    const ev = await this.eventsRepo.findOne({ where: { event_id: eventId } });
+    return !!ev;
   }
 
   async listEvents(params: { active?: boolean; from?: string; to?: string }) {
@@ -320,12 +279,8 @@ export class PublicScheduleService {
   }
 
   async getEvent(eventId: number): Promise<{ id: number; name: string } | null> {
-    const rows: Array<{ event_id: number; name: string }> = await this.datesRepo.query(
-      'SELECT event_id, name FROM events WHERE event_id = ? LIMIT 1',
-      [eventId],
-    );
-    const row = rows?.[0];
-    return row ? { id: row.event_id, name: row.name } : null;
+    const ev = await this.eventsRepo.findOne({ where: { event_id: eventId } });
+    return ev ? { id: ev.event_id, name: ev.name } : null;
   }
 
   // Build legacy-style structure for a single event_date with nested hours and slots

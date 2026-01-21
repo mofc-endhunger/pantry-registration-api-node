@@ -55,7 +55,9 @@ export class EventsService {
   }
 
   async update(id: number, dto: UpdateEventDto) {
-    const event = await this.get(id);
+    // Use private repository for write/update operations
+    const event = await this.eventsRepo.findOne({ where: { id } });
+    if (!event) throw new NotFoundException('Event not found');
     if (dto.name !== undefined) event.name = dto.name;
     if (dto.description !== undefined) event.description = dto.description;
     if (dto.start_at !== undefined) event.start_at = dto.start_at ? new Date(dto.start_at) : null;
@@ -66,7 +68,9 @@ export class EventsService {
   }
 
   async remove(id: number) {
-    const event = await this.get(id);
+    // Use private repository for delete operations
+    const event = await this.eventsRepo.findOne({ where: { id } });
+    if (!event) throw new NotFoundException('Event not found');
     return this.eventsRepo.remove(event);
   }
 
