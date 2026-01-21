@@ -2,10 +2,9 @@ import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
 @Entity('events', { database: 'freshtrak_public' })
 export class PublicEvent {
-  @PrimaryGeneratedColumn({ type: 'int', unsigned: true, name: 'event_id' })
-  event_id!: number;
+  @PrimaryGeneratedColumn({ type: 'bigint', name: 'id' })
+  id!: number;
 
-  // Some FreshTrak schemas use 'event_name' instead of 'name'
-  @Column({ type: 'varchar', length: 255, name: 'event_name' })
+  @Column({ type: 'varchar', length: 255, name: 'name' })
   name!: string;
 }

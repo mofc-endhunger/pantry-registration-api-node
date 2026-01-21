@@ -215,7 +215,7 @@ export class PublicScheduleService {
 
   // Resolve public event name from public events table
   async getEventNameForEventId(eventId: number): Promise<string | null> {
-    const ev = await this.eventsRepo.findOne({ where: { event_id: eventId } });
+    const ev = await this.eventsRepo.findOne({ where: { id: eventId } as any });
     return ev?.name ?? null;
   }
 
@@ -232,7 +232,7 @@ export class PublicScheduleService {
   }
 
   async eventExists(eventId: number): Promise<boolean> {
-    const ev = await this.eventsRepo.findOne({ where: { event_id: eventId } });
+    const ev = await this.eventsRepo.findOne({ where: { id: eventId } as any });
     return !!ev;
   }
 
@@ -269,19 +269,19 @@ export class PublicScheduleService {
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const rows: Array<{ event_id: number; name: string }> = await this.datesRepo.query(
-      `SELECT DISTINCT e.event_id, e.name
+      `SELECT DISTINCT e.id AS event_id, e.name
        FROM events e
-       JOIN event_dates d ON d.event_id = e.event_id
+       JOIN event_dates d ON d.event_id = e.id
        ${whereSql}
-       ORDER BY e.event_id ASC`,
+       ORDER BY e.id ASC`,
       args,
     );
     return rows.map((r) => ({ id: r.event_id, name: r.name }));
   }
 
   async getEvent(eventId: number): Promise<{ id: number; name: string } | null> {
-    const ev = await this.eventsRepo.findOne({ where: { event_id: eventId } });
-    return ev ? { id: ev.event_id, name: ev.name } : null;
+    const ev = await this.eventsRepo.findOne({ where: { id: eventId } as any });
+    return ev ? { id: Number(ev.id), name: ev.name } : null;
   }
 
   // Build legacy-style structure for a single event_date with nested hours and slots
