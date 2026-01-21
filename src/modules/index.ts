@@ -6,6 +6,7 @@ import { GuestAuthenticationsModule } from './guest-authentications/guest-authen
 import { HouseholdsModule } from './households/households.module';
 import { EventsModule } from './events/events.module';
 import { RegistrationsModule } from './registrations/registrations.module';
+import { ReservationsModule } from './reservations/reservations.module';
 
 export const FeatureModules = [
   HealthModule,
@@ -16,4 +17,5 @@ export const FeatureModules = [
   HouseholdsModule,
   EventsModule,
   RegistrationsModule,
+  ReservationsModule,
 ];
