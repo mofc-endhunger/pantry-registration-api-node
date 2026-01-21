@@ -215,8 +215,8 @@ export class PublicScheduleService {
 
   // Resolve public event name from public events table
   async getEventNameForEventId(eventId: number): Promise<string | null> {
-    const ev = await this.eventsRepo.findOne({ where: { id: eventId } as any });
-    return ev?.name ?? null;
+    const row = await this.queryEventFlexible(eventId);
+    return row?.name ?? null;
   }
 
   async getEventNameForDateId(eventDateId: number): Promise<string | null> {
@@ -232,8 +232,8 @@ export class PublicScheduleService {
   }
 
   async eventExists(eventId: number): Promise<boolean> {
-    const ev = await this.eventsRepo.findOne({ where: { id: eventId } as any });
-    return !!ev;
+    const row = await this.queryEventFlexible(eventId);
+    return !!row;
   }
 
   async listEvents(params: { active?: boolean; from?: string; to?: string }) {
@@ -268,22 +268,78 @@ export class PublicScheduleService {
       }
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-    const rows: Array<{ event_id: number; name: string }> = await this.datesRepo.query(
+    const rows = await this.queryEventsListFlexible(whereSql, args);
+    return rows.map((r) => ({ id: r.event_id, name: r.name }));
+  }
+
+  async getEvent(eventId: number): Promise<{ id: number; name: string } | null> {
+    const row = await this.queryEventFlexible(eventId);
+    return row ? { id: Number(row.id), name: row.name } : null;
+  }
+
+  // Flexible query helpers to handle schema variations across environments
+  private async queryEventFlexible(eventId: number): Promise<{ id: number; name: string } | null> {
+    const attempts: Array<{ sql: string; args: Array<number> }> = [
+      { sql: 'SELECT id, name FROM events WHERE id = ? LIMIT 1', args: [eventId] },
+      { sql: 'SELECT id, event_name AS name FROM events WHERE id = ? LIMIT 1', args: [eventId] },
+      {
+        sql: 'SELECT event_id AS id, name FROM events WHERE event_id = ? LIMIT 1',
+        args: [eventId],
+      },
+      {
+        sql: 'SELECT event_id AS id, event_name AS name FROM events WHERE event_id = ? LIMIT 1',
+        args: [eventId],
+      },
+    ];
+    for (const a of attempts) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const row = (await this.eventsRepo.query(a.sql, a.args))?.[0];
+        if (row) return { id: Number(row.id), name: String(row.name) };
+      } catch {
+        // try next
+      }
+    }
+    return null;
+  }
+
+  private async queryEventsListFlexible(
+    whereSql: string,
+    args: Array<string | number>,
+  ): Promise<Array<{ event_id: number; name: string }>> {
+    const attempts: Array<string> = [
       `SELECT DISTINCT e.id AS event_id, e.name
        FROM events e
        JOIN event_dates d ON d.event_id = e.id
        ${whereSql}
        ORDER BY e.id ASC`,
-      args,
-    );
-    return rows.map((r) => ({ id: r.event_id, name: r.name }));
+      `SELECT DISTINCT e.id AS event_id, e.event_name AS name
+       FROM events e
+       JOIN event_dates d ON d.event_id = e.id
+       ${whereSql}
+       ORDER BY e.id ASC`,
+      `SELECT DISTINCT e.event_id AS event_id, e.name
+       FROM events e
+       JOIN event_dates d ON d.event_id = e.event_id
+       ${whereSql}
+       ORDER BY e.event_id ASC`,
+      `SELECT DISTINCT e.event_id AS event_id, e.event_name AS name
+       FROM events e
+       JOIN event_dates d ON d.event_id = e.event_id
+       ${whereSql}
+       ORDER BY e.event_id ASC`,
+    ];
+    for (const sql of attempts) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const rows = await this.eventsRepo.query(sql, args);
+        if (Array.isArray(rows)) return rows;
+      } catch {
+        // try next
+      }
+    }
+    return [];
   }
-
-  async getEvent(eventId: number): Promise<{ id: number; name: string } | null> {
-    const ev = await this.eventsRepo.findOne({ where: { id: eventId } as any });
-    return ev ? { id: Number(ev.id), name: ev.name } : null;
-  }
-
   // Build legacy-style structure for a single event_date with nested hours and slots
   async buildEventDateStructure(eventDateId: number) {
     const [dateRow] = await this.datesRepo.query(
