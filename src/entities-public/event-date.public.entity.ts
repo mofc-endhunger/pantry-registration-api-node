@@ -8,9 +8,18 @@ export class PublicEventDate {
   @Column({ type: 'int', unsigned: true })
   event_id!: number;
 
-  @Column({ type: 'int' })
-  capacity!: number;
+  @Column({ type: 'int', nullable: true })
+  capacity!: number | null;
 
-  @Column({ type: 'int' })
-  reserved!: number;
+  @Column({ type: 'int', nullable: true })
+  reserved!: number | null;
+
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  event_date_key!: number | null;
+
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  start_time_key!: number | null;
+
+  @Column({ type: 'int', unsigned: true, nullable: true })
+  end_time_key!: number | null;
 }

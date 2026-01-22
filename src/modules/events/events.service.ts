@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Event } from '../../entities/event.entity';
@@ -7,31 +7,36 @@ import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { CreateTimeslotDto } from './dto/create-timeslot.dto';
 import { UpdateTimeslotDto } from './dto/update-timeslot.dto';
+import { PublicScheduleService } from '../public-schedule/public-schedule.service';
 
 @Injectable()
 export class EventsService {
   constructor(
     @InjectRepository(Event) private readonly eventsRepo: Repository<Event>,
     @InjectRepository(EventTimeslot) private readonly timeslotsRepo: Repository<EventTimeslot>,
+    @Optional() private readonly publicSchedule?: PublicScheduleService,
   ) {}
 
   async list(params: { active?: boolean; from?: string; to?: string }) {
+    if (this.publicSchedule?.listEvents) {
+      return this.publicSchedule.listEvents(params);
+    }
     const qb = this.eventsRepo.createQueryBuilder('e');
-    if (params.active !== undefined) {
+    if (params.active !== undefined)
       qb.andWhere('e.is_active = :active', { active: params.active });
-    }
-    if (params.from) {
+    if (params.from)
       qb.andWhere('(e.start_at IS NULL OR e.start_at >= :from)', { from: params.from });
-    }
-    if (params.to) {
-      qb.andWhere('(e.end_at IS NULL OR e.end_at <= :to)', { to: params.to });
-    }
-    // MySQL doesn't support 'NULLS LAST'; emulate by ordering nulls last, then ascending by value
+    if (params.to) qb.andWhere('(e.end_at IS NULL OR e.end_at <= :to)', { to: params.to });
     qb.orderBy('e.start_at IS NULL', 'ASC').addOrderBy('e.start_at', 'ASC');
     return qb.getMany();
   }
 
   async get(id: number) {
+    if (this.publicSchedule?.getEvent) {
+      const pub = await this.publicSchedule.getEvent(id);
+      if (!pub) throw new NotFoundException('Event not found');
+      return { id: pub.id, name: pub.name };
+    }
     const event = await this.eventsRepo.findOne({ where: { id } });
     if (!event) throw new NotFoundException('Event not found');
     return event;
@@ -50,7 +55,9 @@ export class EventsService {
   }
 
   async update(id: number, dto: UpdateEventDto) {
-    const event = await this.get(id);
+    // Use private repository for write/update operations
+    const event = await this.eventsRepo.findOne({ where: { id } });
+    if (!event) throw new NotFoundException('Event not found');
     if (dto.name !== undefined) event.name = dto.name;
     if (dto.description !== undefined) event.description = dto.description;
     if (dto.start_at !== undefined) event.start_at = dto.start_at ? new Date(dto.start_at) : null;
@@ -61,7 +68,9 @@ export class EventsService {
   }
 
   async remove(id: number) {
-    const event = await this.get(id);
+    // Use private repository for delete operations
+    const event = await this.eventsRepo.findOne({ where: { id } });
+    if (!event) throw new NotFoundException('Event not found');
     return this.eventsRepo.remove(event);
   }
 
