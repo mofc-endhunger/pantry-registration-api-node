@@ -305,6 +305,43 @@ CREATE TABLE questionnaire_questions (
 - Phase 2: Add server-side enforcement of submission window (e.g., 14 days).
 - Phase 3: Staff reports/aggregations (avg rating per event, comments export).
 
+## Addendum: Align with Survey Engine (Owner Spec 2026‑01‑28)
+
+To align with the survey engine proposal, we will introduce a generalized schema and endpoints while preserving the current simple feedback flow as a compatibility facade.
+
+### Engine Data Model
+
+- forms (id, title, status_id, created_at)
+- questions (id, prompt, type['scale_1_5'|'radio'|'checkbox'|'short_text'], is_standardized)
+- answer_options (id, question_id, value, label, display_order)
+- form_assignments (id, form_id, hierarchy_type_id, hierarchy_value)
+- survey_triggers (id, assignment_id, trigger_type['transactional'|'milestone'|'time_cohort'], interval_value)
+- form_submissions (id, form_id, trigger_id, registration_id, user_id, overall_rating, comments, date_key, time_key, ip_address, date_added, status_id)
+- form_responses (id, submission_id, question_id, answer_value)
+
+Constraints:
+
+- Durable immutability: Once submissions exist for a form/version, do not edit/delete questions or associations; deactivate instead.
+- Submission window: Default 14 days post service date for transactional triggers.
+
+### Engine Endpoints
+
+- GET /surveys/active?registration_id=123
+  - Evaluates eligibility for transactional surveys and returns the applicable form with questions/options if available; otherwise has_active=false.
+- POST /surveys/submit
+  - Body: { form_id, trigger_id, registration_id?, overall_rating?, comments?, responses: [{ question_id, answer_value }] }
+  - Captures IP and User‑Agent. Enforces duplicate protection and 14‑day window for transactional context.
+
+### Backwards Compatibility
+
+- Existing GET/POST /reservations/:id/feedback remain; they will be backed by the engine in a later phase, mapping rating/comments to form_submissions and per‑question answers to form_responses.
+
+### Phase Plan
+
+- Phase A (now): Add engine tables and endpoints (transactional only).
+- Phase B: Wire feedback facade to engine; migrate data.
+- Phase C: Add milestone/time‑cohort triggers and background jobs.
+
 ## Success Metrics
 
 - Submission rate: % of eligible registrations with feedback.
