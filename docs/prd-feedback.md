@@ -316,7 +316,7 @@ To align with the survey engine proposal, we will introduce a generalized schema
 - answer_options (id, question_id, value, label, display_order)
 - form_assignments (id, form_id, hierarchy_type_id, hierarchy_value)
 - survey_triggers (id, assignment_id, trigger_type['transactional'|'milestone'|'time_cohort'], interval_value)
-- form_submissions (id, form_id, trigger_id, registration_id, user_id, overall_rating, comments, date_key, time_key, ip_address, date_added, status_id)
+- form_submissions (id, survey_id, trigger_id, registration_id, user_id, overall_rating, comments, date_key, time_key, ip_address, date_added, status_id)
 - form_responses (id, submission_id, question_id, answer_value)
 
 Constraints:
@@ -329,7 +329,7 @@ Constraints:
 - GET /surveys/active?registration_id=123
   - Evaluates eligibility for transactional surveys and returns the applicable form with questions/options if available; otherwise has_active=false.
 - POST /surveys/submit
-  - Body: { form_id, trigger_id, registration_id?, overall_rating?, comments?, responses: [{ question_id, answer_value }] }
+  - Body: { survey_id, trigger_id, registration_id?, overall_rating?, comments?, responses: [{ question_id, answer_value }] }
   - Captures IP and User‑Agent. Enforces duplicate protection and 14‑day window for transactional context.
 
 ### Backwards Compatibility

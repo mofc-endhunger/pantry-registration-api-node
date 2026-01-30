@@ -14,8 +14,8 @@ export class SubmitSurveyResponseDto {
 
 export class SubmitSurveyDto {
   @IsInt()
-  @Transform(({ value, obj }) => obj?.form_id ?? value)
-  form_id!: number;
+  @Transform(({ value, obj }) => obj?.survey_id ?? value)
+  survey_id!: number;
 
   @IsInt()
   @Transform(({ value, obj }) => obj?.trigger_id ?? value)

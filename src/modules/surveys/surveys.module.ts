@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Form } from '../../entities/forms.entity';
-import { Question } from '../../entities/questions.entity';
+import { Survey } from '../../entities/survey.entity';
+import { SurveyQuestion } from '../../entities/survey-question.entity';
 import { AnswerOption } from '../../entities/answer-options.entity';
-import { FormAssignment } from '../../entities/form-assignments.entity';
+import { SurveyAssignment } from '../../entities/survey-assignment.entity';
 import { SurveyTrigger } from '../../entities/survey-triggers.entity';
-import { FormSubmission } from '../../entities/form-submissions.entity';
-import { FormResponse } from '../../entities/form-responses.entity';
+import { SurveySubmission } from '../../entities/survey-submissions.entity';
+import { SurveyResponse } from '../../entities/survey-responses.entity';
 import { Registration } from '../../entities/registration.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { SurveysController } from './surveys.controller';
@@ -18,13 +18,13 @@ import { PublicScheduleModule } from '../public-schedule/public-schedule.module'
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      Form,
-      Question,
+      Survey,
+      SurveyQuestion,
       AnswerOption,
-      FormAssignment,
+      SurveyAssignment,
       SurveyTrigger,
-      FormSubmission,
-      FormResponse,
+      SurveySubmission,
+      SurveyResponse,
       Registration,
       Authentication,
     ]),

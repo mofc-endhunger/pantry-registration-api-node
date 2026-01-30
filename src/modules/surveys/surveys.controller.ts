@@ -44,7 +44,26 @@ export class SurveysController {
     description:
       'Persists a form submission and responses. Enforces 14-day window for transactional context.',
   })
-  @ApiBody({ type: SubmitSurveyDto })
+  @ApiBody({
+    type: SubmitSurveyDto,
+    examples: {
+      transactional: {
+        summary: 'Transactional survey submission',
+        value: {
+          survey_id: 1,
+          trigger_id: 10,
+          registration_id: 12345,
+          overall_rating: 5,
+          comments: 'Great experience, thank you!',
+          responses: [
+            { question_id: 101, answer_value: '5' },
+            { question_id: 102, answer_value: '4' },
+            { question_id: 103, answer_value: '5' },
+          ],
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Submission created' })
   @ApiResponse({ status: 409, description: 'Duplicate submission' })
   @Post('submit')

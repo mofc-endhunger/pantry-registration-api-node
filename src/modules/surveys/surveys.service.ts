@@ -7,13 +7,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Form } from '../../entities/forms.entity';
-import { Question } from '../../entities/questions.entity';
+import { Survey } from '../../entities/survey.entity';
+import { SurveyQuestion } from '../../entities/survey-question.entity';
 import { AnswerOption } from '../../entities/answer-options.entity';
-import { FormAssignment } from '../../entities/form-assignments.entity';
+import { SurveyAssignment } from '../../entities/survey-assignment.entity';
 import { SurveyTrigger } from '../../entities/survey-triggers.entity';
-import { FormSubmission } from '../../entities/form-submissions.entity';
-import { FormResponse } from '../../entities/form-responses.entity';
+import { SurveySubmission } from '../../entities/survey-submissions.entity';
+import { SurveyResponse } from '../../entities/survey-responses.entity';
 import { Registration } from '../../entities/registration.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { UsersService } from '../users/users.service';
@@ -33,13 +33,15 @@ type AuthUser = {
 @Injectable()
 export class SurveysService {
   constructor(
-    @InjectRepository(Form) private readonly formsRepo: Repository<Form>,
-    @InjectRepository(Question) private readonly questionsRepo: Repository<Question>,
+    @InjectRepository(Survey) private readonly surveysRepo: Repository<Survey>,
+    @InjectRepository(SurveyQuestion) private readonly questionsRepo: Repository<SurveyQuestion>,
     @InjectRepository(AnswerOption) private readonly optionsRepo: Repository<AnswerOption>,
-    @InjectRepository(FormAssignment) private readonly assignmentsRepo: Repository<FormAssignment>,
+    @InjectRepository(SurveyAssignment)
+    private readonly assignmentsRepo: Repository<SurveyAssignment>,
     @InjectRepository(SurveyTrigger) private readonly triggersRepo: Repository<SurveyTrigger>,
-    @InjectRepository(FormSubmission) private readonly submissionsRepo: Repository<FormSubmission>,
-    @InjectRepository(FormResponse) private readonly responsesRepo: Repository<FormResponse>,
+    @InjectRepository(SurveySubmission)
+    private readonly submissionsRepo: Repository<SurveySubmission>,
+    @InjectRepository(SurveyResponse) private readonly responsesRepo: Repository<SurveyResponse>,
     @InjectRepository(Registration) private readonly regsRepo: Repository<Registration>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
     private readonly usersService: UsersService,
@@ -88,19 +90,21 @@ export class SurveysService {
   async getActive(params: { user: AuthUser; guestToken?: string; registrationId?: number }) {
     // For v1: transactional context only if registrationId provided
     const dbUserId = await this.resolveDbUserId(params.user, params.guestToken);
-    let form: Form | null = null;
+    let survey: Survey | null = null;
     let trigger: SurveyTrigger | null = null;
 
     if (params.registrationId) {
       await this.assertRegistrationOwnership(params.registrationId, dbUserId);
       // Simple strategy: latest active form assigned at "event" hierarchy (fallback to any active form)
       // This is a placeholder until assignment data exists.
-      form =
-        (await this.formsRepo.findOne({ where: { status_id: 1 }, order: { id: 'DESC' as any } })) ??
-        null;
+      survey =
+        (await this.surveysRepo.findOne({
+          where: { status_id: 1 },
+          order: { id: 'DESC' as any },
+        })) ?? null;
       trigger =
         (await this.triggersRepo.findOne({
-          where: { trigger_type: 'transactional' as any },
+          where: { trigger_type: 'transaction' as any },
           order: { id: 'DESC' as any },
         })) ?? null;
     } else {
@@ -108,19 +112,22 @@ export class SurveysService {
       return { has_active: false };
     }
 
-    if (!form || !trigger) return { has_active: false };
+    if (!survey || !trigger) return { has_active: false };
 
     // Prevent duplicates for v1 transactional
     const already = await this.submissionsRepo.findOne({
       where: {
         registration_id: params.registrationId,
-        form_id: form.id,
+        survey_id: survey.id,
         trigger_id: trigger.id,
       },
     });
     if (already) return { has_active: false };
 
-    const questions = await this.questionsRepo.find();
+    const questions = await this.questionsRepo.find({
+      where: { survey_id: survey.id },
+      order: { display_order: 'ASC' as any },
+    });
     const options = await this.optionsRepo.find();
     const byQuestion = new Map<number, AnswerOption[]>();
     options.forEach((o) => {
@@ -130,13 +137,14 @@ export class SurveysService {
     });
     return {
       has_active: true,
-      form: {
-        id: form.id,
-        title: form.title,
+      survey: {
+        id: survey.id,
+        title: survey.title,
         questions: questions.map((q) => ({
           id: q.id,
           type: q.type,
           prompt: q.prompt,
+          order: q.display_order,
           options: (byQuestion.get(q.id) ?? []).map((o) => ({
             id: o.id,
             value: o.value,
@@ -182,7 +190,7 @@ export class SurveysService {
       const dupe = await this.submissionsRepo.findOne({
         where: {
           registration_id: params.dto.registration_id,
-          form_id: params.dto.form_id,
+          survey_id: params.dto.survey_id,
           trigger_id: params.dto.trigger_id,
         },
       });
@@ -192,9 +200,10 @@ export class SurveysService {
     const date_key = this.toDateKey(regDateIso);
     const time_key = this.toTimeKey();
     const submission = await this.submissionsRepo.save({
-      form_id: params.dto.form_id,
+      survey_id: params.dto.survey_id,
       trigger_id: params.dto.trigger_id,
       registration_id: params.dto.registration_id ?? null,
+      family_id: null,
       user_id: dbUserId,
       overall_rating: params.dto.overall_rating ?? null,
       comments: params.dto.comments ?? null,
@@ -216,7 +225,7 @@ export class SurveysService {
 
     return {
       id: submissionId,
-      form_id: params.dto.form_id,
+      survey_id: params.dto.survey_id,
       trigger_id: params.dto.trigger_id,
       registration_id: params.dto.registration_id ?? null,
       date_key,
