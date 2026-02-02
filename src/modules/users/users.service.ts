@@ -150,7 +150,7 @@ export class UsersService {
     // Always use savedUser.id for all downstream calls
     const userId = savedUser.id;
 
-    // Create household and add user as head_of_household
+    // Create household (HouseholdsService guards against duplicates and will reuse existing)
     const household = await this.householdsService.createHousehold(userId, {
       primary_first_name: savedUser.first_name ?? undefined,
       primary_last_name: savedUser.last_name ?? undefined,

@@ -42,6 +42,11 @@ export class HouseholdsService {
     primaryUserId: number,
     dto: CreateHouseholdDto,
   ): Promise<HouseholdWithCounts> {
+    // Minimal safeguard: if a HOH household already exists for this user, reuse it
+    const existingId = await this.findHouseholdIdByUserId(primaryUserId);
+    if (existingId) {
+      return this.getHouseholdById(existingId, primaryUserId);
+    }
     // Minimal create; number/name/identification_code come from upstream inputs you provide.
     // Placeholder: you'll likely supply number, name, identification_code elsewhere.
     const created = await this.householdsRepo.save(
@@ -181,11 +186,10 @@ export class HouseholdsService {
 
     // Upsert members and deactivate omitted ones
     if (Array.isArray(dto.members)) {
+      const membersInput = dto.members as Array<Partial<HouseholdMember>>;
       // Get IDs of members in the payload (excluding new members with null/undefined id)
-      const payloadMemberIds = new Set(
-        dto.members
-          .filter((m: any) => m.id != null)
-          .map((m: any) => Number(m.id))
+      const payloadMemberIds = new Set<number>(
+        membersInput.filter((m) => m.id != null).map((m) => Number(m.id)),
       );
 
       // Deactivate members that exist in DB but are NOT in the payload
@@ -202,8 +206,8 @@ export class HouseholdsService {
       }
 
       // Upsert each provided member
-      for (const m of dto.members) {
-        const member = household.members.find((mem) => mem.id === m.id);
+      for (const m of membersInput) {
+        const member = household.members.find((mem) => mem.id === (m.id as number));
         if (member) {
           Object.assign(member, {
             number: m.number ?? member.number,
@@ -271,7 +275,6 @@ export class HouseholdsService {
 
     return updated;
   }
- 
 
   private withComputedCounts(household: Household): HouseholdWithCounts {
     const members: HouseholdMember[] = household.members || [];
