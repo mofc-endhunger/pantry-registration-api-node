@@ -12,3 +12,5 @@ export { EventTimeslot } from './event-timeslot.entity';
 export { Registration } from './registration.entity';
 export { RegistrationAttendee } from './registration-attendee.entity';
 export { CheckInAudit } from './checkin-audit.entity';
+export { Feedback } from './feedback.entity';
+export { FeedbackResponse } from './feedback-response.entity';
