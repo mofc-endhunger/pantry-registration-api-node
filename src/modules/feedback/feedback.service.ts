@@ -7,8 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Feedback } from '../../entities/feedback.entity';
-import { FeedbackResponse } from '../../entities/feedback-response.entity';
 import { QuestionnaireVersion } from '../../entities/questionnaire-version.entity';
 import { QuestionnaireQuestion } from '../../entities/questionnaire-question.entity';
 import { Registration } from '../../entities/registration.entity';
@@ -16,6 +14,9 @@ import { Authentication } from '../../entities/authentication.entity';
 import { UsersService } from '../users/users.service';
 import { HouseholdsService } from '../households/households.service';
 import { SubmitFeedbackDto } from './dto/submit-feedback.dto';
+import { SurveySubmission } from '../../entities/survey-submissions.entity';
+import { SurveyResponse } from '../../entities/survey-responses.entity';
+import { SurveysService } from '../surveys/surveys.service';
 
 type AuthUser = {
   authType?: string;
@@ -29,9 +30,10 @@ type AuthUser = {
 @Injectable()
 export class FeedbackService {
   constructor(
-    @InjectRepository(Feedback) private readonly feedbackRepo: Repository<Feedback>,
-    @InjectRepository(FeedbackResponse)
-    private readonly responseRepo: Repository<FeedbackResponse>,
+    @InjectRepository(SurveySubmission)
+    private readonly submissionsRepo: Repository<SurveySubmission>,
+    @InjectRepository(SurveyResponse)
+    private readonly responsesRepo: Repository<SurveyResponse>,
     @InjectRepository(QuestionnaireVersion)
     private readonly qvRepo: Repository<QuestionnaireVersion>,
     @InjectRepository(QuestionnaireQuestion)
@@ -42,6 +44,7 @@ export class FeedbackService {
     private readonly authRepo: Repository<Authentication>,
     private readonly usersService: UsersService,
     private readonly householdsService: HouseholdsService,
+    private readonly surveysService: SurveysService,
   ) {}
 
   private async resolveDbUserId(user: AuthUser, guestToken?: string): Promise<number> {
@@ -125,29 +128,68 @@ export class FeedbackService {
   async getForReservation(params: { user: AuthUser; guestToken?: string; registrationId: number }) {
     const dbUserId = await this.resolveDbUserId(params.user, params.guestToken);
     const reg = await this.assertRegistrationOwnership(params.registrationId, dbUserId);
-    const existing = await this.feedbackRepo.findOne({
-      where: { registration_id: params.registrationId },
+    const existing = await this.submissionsRepo.findOne({
+      where: { registration_id: params.registrationId, user_id: dbUserId },
     });
     if (existing) {
-      const responses = await this.responseRepo.find({
-        where: { feedback_id: Number(existing.id) },
+      const responses = await this.responsesRepo.find({
+        where: { submission_id: Number(existing.id) },
       });
-      const questionnaire = await this.getActiveQuestionnaire();
+      const active = await this.surveysService.getActive({
+        user: params.user,
+        guestToken: params.guestToken,
+        registrationId: params.registrationId,
+      });
+      const questionnaire = active.has_active
+        ? {
+            id: active.survey.id,
+            version: 1,
+            title: active.survey.title,
+            questions: active.survey.questions.map((q: any) => ({
+              id: q.id,
+              order: q.order,
+              type: q.type,
+              prompt: q.prompt,
+              required: true,
+            })),
+          }
+        : await this.getActiveQuestionnaire();
       return {
         id: Number(existing.id),
         registration_id: params.registrationId,
         has_submitted: true,
-        submitted_at: existing.submitted_at?.toISOString?.() ?? null,
-        rating: existing.rating,
+        submitted_at: existing.date_added?.toISOString?.() ?? null,
+        rating: existing.overall_rating ?? null,
         comments: existing.comments ?? null,
         questionnaire,
-        responses: responses.map((r) => ({
-          question_id: r.question_id,
-          scale_value: r.scale_value ?? undefined,
-        })),
+        responses: responses.map((r) => {
+          const v = Number(r.answer_value);
+          return {
+            question_id: r.question_id,
+            scale_value: Number.isFinite(v) ? v : undefined,
+          };
+        }),
       };
     }
-    const questionnaire = await this.getActiveQuestionnaire();
+    const active = await this.surveysService.getActive({
+      user: params.user,
+      guestToken: params.guestToken,
+      registrationId: params.registrationId,
+    });
+    const questionnaire = active.has_active
+      ? {
+          id: active.survey.id,
+          version: 1,
+          title: active.survey.title,
+          questions: active.survey.questions.map((q: any) => ({
+            id: q.id,
+            order: q.order,
+            type: q.type,
+            prompt: q.prompt,
+            required: true,
+          })),
+        }
+      : await this.getActiveQuestionnaire();
     return {
       id: null,
       registration_id: params.registrationId,
@@ -170,57 +212,44 @@ export class FeedbackService {
     const dbUserId = await this.resolveDbUserId(params.user, params.guestToken);
     const reg = await this.assertRegistrationOwnership(params.registrationId, dbUserId);
 
-    const dupe = await this.feedbackRepo.findOne({
-      where: { registration_id: params.registrationId },
+    const dupe = await this.submissionsRepo.findOne({
+      where: { registration_id: params.registrationId, user_id: dbUserId },
     });
     if (dupe) throw new ConflictException('Feedback already submitted for this registration');
 
-    // Basic validation already done via DTO; optionally validate responses align with questionnaire
-    const questionnaire = await this.getActiveQuestionnaire();
-    const requiredIds = new Set(
-      questionnaire.questions.filter((q: any) => q.required).map((q: any) => q.id),
-    );
-    const provided = new Map<number, number | undefined>();
-    (params.dto.responses ?? []).forEach((r) => {
-      provided.set(r.question_id, r.scale_value);
+    const active = await this.surveysService.getActive({
+      user: params.user,
+      guestToken: params.guestToken,
+      registrationId: params.registrationId,
     });
-    for (const id of requiredIds) {
-      if (!provided.has(id)) {
-        throw new ConflictException('Required questionnaire responses missing');
-      }
-      const v = provided.get(id);
-      if (v == null || v < 1 || v > 5) {
-        throw new ConflictException('Invalid questionnaire response value');
-      }
+    if (!active.has_active) {
+      throw new ConflictException('No active survey configured for this reservation');
     }
 
-    const f = await this.feedbackRepo.save({
-      registration_id: params.registrationId,
-      user_id: dbUserId,
-      event_id: reg.event_id,
-      questionnaire_version_id: questionnaire.id || null,
-      rating: params.dto.rating,
-      comments: params.dto.comments ?? null,
-      user_agent: params.meta?.userAgent ?? null,
-      ip: params.meta?.ip ? Buffer.from(params.meta.ip) : null,
-    } as any);
-    const feedbackId = Number(f.id);
-
-    if (params.dto.responses?.length) {
-      const rows = params.dto.responses.map((r) => ({
-        feedback_id: feedbackId,
-        question_id: r.question_id,
-        scale_value: r.scale_value ?? null,
-      }));
-      await this.responseRepo.insert(rows as any);
-    }
+    // Submit using the SurveysService to centralize keys/window logic
+    const result = await this.surveysService.submit({
+      user: params.user,
+      guestToken: params.guestToken,
+      dto: {
+        survey_id: active.survey.id,
+        trigger_id: active.trigger.id,
+        registration_id: params.registrationId,
+        overall_rating: params.dto.rating,
+        comments: params.dto.comments ?? null,
+        responses: (params.dto.responses ?? []).map((r) => ({
+          question_id: r.question_id,
+          answer_value: String(r.scale_value ?? ''),
+        })),
+      } as any,
+      meta: params.meta,
+    });
 
     return {
-      id: feedbackId,
+      id: result.id,
       registration_id: params.registrationId,
-      submitted_at: (f.submitted_at as Date)?.toISOString?.() ?? new Date().toISOString(),
-      rating: f.rating,
-      comments: f.comments,
+      submitted_at: new Date().toISOString(),
+      rating: params.dto.rating,
+      comments: params.dto.comments ?? null,
     };
   }
 }
