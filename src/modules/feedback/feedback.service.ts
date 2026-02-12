@@ -140,20 +140,27 @@ export class FeedbackService {
         guestToken: params.guestToken,
         registrationId: params.registrationId,
       });
-      const questionnaire = active.has_active
-        ? {
-            id: active.survey.id,
+      let questionnaire: any;
+      if ((active as any)?.has_active && (active as any)?.survey) {
+        const s = (active as any).survey;
+        {
+          const qs: any[] = Array.isArray(s.questions) ? (s.questions as any[]) : [];
+          questionnaire = {
+            id: s.id,
             version: 1,
-            title: active.survey.title,
-            questions: active.survey.questions.map((q: any) => ({
+            title: s.title,
+            questions: qs.map((q: any) => ({
               id: q.id,
               order: q.order,
               type: q.type,
               prompt: q.prompt,
               required: true,
             })),
-          }
-        : await this.getActiveQuestionnaire();
+          };
+        }
+      } else {
+        questionnaire = await this.getActiveQuestionnaire();
+      }
       return {
         id: Number(existing.survey_family_id),
         registration_id: params.registrationId,
@@ -177,20 +184,27 @@ export class FeedbackService {
       guestToken: params.guestToken,
       registrationId: params.registrationId,
     });
-    const questionnaire = active.has_active
-      ? {
-          id: active.survey.id,
+    let questionnaire: any;
+    if ((active as any)?.has_active && (active as any)?.survey) {
+      const s = (active as any).survey;
+      {
+        const qs: any[] = Array.isArray(s.questions) ? (s.questions as any[]) : [];
+        questionnaire = {
+          id: s.id,
           version: 1,
-          title: active.survey.title,
-          questions: active.survey.questions.map((q: any) => ({
+          title: s.title,
+          questions: qs.map((q: any) => ({
             id: q.id,
             order: q.order,
             type: q.type,
             prompt: q.prompt,
             required: true,
           })),
-        }
-      : await this.getActiveQuestionnaire();
+        };
+      }
+    } else {
+      questionnaire = await this.getActiveQuestionnaire();
+    }
     return {
       id: null,
       registration_id: params.registrationId,
@@ -224,7 +238,7 @@ export class FeedbackService {
       guestToken: params.guestToken,
       registrationId: params.registrationId,
     });
-    if (!active.has_active) {
+    if (!(active as any)?.has_active || !(active as any)?.survey || !(active as any)?.trigger) {
       throw new ConflictException('No active survey configured for this reservation');
     }
 
@@ -233,8 +247,8 @@ export class FeedbackService {
       user: params.user,
       guestToken: params.guestToken,
       dto: {
-        survey_id: active.survey.id,
-        trigger_id: active.trigger.id,
+        survey_id: (active as any).survey!.id,
+        trigger_id: (active as any).trigger!.id,
         registration_id: params.registrationId,
         overall_rating: params.dto.rating,
         comments: params.dto.comments ?? null,
