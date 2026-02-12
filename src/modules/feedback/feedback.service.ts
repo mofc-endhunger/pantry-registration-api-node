@@ -14,8 +14,8 @@ import { Authentication } from '../../entities/authentication.entity';
 import { UsersService } from '../users/users.service';
 import { HouseholdsService } from '../households/households.service';
 import { SubmitFeedbackDto } from './dto/submit-feedback.dto';
-import { SurveySubmission } from '../../entities/survey-submissions.entity';
-import { SurveyResponse } from '../../entities/survey-responses.entity';
+import { SurveyFamily } from '../../entities/survey-families.entity';
+import { SurveyFamilyAnswer } from '../../entities/survey-family-answers.entity';
 import { SurveysService } from '../surveys/surveys.service';
 
 type AuthUser = {
@@ -30,10 +30,9 @@ type AuthUser = {
 @Injectable()
 export class FeedbackService {
   constructor(
-    @InjectRepository(SurveySubmission)
-    private readonly submissionsRepo: Repository<SurveySubmission>,
-    @InjectRepository(SurveyResponse)
-    private readonly responsesRepo: Repository<SurveyResponse>,
+    @InjectRepository(SurveyFamily) private readonly familiesRepo: Repository<SurveyFamily>,
+    @InjectRepository(SurveyFamilyAnswer)
+    private readonly responsesRepo: Repository<SurveyFamilyAnswer>,
     @InjectRepository(QuestionnaireVersion)
     private readonly qvRepo: Repository<QuestionnaireVersion>,
     @InjectRepository(QuestionnaireQuestion)
@@ -127,13 +126,14 @@ export class FeedbackService {
 
   async getForReservation(params: { user: AuthUser; guestToken?: string; registrationId: number }) {
     const dbUserId = await this.resolveDbUserId(params.user, params.guestToken);
-    const reg = await this.assertRegistrationOwnership(params.registrationId, dbUserId);
-    const existing = await this.submissionsRepo.findOne({
-      where: { registration_id: params.registrationId, user_id: dbUserId },
+    const _reg = await this.assertRegistrationOwnership(params.registrationId, dbUserId);
+    const existing = await this.familiesRepo.findOne({
+      where: { linkage_type_NK: params.registrationId },
+      order: { date_added: 'DESC' as any },
     });
     if (existing) {
       const responses = await this.responsesRepo.find({
-        where: { submission_id: Number(existing.id) },
+        where: { survey_family_id: Number(existing.survey_family_id) },
       });
       const active = await this.surveysService.getActive({
         user: params.user,
@@ -155,17 +155,18 @@ export class FeedbackService {
           }
         : await this.getActiveQuestionnaire();
       return {
-        id: Number(existing.id),
+        id: Number(existing.survey_family_id),
         registration_id: params.registrationId,
         has_submitted: true,
         submitted_at: existing.date_added?.toISOString?.() ?? null,
-        rating: existing.overall_rating ?? null,
-        comments: existing.comments ?? null,
+        rating:
+          responses.map((r) => Number(r.answer_value)).find((n) => Number.isFinite(n)) ?? null,
+        comments: null,
         questionnaire,
         responses: responses.map((r) => {
           const v = Number(r.answer_value);
           return {
-            question_id: r.question_id,
+            question_id: r.survey_question_id,
             scale_value: Number.isFinite(v) ? v : undefined,
           };
         }),
@@ -210,10 +211,11 @@ export class FeedbackService {
     meta?: { ip?: string; userAgent?: string };
   }) {
     const dbUserId = await this.resolveDbUserId(params.user, params.guestToken);
-    const reg = await this.assertRegistrationOwnership(params.registrationId, dbUserId);
+    const _reg2 = await this.assertRegistrationOwnership(params.registrationId, dbUserId);
 
-    const dupe = await this.submissionsRepo.findOne({
-      where: { registration_id: params.registrationId, user_id: dbUserId },
+    const dupe = await this.familiesRepo.findOne({
+      where: { linkage_type_NK: params.registrationId },
+      order: { date_added: 'DESC' as any },
     });
     if (dupe) throw new ConflictException('Feedback already submitted for this registration');
 

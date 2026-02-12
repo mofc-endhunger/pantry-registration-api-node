@@ -7,13 +7,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Survey } from '../../entities/survey.entity';
-import { SurveyQuestion } from '../../entities/survey-question.entity';
-import { AnswerOption } from '../../entities/answer-options.entity';
-import { SurveyAssignment } from '../../entities/survey-assignment.entity';
-import { SurveyTrigger } from '../../entities/survey-triggers.entity';
-import { SurveySubmission } from '../../entities/survey-submissions.entity';
-import { SurveyResponse } from '../../entities/survey-responses.entity';
+import { SurveyFamily } from '../../entities/survey-families.entity';
+import { SurveyFamilyAnswer } from '../../entities/survey-family-answers.entity';
+import { PublicSurvey } from '../../entities-public/survey.public.entity';
+import { PublicSurveyQuestionLibrary } from '../../entities-public/survey-question-library.public.entity';
+import { PublicSurveyAnswerLibrary } from '../../entities-public/survey-answer-library.public.entity';
+import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { Registration } from '../../entities/registration.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { UsersService } from '../users/users.service';
@@ -33,15 +32,17 @@ type AuthUser = {
 @Injectable()
 export class SurveysService {
   constructor(
-    @InjectRepository(Survey) private readonly surveysRepo: Repository<Survey>,
-    @InjectRepository(SurveyQuestion) private readonly questionsRepo: Repository<SurveyQuestion>,
-    @InjectRepository(AnswerOption) private readonly optionsRepo: Repository<AnswerOption>,
-    @InjectRepository(SurveyAssignment)
-    private readonly assignmentsRepo: Repository<SurveyAssignment>,
-    @InjectRepository(SurveyTrigger) private readonly triggersRepo: Repository<SurveyTrigger>,
-    @InjectRepository(SurveySubmission)
-    private readonly submissionsRepo: Repository<SurveySubmission>,
-    @InjectRepository(SurveyResponse) private readonly responsesRepo: Repository<SurveyResponse>,
+    @InjectRepository(SurveyFamily) private readonly familiesRepo: Repository<SurveyFamily>,
+    @InjectRepository(SurveyFamilyAnswer)
+    private readonly familyAnswersRepo: Repository<SurveyFamilyAnswer>,
+    @InjectRepository(PublicSurvey, 'public')
+    private readonly surveysRepo: Repository<PublicSurvey>,
+    @InjectRepository(PublicSurveyQuestionLibrary, 'public')
+    private readonly questionsLibRepo: Repository<PublicSurveyQuestionLibrary>,
+    @InjectRepository(PublicSurveyAnswerLibrary, 'public')
+    private readonly answersLibRepo: Repository<PublicSurveyAnswerLibrary>,
+    @InjectRepository(PublicSurveyQuestionMap, 'public')
+    private readonly questionMapRepo: Repository<PublicSurveyQuestionMap>,
     @InjectRepository(Registration) private readonly regsRepo: Repository<Registration>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
     private readonly usersService: UsersService,
@@ -90,70 +91,70 @@ export class SurveysService {
   async getActive(params: { user: AuthUser; guestToken?: string; registrationId?: number }) {
     // For v1: transactional context only if registrationId provided
     const dbUserId = await this.resolveDbUserId(params.user, params.guestToken);
-    let survey: Survey | null = null;
-    let trigger: SurveyTrigger | null = null;
+    let survey: PublicSurvey | null = null;
 
     if (params.registrationId) {
       await this.assertRegistrationOwnership(params.registrationId, dbUserId);
-      // Simple strategy: latest active form assigned at "event" hierarchy (fallback to any active form)
-      // This is a placeholder until assignment data exists.
+      // Placeholder strategy: latest active survey in public
       survey =
         (await this.surveysRepo.findOne({
           where: { status_id: 1 },
-          order: { id: 'DESC' as any },
-        })) ?? null;
-      trigger =
-        (await this.triggersRepo.findOne({
-          where: { trigger_type: 'transaction' as any },
-          order: { id: 'DESC' as any },
+          order: { survey_id: 'DESC' as any },
         })) ?? null;
     } else {
       // No context → no active survey
       return { has_active: false };
     }
 
-    if (!survey || !trigger) return { has_active: false };
+    if (!survey) return { has_active: false };
 
-    // Prevent duplicates for v1 transactional
-    const already = await this.submissionsRepo.findOne({
-      where: {
-        registration_id: params.registrationId,
-        survey_id: survey.id,
-        trigger_id: trigger.id,
-      },
+    // Prevent duplicates (completed) on families table
+    const dupe = await this.familiesRepo.findOne({
+      where: { survey_id: survey.survey_id, linkage_type_NK: params.registrationId },
+      order: { date_added: 'DESC' as any },
     });
-    if (already) return { has_active: false };
+    if (dupe && dupe.survey_status === 'completed') return { has_active: false };
 
-    const questions = await this.questionsRepo.find({
-      where: { survey_id: survey.id },
+    const maps = await this.questionMapRepo.find({
+      where: { survey_id: survey.survey_id },
       order: { display_order: 'ASC' as any },
     });
-    const options = await this.optionsRepo.find();
-    const byQuestion = new Map<number, AnswerOption[]>();
-    options.forEach((o) => {
-      const arr = byQuestion.get(o.question_id) ?? [];
-      arr.push(o);
-      byQuestion.set(o.question_id, arr);
+    const qIds = maps.map((m) => m.question_id);
+    const questionsLib = qIds.length
+      ? await this.questionsLibRepo.findBy({ question_id: qIds as unknown as any })
+      : [];
+    const byLibId = new Map<number, PublicSurveyQuestionLibrary>();
+    questionsLib.forEach((q) => byLibId.set(q.question_id, q));
+    const answers = await this.answersLibRepo.find();
+    const byQuestion = new Map<number, PublicSurveyAnswerLibrary[]>();
+    answers.forEach((a) => {
+      const arr = byQuestion.get(a.question_id) ?? [];
+      arr.push(a);
+      byQuestion.set(a.question_id, arr);
     });
     return {
       has_active: true,
       survey: {
-        id: survey.id,
-        title: survey.title,
-        questions: questions.map((q) => ({
-          id: q.id,
-          type: q.type,
-          prompt: q.prompt,
-          order: q.display_order,
-          options: (byQuestion.get(q.id) ?? []).map((o) => ({
-            id: o.id,
-            value: o.value,
-            label: o.label,
-            order: o.display_order,
-          })),
-        })),
+        id: survey.survey_id,
+        title: survey.survey_title,
+        questions: maps.map((m) => {
+          const lib = byLibId.get(m.question_id);
+          return {
+            id: m.survey_question_id,
+            type: lib?.question_type ?? 'scale_1_5',
+            prompt: lib?.question_text ?? '',
+            order: m.display_order,
+            options: (byQuestion.get(m.question_id) ?? []).map((o) => ({
+              id: o.answer_id,
+              value: o.answer_value,
+              label: o.answer_text,
+              order: o.display_order,
+            })),
+          };
+        }),
       },
-      trigger: { id: trigger.id, type: trigger.trigger_type },
+      // v5 has assignment/trigger; for v1 facade we return a simple stub
+      trigger: { id: 0, type: 'transaction' },
     };
   }
 
@@ -186,50 +187,46 @@ export class SurveysService {
           throw new ForbiddenException('Feedback window has closed');
         }
       }
-      // Prevent duplicates
-      const dupe = await this.submissionsRepo.findOne({
+      // Prevent duplicates (completed) on families table
+      const dupe = await this.familiesRepo.findOne({
         where: {
-          registration_id: params.dto.registration_id,
           survey_id: params.dto.survey_id,
-          trigger_id: params.dto.trigger_id,
+          linkage_type_NK: params.dto.registration_id,
         },
+        order: { date_added: 'DESC' as any },
       });
-      if (dupe) throw new ConflictException('Survey already submitted for this registration');
+      if (dupe && dupe.survey_status === 'completed')
+        throw new ConflictException('Survey already submitted for this registration');
     }
 
-    const date_key = this.toDateKey(regDateIso);
-    const time_key = this.toTimeKey();
-    const submission = await this.submissionsRepo.save({
+    // Insert family (completed now for v1 facade)
+    const family = await this.familiesRepo.save({
       survey_id: params.dto.survey_id,
-      trigger_id: params.dto.trigger_id,
-      registration_id: params.dto.registration_id ?? null,
-      family_id: null,
-      user_id: dbUserId,
-      overall_rating: params.dto.overall_rating ?? null,
-      comments: params.dto.comments ?? null,
-      date_key,
-      time_key,
-      ip_address: params.meta?.ip ? Buffer.from(params.meta.ip) : null,
-      status_id: 17,
+      linkage_type_id: 0, // registration linkage type placeholder
+      linkage_type_NK: params.dto.registration_id ?? 0,
+      survey_status: 'completed',
+      started_at: new Date(),
+      completed_at: new Date(),
+      status_id: 1,
     } as any);
-    const submissionId = Number(submission.id);
+    const familyId = Number(family.survey_family_id);
 
     if (params.dto.responses?.length) {
       const rows = params.dto.responses.map((r) => ({
-        submission_id: submissionId,
-        question_id: r.question_id,
-        answer_value: r.answer_value,
+        survey_family_id: familyId,
+        survey_question_id: r.question_id,
+        answer_id: null,
+        answer_value: r.answer_value ?? null,
+        answer_text: null,
       }));
-      await this.responsesRepo.insert(rows as any);
+      await this.familyAnswersRepo.insert(rows as any);
     }
 
     return {
-      id: submissionId,
+      id: familyId,
       survey_id: params.dto.survey_id,
       trigger_id: params.dto.trigger_id,
       registration_id: params.dto.registration_id ?? null,
-      date_key,
-      time_key,
     };
   }
 }

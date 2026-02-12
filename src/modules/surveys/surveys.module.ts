@@ -1,12 +1,11 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Survey } from '../../entities/survey.entity';
-import { SurveyQuestion } from '../../entities/survey-question.entity';
-import { AnswerOption } from '../../entities/answer-options.entity';
-import { SurveyAssignment } from '../../entities/survey-assignment.entity';
-import { SurveyTrigger } from '../../entities/survey-triggers.entity';
-import { SurveySubmission } from '../../entities/survey-submissions.entity';
-import { SurveyResponse } from '../../entities/survey-responses.entity';
+import { SurveyFamily } from '../../entities/survey-families.entity';
+import { SurveyFamilyAnswer } from '../../entities/survey-family-answers.entity';
+import { PublicSurvey } from '../../entities-public/survey.public.entity';
+import { PublicSurveyQuestionLibrary } from '../../entities-public/survey-question-library.public.entity';
+import { PublicSurveyAnswerLibrary } from '../../entities-public/survey-answer-library.public.entity';
+import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { Registration } from '../../entities/registration.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { SurveysController } from './surveys.controller';
@@ -17,17 +16,16 @@ import { PublicScheduleModule } from '../public-schedule/public-schedule.module'
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      Survey,
-      SurveyQuestion,
-      AnswerOption,
-      SurveyAssignment,
-      SurveyTrigger,
-      SurveySubmission,
-      SurveyResponse,
-      Registration,
-      Authentication,
-    ]),
+    TypeOrmModule.forFeature([SurveyFamily, SurveyFamilyAnswer, Registration, Authentication]),
+    TypeOrmModule.forFeature(
+      [
+        PublicSurvey,
+        PublicSurveyQuestionLibrary,
+        PublicSurveyAnswerLibrary,
+        PublicSurveyQuestionMap,
+      ],
+      'public',
+    ),
     UsersModule,
     HouseholdsModule,
     PublicScheduleModule,
