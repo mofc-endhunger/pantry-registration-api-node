@@ -32,7 +32,8 @@ export class FeedbackController {
   })
   @Get(':id/feedback')
   async getForReservation(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
-    if (process.env.FEATURE_FEEDBACK !== 'true') {
+    const isDisabled = (process.env.FEATURE_FEEDBACK ?? 'true').toLowerCase() === 'false';
+    if (isDisabled) {
       // Feature disabled: return scaffold without touching DB
       return {
         id: null,
@@ -96,7 +97,8 @@ export class FeedbackController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SubmitFeedbackDto,
   ) {
-    if (process.env.FEATURE_FEEDBACK !== 'true') {
+    const isDisabled = (process.env.FEATURE_FEEDBACK ?? 'true').toLowerCase() === 'false';
+    if (isDisabled) {
       return {
         status: 501,
         message: 'Feedback feature is disabled in this environment',

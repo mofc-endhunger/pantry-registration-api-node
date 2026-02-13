@@ -10,8 +10,8 @@ Audience: Frontend implementers building the Reservations Feedback UI.
 
 #### Feature flag
 
-- When `FEATURE_FEEDBACK=true`, endpoints read/write real data.
-- When not set/false:
+- Default: enabled. Endpoints read/write real data unless explicitly disabled.
+- To disable, set `FEATURE_FEEDBACK=false`:
   - GET returns a small scaffolded questionnaire with `has_submitted=false` (no DB access).
   - POST returns `501` with a “Feedback feature is disabled” message.
 
@@ -102,7 +102,7 @@ Audience: Frontend implementers building the Reservations Feedback UI.
 - `403`: Not yet available or window closed.
 - `409`: Already submitted for this reservation.
 - `422`: Validation error (e.g., missing required responses).
-- `501`: Feature disabled (when `FEATURE_FEEDBACK` is not true).
+- `501`: Feature disabled (when `FEATURE_FEEDBACK=false`).
 
 #### Example (fetch)
 
