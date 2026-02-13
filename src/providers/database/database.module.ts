@@ -26,7 +26,8 @@ import * as entities from '../../entities';
           username: configService.get<string>('database.username'),
           password: configService.get<string>('database.password'),
           database: configService.get<string>('database.database'),
-          entities: Object.values(entities), // Explicitly register all entities
+          entities: [],
+          autoLoadEntities: true,
           // In test, auto-sync the schema; rely on test helpers to truncate between tests
           synchronize: isTest ? true : false,
           dropSchema: false,
