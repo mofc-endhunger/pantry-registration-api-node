@@ -4,6 +4,7 @@ import { Transform, Type } from 'class-transformer';
 
 export class SubmitFeedbackResponseDto {
   @IsInt()
+  @Type(() => Number)
   @Transform(({ value, obj }) => obj?.question_id ?? value)
   question_id!: number;
 
@@ -11,6 +12,7 @@ export class SubmitFeedbackResponseDto {
   @IsInt()
   @Min(1)
   @Max(5)
+  @Type(() => Number)
   @Transform(({ value, obj }) => obj?.scale_value ?? value)
   scale_value?: number;
 }
@@ -19,6 +21,7 @@ export class SubmitFeedbackDto {
   @IsInt()
   @Min(1)
   @Max(5)
+  @Type(() => Number)
   @Transform(({ value, obj }) => obj?.rating ?? value)
   rating!: number;
 
