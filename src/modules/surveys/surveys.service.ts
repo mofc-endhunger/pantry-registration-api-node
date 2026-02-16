@@ -112,12 +112,14 @@ export class SurveysService {
     if (dupe && dupe.survey_status === 'completed') return { has_active: false };
 
     const maps = await this.questionMapRepo.find({
-      where: { survey_id: survey.survey_id },
+      where: { survey_id: survey.survey_id, status_id: 1 as any },
       order: { display_order: 'ASC' as any },
     });
     const qIds = maps.map((m) => m.question_id);
     const questionsLib = qIds.length
-      ? await this.questionsLibRepo.findBy({ question_id: In(qIds) })
+      ? await this.questionsLibRepo.find({
+          where: { question_id: In(qIds), language_id: survey.language_id, status_id: 1 as any },
+        })
       : [];
     const byLibId = new Map<number, PublicSurveyQuestionLibrary>();
     questionsLib.forEach((q) => byLibId.set(q.question_id, q));

@@ -8,6 +8,9 @@ export class PublicSurveyQuestionMap {
   @Column({ type: 'int', unsigned: true, name: 'survey_id' })
   survey_id!: number;
 
+  @Column({ type: 'int', unsigned: true, name: 'section_id', nullable: true })
+  section_id!: number | null;
+
   @Column({ type: 'int', unsigned: true, name: 'question_id' })
   question_id!: number;
 
@@ -16,4 +19,7 @@ export class PublicSurveyQuestionMap {
 
   @Column({ type: 'tinyint', unsigned: true, name: 'is_required', default: () => '0' })
   is_required!: number;
+
+  @Column({ type: 'tinyint', unsigned: true, name: 'status_id', default: () => '1' })
+  status_id!: number;
 }
