@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
-@Entity('surveys', { database: 'freshtrak_public' })
+@Entity('surveys')
 export class PublicSurvey {
   @PrimaryGeneratedColumn({ type: 'int', unsigned: true, name: 'survey_id' })
   survey_id!: number;

@@ -35,13 +35,13 @@ export class SurveysService {
     @InjectRepository(SurveyFamily) private readonly familiesRepo: Repository<SurveyFamily>,
     @InjectRepository(SurveyFamilyAnswer)
     private readonly familyAnswersRepo: Repository<SurveyFamilyAnswer>,
-    @InjectRepository(PublicSurvey, 'public')
+    @InjectRepository(PublicSurvey)
     private readonly surveysRepo: Repository<PublicSurvey>,
-    @InjectRepository(PublicSurveyQuestionLibrary, 'public')
+    @InjectRepository(PublicSurveyQuestionLibrary)
     private readonly questionsLibRepo: Repository<PublicSurveyQuestionLibrary>,
-    @InjectRepository(PublicSurveyAnswerLibrary, 'public')
+    @InjectRepository(PublicSurveyAnswerLibrary)
     private readonly answersLibRepo: Repository<PublicSurveyAnswerLibrary>,
-    @InjectRepository(PublicSurveyQuestionMap, 'public')
+    @InjectRepository(PublicSurveyQuestionMap)
     private readonly questionMapRepo: Repository<PublicSurveyQuestionMap>,
     @InjectRepository(Registration) private readonly regsRepo: Repository<Registration>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
@@ -162,7 +162,7 @@ export class SurveysService {
         '  COALESCE(s.survey_id, s.id)            AS survey_id,',
         '  COALESCE(s.survey_title, s.title)      AS survey_title,',
         '  COALESCE(s.status_id, 1)               AS status_id',
-        'FROM freshtrak_public.surveys s',
+        'FROM surveys s',
         'WHERE COALESCE(s.status_id, 1) = 1',
         'ORDER BY COALESCE(s.survey_id, s.id) DESC',
         'LIMIT 1',

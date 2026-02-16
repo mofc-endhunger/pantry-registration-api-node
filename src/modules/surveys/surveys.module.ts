@@ -17,15 +17,12 @@ import { PublicScheduleModule } from '../public-schedule/public-schedule.module'
 @Module({
   imports: [
     TypeOrmModule.forFeature([SurveyFamily, SurveyFamilyAnswer, Registration, Authentication]),
-    TypeOrmModule.forFeature(
-      [
-        PublicSurvey,
-        PublicSurveyQuestionLibrary,
-        PublicSurveyAnswerLibrary,
-        PublicSurveyQuestionMap,
-      ],
-      'public',
-    ),
+    TypeOrmModule.forFeature([
+      PublicSurvey,
+      PublicSurveyQuestionLibrary,
+      PublicSurveyAnswerLibrary,
+      PublicSurveyQuestionMap,
+    ]),
     UsersModule,
     HouseholdsModule,
     PublicScheduleModule,
