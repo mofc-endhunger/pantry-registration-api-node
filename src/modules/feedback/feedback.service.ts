@@ -149,13 +149,22 @@ export class FeedbackService {
             id: s.id,
             version: 1,
             title: s.title,
-            questions: qs.map((q: any) => ({
-              id: q.id,
-              order: q.order,
-              type: q.type,
-              prompt: q.prompt,
-              required: true,
-            })),
+            questions: qs.map((q: any) => {
+              const base: any = {
+                id: q.id,
+                order: q.order,
+                type: q.type,
+                prompt: q.prompt,
+                required: true,
+              };
+              if (Array.isArray(q.options)) {
+                base.options = q.options;
+              }
+              if (Array.isArray(q.answers)) {
+                base.answers = q.answers;
+              }
+              return base;
+            }),
           };
         }
       } else {
@@ -193,13 +202,22 @@ export class FeedbackService {
           id: s.id,
           version: 1,
           title: s.title,
-          questions: qs.map((q: any) => ({
-            id: q.id,
-            order: q.order,
-            type: q.type,
-            prompt: q.prompt,
-            required: true,
-          })),
+          questions: qs.map((q: any) => {
+            const base: any = {
+              id: q.id,
+              order: q.order,
+              type: q.type,
+              prompt: q.prompt,
+              required: true,
+            };
+            if (Array.isArray(q.options)) {
+              base.options = q.options;
+            }
+            if (Array.isArray(q.answers)) {
+              base.answers = q.answers;
+            }
+            return base;
+          }),
         };
       }
     } else {
