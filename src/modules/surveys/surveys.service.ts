@@ -155,9 +155,9 @@ export class SurveysService {
         title: survey.survey_title,
         questions: maps.map((m) => {
           const lib = byLibId.get(m.question_id);
-          const qType = lib?.question_type ?? 'scale_1_5';
           const at =
             typeof lib?.answer_type_id === 'number' ? byTypeId.get(lib.answer_type_id) : undefined;
+          const qType = at?.answer_type_code ?? lib?.question_type ?? 'scale_1_5';
           const opts = (byQuestion.get(m.question_id) ?? []).map((o) => ({
             id: o.answer_id,
             value: o.answer_value,
@@ -171,9 +171,7 @@ export class SurveysService {
             order: m.display_order,
             options: opts,
           };
-          if (qType === 'multiple_choice' || qType === 'multiple_select') {
-            q.answers = opts; // alias for UI expecting `answers`
-          }
+          if (opts.length > 0) q.answers = opts; // alias for UIs expecting `answers`
           if (at) {
             q.answerType = {
               id: at.answer_type_id,
