@@ -10,8 +10,6 @@ import { PublicSurveyQuestionLibrary } from '../../entities-public/survey-questi
 import { PublicSurveyAnswerLibrary } from '../../entities-public/survey-answer-library.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { PublicAnswerType } from '../../entities-public/types-answer.public.entity';
-import { QuestionnaireVersion } from '../../entities/questionnaire-version.entity';
-import { QuestionnaireQuestion } from '../../entities/questionnaire-question.entity';
 
 @Module({
   imports: [
@@ -39,9 +37,6 @@ import { QuestionnaireQuestion } from '../../entities/questionnaire-question.ent
             // Private write-side
             SurveyFamily,
             SurveyFamilyAnswer,
-            // Legacy questionnaire (fallback scaffold)
-            QuestionnaireVersion,
-            QuestionnaireQuestion,
             // Private read-side survey master tables (now read from default/private DB)
             PublicSurvey,
             PublicSurveyQuestionLibrary,

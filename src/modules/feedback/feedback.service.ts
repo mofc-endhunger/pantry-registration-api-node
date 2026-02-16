@@ -7,8 +7,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { QuestionnaireVersion } from '../../entities/questionnaire-version.entity';
-import { QuestionnaireQuestion } from '../../entities/questionnaire-question.entity';
 import { Registration } from '../../entities/registration.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { UsersService } from '../users/users.service';
@@ -33,10 +31,6 @@ export class FeedbackService {
     @InjectRepository(SurveyFamily) private readonly familiesRepo: Repository<SurveyFamily>,
     @InjectRepository(SurveyFamilyAnswer)
     private readonly responsesRepo: Repository<SurveyFamilyAnswer>,
-    @InjectRepository(QuestionnaireVersion)
-    private readonly qvRepo: Repository<QuestionnaireVersion>,
-    @InjectRepository(QuestionnaireQuestion)
-    private readonly qqRepo: Repository<QuestionnaireQuestion>,
     @InjectRepository(Registration)
     private readonly regsRepo: Repository<Registration>,
     @InjectRepository(Authentication)
