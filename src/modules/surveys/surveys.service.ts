@@ -155,11 +155,10 @@ export class SurveysService {
   }
 
   private async fetchLatestActiveSurveyCompat(): Promise<PublicSurvey | null> {
-    // Private schema uses survey_id/survey_title
-    const latest = await this.surveysRepo.findOne({
-      where: { status_id: 1 },
-      order: { survey_id: 'DESC' as any },
-    });
+    // Private schema uses survey_id/survey_title; prefer query builder for deterministic ordering
+    const qb = this.surveysRepo.createQueryBuilder('s');
+    qb.where('s.status_id = :status', { status: 1 }).orderBy('s.survey_id', 'DESC').limit(1);
+    const latest = await qb.getOne();
     return latest ?? null;
   }
 
