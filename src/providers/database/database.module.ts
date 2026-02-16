@@ -5,6 +5,10 @@ import databaseConfig from '../../config/database.config';
 import * as entities from '../../entities';
 import { SurveyFamily } from '../../entities/survey-families.entity';
 import { SurveyFamilyAnswer } from '../../entities/survey-family-answers.entity';
+import { PublicSurvey } from '../../entities-public/survey.public.entity';
+import { PublicSurveyQuestionLibrary } from '../../entities-public/survey-question-library.public.entity';
+import { PublicSurveyAnswerLibrary } from '../../entities-public/survey-answer-library.public.entity';
+import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 
 @Module({
   imports: [
@@ -28,7 +32,18 @@ import { SurveyFamilyAnswer } from '../../entities/survey-family-answers.entity'
           username: configService.get<string>('database.username'),
           password: configService.get<string>('database.password'),
           database: configService.get<string>('database.database'),
-          entities: [SurveyFamily, SurveyFamilyAnswer, ...Object.values(entities)],
+          entities: [
+            // Private write-side
+            SurveyFamily,
+            SurveyFamilyAnswer,
+            // Private read-side survey master tables (now read from default/private DB)
+            PublicSurvey,
+            PublicSurveyQuestionLibrary,
+            PublicSurveyAnswerLibrary,
+            PublicSurveyQuestionMap,
+            // Remaining app entities
+            ...Object.values(entities),
+          ],
           // In test, auto-sync the schema; rely on test helpers to truncate between tests
           synchronize: isTest ? true : false,
           dropSchema: false,
