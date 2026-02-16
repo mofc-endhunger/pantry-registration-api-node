@@ -140,18 +140,24 @@ export class SurveysService {
         title: survey.survey_title,
         questions: maps.map((m) => {
           const lib = byLibId.get(m.question_id);
-          return {
+          const qType = lib?.question_type ?? 'scale_1_5';
+          const opts = (byQuestion.get(m.question_id) ?? []).map((o) => ({
+            id: o.answer_id,
+            value: o.answer_value,
+            label: o.answer_text,
+            order: o.display_order,
+          }));
+          const q: any = {
             id: m.survey_question_id,
-            type: lib?.question_type ?? 'scale_1_5',
+            type: qType,
             prompt: lib?.question_text ?? '',
             order: m.display_order,
-            options: (byQuestion.get(m.question_id) ?? []).map((o) => ({
-              id: o.answer_id,
-              value: o.answer_value,
-              label: o.answer_text,
-              order: o.display_order,
-            })),
+            options: opts,
           };
+          if (qType === 'multiple_choice' || qType === 'multiple_select') {
+            q.answers = opts; // alias for UI expecting `answers`
+          }
+          return q;
         }),
       },
       // v5 has assignment/trigger; for v1 facade we return a simple stub
