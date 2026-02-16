@@ -5,6 +5,9 @@ export class PublicSurveyAnswerLibrary {
   @PrimaryGeneratedColumn({ type: 'int', unsigned: true, name: 'answer_id' })
   answer_id!: number;
 
+  @Column({ type: 'smallint', unsigned: true, name: 'language_id' })
+  language_id!: number;
+
   @Column({ type: 'int', unsigned: true, name: 'question_id' })
   question_id!: number;
 
@@ -16,4 +19,7 @@ export class PublicSurveyAnswerLibrary {
 
   @Column({ type: 'int', unsigned: true, name: 'display_order', default: () => '0' })
   display_order!: number;
+
+  @Column({ type: 'tinyint', unsigned: true, name: 'status_id', default: () => '1' })
+  status_id!: number;
 }

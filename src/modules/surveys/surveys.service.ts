@@ -121,7 +121,12 @@ export class SurveysService {
       : [];
     const byLibId = new Map<number, PublicSurveyQuestionLibrary>();
     questionsLib.forEach((q) => byLibId.set(q.question_id, q));
-    const answers = qIds.length ? await this.answersLibRepo.findBy({ question_id: In(qIds) }) : [];
+    const answers = qIds.length
+      ? await this.answersLibRepo.find({
+          where: { question_id: In(qIds), status_id: 1, language_id: survey.language_id },
+          order: { question_id: 'ASC' as any, display_order: 'ASC' as any },
+        })
+      : [];
     const byQuestion = new Map<number, PublicSurveyAnswerLibrary[]>();
     answers.forEach((a) => {
       const arr = byQuestion.get(a.question_id) ?? [];
