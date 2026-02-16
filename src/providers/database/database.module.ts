@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import databaseConfig from '../../config/database.config';
 import * as entities from '../../entities';
+import { SurveyFamily } from '../../entities/survey-families.entity';
+import { SurveyFamilyAnswer } from '../../entities/survey-family-answers.entity';
 
 @Module({
   imports: [
@@ -26,8 +28,7 @@ import * as entities from '../../entities';
           username: configService.get<string>('database.username'),
           password: configService.get<string>('database.password'),
           database: configService.get<string>('database.database'),
-          entities: [],
-          autoLoadEntities: true,
+          entities: [SurveyFamily, SurveyFamilyAnswer, ...Object.values(entities)],
           // In test, auto-sync the schema; rely on test helpers to truncate between tests
           synchronize: isTest ? true : false,
           dropSchema: false,
