@@ -13,6 +13,7 @@ import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionLibrary } from '../../entities-public/survey-question-library.public.entity';
 import { PublicSurveyAnswerLibrary } from '../../entities-public/survey-answer-library.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
+import { PublicAnswerType } from '../../entities-public/types-answer.public.entity';
 import { Registration } from '../../entities/registration.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { UsersService } from '../users/users.service';
@@ -43,6 +44,8 @@ export class SurveysService {
     private readonly answersLibRepo: Repository<PublicSurveyAnswerLibrary>,
     @InjectRepository(PublicSurveyQuestionMap)
     private readonly questionMapRepo: Repository<PublicSurveyQuestionMap>,
+    @InjectRepository(PublicAnswerType)
+    private readonly answerTypesRepo: Repository<PublicAnswerType>,
     @InjectRepository(Registration) private readonly regsRepo: Repository<Registration>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
     private readonly usersService: UsersService,
@@ -123,6 +126,16 @@ export class SurveysService {
       : [];
     const byLibId = new Map<number, PublicSurveyQuestionLibrary>();
     questionsLib.forEach((q) => byLibId.set(q.question_id, q));
+    const typeIds = Array.from(
+      new Set(questionsLib.map((q) => q.answer_type_id).filter((v) => typeof v === 'number')),
+    );
+    const answerTypes = typeIds.length
+      ? await this.answerTypesRepo.find({
+          where: { answer_type_id: In(typeIds), status_id: 1 as any },
+        })
+      : [];
+    const byTypeId = new Map<number, PublicAnswerType>();
+    answerTypes.forEach((t) => byTypeId.set(t.answer_type_id, t));
     const answers = qIds.length
       ? await this.answersLibRepo.find({
           where: { question_id: In(qIds), status_id: 1, language_id: survey.language_id },
@@ -143,6 +156,8 @@ export class SurveysService {
         questions: maps.map((m) => {
           const lib = byLibId.get(m.question_id);
           const qType = lib?.question_type ?? 'scale_1_5';
+          const at =
+            typeof lib?.answer_type_id === 'number' ? byTypeId.get(lib.answer_type_id) : undefined;
           const opts = (byQuestion.get(m.question_id) ?? []).map((o) => ({
             id: o.answer_id,
             value: o.answer_value,
@@ -158,6 +173,13 @@ export class SurveysService {
           };
           if (qType === 'multiple_choice' || qType === 'multiple_select') {
             q.answers = opts; // alias for UI expecting `answers`
+          }
+          if (at) {
+            q.answerType = {
+              id: at.answer_type_id,
+              name: at.answer_type_name,
+              code: at.answer_type_code,
+            };
           }
           return q;
         }),
@@ -229,13 +251,80 @@ export class SurveysService {
     const familyId = Number(family.survey_family_id);
 
     if (params.dto.responses?.length) {
-      const rows = params.dto.responses.map((r) => ({
-        survey_family_id: familyId,
-        survey_question_id: r.question_id,
-        answer_id: null,
-        answer_value: r.answer_value ?? null,
-        answer_text: null,
-      }));
+      // Build rows with validation/mapping for multiple choice answers
+      const rows: Array<{
+        survey_family_id: number;
+        survey_question_id: number;
+        answer_id: number | null;
+        answer_value: string | null;
+        answer_text: string | null;
+      }> = [];
+
+      for (const r of params.dto.responses) {
+        const surveyQuestionId = Number(r.question_id);
+
+        // Resolve map → library question_id
+        const map = await this.questionMapRepo.findOne({
+          where: { survey_question_id: surveyQuestionId },
+        });
+        if (!map) {
+          throw new NotFoundException(`Survey question ${surveyQuestionId} not found`);
+        }
+
+        let answerId: number | null = null;
+        let answerValue: string | null = null;
+        let answerText: string | null = null;
+
+        // If answer_id provided, validate it belongs to this question_id
+        if (typeof (r as any).answer_id === 'number') {
+          const a = await this.answersLibRepo.findOne({
+            where: {
+              answer_id: (r as any).answer_id,
+              question_id: map.question_id,
+              status_id: 1 as any,
+            },
+          });
+          if (!a) {
+            throw new NotFoundException(
+              `answer_id ${(r as any).answer_id} not valid for question_id ${map.question_id}`,
+            );
+          }
+          answerId = Number(a.answer_id);
+          // Prefer explicit answer_value from request, else library's coded value (can be NULL)
+          answerValue =
+            typeof (r as any).answer_value === 'string' && (r as any).answer_value.length > 0
+              ? (r as any).answer_value
+              : (a.answer_value ?? null);
+        } else {
+          // Free text / numeric / scale: take provided answer_value (string) if any
+          if (typeof (r as any).answer_value === 'string' && (r as any).answer_value.length > 0) {
+            answerValue = (r as any).answer_value;
+          } else {
+            answerValue = null;
+          }
+        }
+
+        // Optional supplemental text
+        if (typeof (r as any).answer_text === 'string' && (r as any).answer_text.length > 0) {
+          answerText = (r as any).answer_text;
+        }
+
+        // At least one of answer_id, answer_value, answer_text should be present
+        if (answerId === null && answerValue === null && answerText === null) {
+          throw new ConflictException(
+            `No response provided for survey_question_id ${surveyQuestionId}`,
+          );
+        }
+
+        rows.push({
+          survey_family_id: familyId,
+          survey_question_id: surveyQuestionId,
+          answer_id: answerId,
+          answer_value: answerValue,
+          answer_text: answerText,
+        });
+      }
+
       await this.familyAnswersRepo.insert(rows as any);
     }
 

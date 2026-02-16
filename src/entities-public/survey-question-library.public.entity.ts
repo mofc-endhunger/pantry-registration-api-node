@@ -8,6 +8,9 @@ export class PublicSurveyQuestionLibrary {
   @Column({ type: 'smallint', unsigned: true, name: 'language_id' })
   language_id!: number;
 
+  @Column({ type: 'tinyint', unsigned: true, name: 'answer_type_id', nullable: true })
+  answer_type_id!: number | null;
+
   @Column({ type: 'text', name: 'question_text' })
   question_text!: string;
 

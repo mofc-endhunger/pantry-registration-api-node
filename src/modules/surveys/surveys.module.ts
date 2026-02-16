@@ -6,6 +6,7 @@ import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionLibrary } from '../../entities-public/survey-question-library.public.entity';
 import { PublicSurveyAnswerLibrary } from '../../entities-public/survey-answer-library.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
+import { PublicAnswerType } from '../../entities-public/types-answer.public.entity';
 import { Registration } from '../../entities/registration.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { SurveysController } from './surveys.controller';
@@ -22,6 +23,7 @@ import { PublicScheduleModule } from '../public-schedule/public-schedule.module'
       PublicSurveyQuestionLibrary,
       PublicSurveyAnswerLibrary,
       PublicSurveyQuestionMap,
+      PublicAnswerType,
     ]),
     UsersModule,
     HouseholdsModule,

@@ -9,6 +9,7 @@ import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionLibrary } from '../../entities-public/survey-question-library.public.entity';
 import { PublicSurveyAnswerLibrary } from '../../entities-public/survey-answer-library.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
+import { PublicAnswerType } from '../../entities-public/types-answer.public.entity';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-m
             PublicSurveyQuestionLibrary,
             PublicSurveyAnswerLibrary,
             PublicSurveyQuestionMap,
+            PublicAnswerType,
             // Remaining app entities
             ...Object.values(entities),
           ],
