@@ -183,6 +183,9 @@ export class FeedbackService {
           const v = Number(r.answer_value);
           return {
             question_id: r.survey_question_id,
+            answer_id: r.answer_id ?? null,
+            answer_value: r.answer_value ?? null,
+            answer_text: r.answer_text ?? null,
             scale_value: Number.isFinite(v) ? v : undefined,
           };
         }),
