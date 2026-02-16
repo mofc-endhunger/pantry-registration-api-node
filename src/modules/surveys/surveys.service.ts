@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { SurveyFamily } from '../../entities/survey-families.entity';
 import { SurveyFamilyAnswer } from '../../entities/survey-family-answers.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
@@ -117,11 +117,11 @@ export class SurveysService {
     });
     const qIds = maps.map((m) => m.question_id);
     const questionsLib = qIds.length
-      ? await this.questionsLibRepo.findBy({ question_id: qIds as unknown as any })
+      ? await this.questionsLibRepo.findBy({ question_id: In(qIds) })
       : [];
     const byLibId = new Map<number, PublicSurveyQuestionLibrary>();
     questionsLib.forEach((q) => byLibId.set(q.question_id, q));
-    const answers = await this.answersLibRepo.find();
+    const answers = qIds.length ? await this.answersLibRepo.findBy({ question_id: In(qIds) }) : [];
     const byQuestion = new Map<number, PublicSurveyAnswerLibrary[]>();
     answers.forEach((a) => {
       const arr = byQuestion.get(a.question_id) ?? [];
