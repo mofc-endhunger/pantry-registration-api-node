@@ -69,58 +69,35 @@ export class FeedbackService {
     return r;
   }
 
-  private async getActiveQuestionnaire() {
-    const qv =
-      (await this.qvRepo.findOne({
-        where: { is_active: true },
-        order: { version: 'DESC' as any },
-      })) ?? null;
-    if (!qv) {
-      // fallback scaffold (no persistence)
-      return {
-        id: 0,
-        version: 1,
-        title: 'Post-Event Feedback',
-        questions: [
-          {
-            id: 101,
-            order: 1,
-            type: 'scale_1_5',
-            prompt: 'How satisfied were you with check-in?',
-            required: true,
-          },
-          {
-            id: 102,
-            order: 2,
-            type: 'scale_1_5',
-            prompt: 'How satisfied were you with wait time?',
-            required: true,
-          },
-          {
-            id: 103,
-            order: 3,
-            type: 'scale_1_5',
-            prompt: 'How satisfied were you with overall service?',
-            required: true,
-          },
-        ],
-      };
-    }
-    const questions = await this.qqRepo.find({
-      where: { questionnaire_version_id: qv.id },
-      order: { display_order: 'ASC' as any },
-    });
+  private getActiveQuestionnaire() {
+    // Always return a lightweight scaffold without DB access
     return {
-      id: qv.id,
-      version: qv.version,
-      title: qv.title,
-      questions: questions.map((q) => ({
-        id: q.id,
-        order: q.display_order,
-        type: q.type,
-        prompt: q.prompt,
-        required: q.required,
-      })),
+      id: 0,
+      version: 1,
+      title: 'Post-Event Feedback',
+      questions: [
+        {
+          id: 101,
+          order: 1,
+          type: 'likert_5',
+          prompt: 'How satisfied were you with check-in?',
+          required: true,
+        },
+        {
+          id: 102,
+          order: 2,
+          type: 'likert_5',
+          prompt: 'How satisfied were you with wait time?',
+          required: true,
+        },
+        {
+          id: 103,
+          order: 3,
+          type: 'likert_5',
+          prompt: 'How satisfied were you with overall service?',
+          required: true,
+        },
+      ],
     };
   }
 
@@ -168,7 +145,7 @@ export class FeedbackService {
           };
         }
       } else {
-        questionnaire = await this.getActiveQuestionnaire();
+        questionnaire = this.getActiveQuestionnaire();
       }
       return {
         id: Number(existing.survey_family_id),
@@ -224,7 +201,7 @@ export class FeedbackService {
         };
       }
     } else {
-      questionnaire = await this.getActiveQuestionnaire();
+      questionnaire = this.getActiveQuestionnaire();
     }
     return {
       id: null,
