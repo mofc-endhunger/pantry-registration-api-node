@@ -95,12 +95,8 @@ export class SurveysService {
 
     if (params.registrationId) {
       await this.assertRegistrationOwnership(params.registrationId, dbUserId);
-      // Placeholder strategy: latest active survey in public
-      survey =
-        (await this.surveysRepo.findOne({
-          where: { status_id: 1 },
-          order: { survey_id: 'DESC' as any },
-        })) ?? null;
+      // Placeholder strategy: latest active survey in public, with column compatibility
+      survey = await this.fetchLatestActiveSurveyCompat();
     } else {
       // No context → no active survey
       return { has_active: false };
@@ -156,6 +152,29 @@ export class SurveysService {
       // v5 has assignment/trigger; for v1 facade we return a simple stub
       trigger: { id: 0, type: 'transaction' },
     };
+  }
+
+  private async fetchLatestActiveSurveyCompat(): Promise<PublicSurvey | null> {
+    // Support both v5 (survey_id, survey_title) and legacy (id, title) column names
+    const rows = await this.surveysRepo.query(
+      [
+        'SELECT',
+        '  COALESCE(s.survey_id, s.id)            AS survey_id,',
+        '  COALESCE(s.survey_title, s.title)      AS survey_title,',
+        '  COALESCE(s.status_id, 1)               AS status_id',
+        'FROM freshtrak_public.surveys s',
+        'WHERE COALESCE(s.status_id, 1) = 1',
+        'ORDER BY COALESCE(s.survey_id, s.id) DESC',
+        'LIMIT 1',
+      ].join(' '),
+    );
+    if (!rows?.length) return null;
+    // Coerce to PublicSurvey-like shape
+    return {
+      survey_id: Number(rows[0].survey_id),
+      survey_title: rows[0].survey_title as string,
+      status_id: Number(rows[0].status_id),
+    } as unknown as PublicSurvey;
   }
 
   async submit(params: {
