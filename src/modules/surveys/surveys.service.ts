@@ -167,6 +167,7 @@ export class SurveysService {
         prompt: lib?.question_text ?? '',
         order: m.display_order,
         section_id: m.section_id ?? null,
+        required: m.is_required === 1,
         options: opts,
       };
       if (opts.length > 0) q.answers = opts; // alias for UIs expecting `answers`
@@ -202,6 +203,44 @@ export class SurveysService {
       })
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
+    // Resume support: if an in-progress family exists, return previous answers and next section hint
+    let previousResponses: Array<{
+      question_id: number;
+      answer_id: number | null;
+      answer_value: string | null;
+      answer_text: string | null;
+    }> = [];
+    let progress: { family_id: number; status: string; next_section_id: number | null } | undefined;
+    if (dupe && dupe.survey_status !== 'completed') {
+      const famId = Number(dupe.survey_family_id);
+      const existingAnswers = await this.familyAnswersRepo.find({
+        where: { survey_family_id: famId as any },
+      });
+      const answeredSet = new Set<number>(existingAnswers.map((r) => Number(r.survey_question_id)));
+      previousResponses = existingAnswers.map((r) => ({
+        question_id: Number(r.survey_question_id),
+        answer_id: r.answer_id,
+        answer_value: r.answer_value,
+        answer_text: r.answer_text,
+      }));
+      // Determine next section: first section with any required question unanswered
+      let nextSectionId: number | null = null;
+      for (const s of sections) {
+        const reqQs = s.questions.filter((q) => q.required === true);
+        const allReqAnswered =
+          reqQs.length === 0 ? true : reqQs.every((q) => answeredSet.has(Number(q.id)));
+        if (!allReqAnswered) {
+          nextSectionId = s.id ?? null;
+          break;
+        }
+      }
+      progress = {
+        family_id: famId,
+        status: dupe.survey_status,
+        next_section_id: nextSectionId,
+      };
+    }
+
     return {
       has_active: true,
       survey: {
@@ -211,9 +250,12 @@ export class SurveysService {
         questions: flatQuestions,
         // New: sectioned pages
         sections,
+        // Prefill data for resuming
+        previous_responses: previousResponses,
       },
       // v5 has assignment/trigger; for v1 facade we return a simple stub
       trigger: { id: 0, type: 'transaction' },
+      progress,
     };
   }
 
