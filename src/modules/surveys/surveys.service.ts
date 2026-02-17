@@ -148,39 +148,69 @@ export class SurveysService {
       arr.push(a);
       byQuestion.set(a.question_id, arr);
     });
+
+    // Build flat question list (back-compat) and sectioned structure
+    const buildQuestion = (m: PublicSurveyQuestionMap) => {
+      const lib = byLibId.get(m.question_id);
+      const at =
+        typeof lib?.answer_type_id === 'number' ? byTypeId.get(lib.answer_type_id) : undefined;
+      const qType = at?.answer_type_code ?? lib?.question_type ?? 'scale_1_5';
+      const opts = (byQuestion.get(m.question_id) ?? []).map((o) => ({
+        id: o.answer_id,
+        value: o.answer_value,
+        label: o.answer_text,
+        order: o.display_order,
+      }));
+      const q: any = {
+        id: m.survey_question_id,
+        type: qType,
+        prompt: lib?.question_text ?? '',
+        order: m.display_order,
+        section_id: m.section_id ?? null,
+        options: opts,
+      };
+      if (opts.length > 0) q.answers = opts; // alias for UIs expecting `answers`
+      if (at) {
+        q.answerType = {
+          id: at.answer_type_id,
+          name: at.answer_type_name,
+          code: at.answer_type_code,
+        };
+      }
+      return q;
+    };
+
+    const flatQuestions = maps.map(buildQuestion);
+
+    // Group into sections (pages) using section_id; unknown/null section grouped under 0
+    const bySection = new Map<number, any[]>();
+    for (const m of maps) {
+      const sid = m.section_id ?? 0;
+      const arr = bySection.get(sid) ?? [];
+      arr.push(buildQuestion(m));
+      bySection.set(sid, arr);
+    }
+    const sections = Array.from(bySection.entries())
+      .map(([sid, qs]) => {
+        const ord = Math.min(...qs.map((q: any) => Number(q.order) || 0));
+        return {
+          id: sid === 0 ? null : sid,
+          order: ord,
+          title: null, // optional enhancement: load from survey_sections if available
+          questions: qs,
+        };
+      })
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
     return {
       has_active: true,
       survey: {
         id: survey.survey_id,
         title: survey.survey_title,
-        questions: maps.map((m) => {
-          const lib = byLibId.get(m.question_id);
-          const at =
-            typeof lib?.answer_type_id === 'number' ? byTypeId.get(lib.answer_type_id) : undefined;
-          const qType = at?.answer_type_code ?? lib?.question_type ?? 'scale_1_5';
-          const opts = (byQuestion.get(m.question_id) ?? []).map((o) => ({
-            id: o.answer_id,
-            value: o.answer_value,
-            label: o.answer_text,
-            order: o.display_order,
-          }));
-          const q: any = {
-            id: m.survey_question_id,
-            type: qType,
-            prompt: lib?.question_text ?? '',
-            order: m.display_order,
-            options: opts,
-          };
-          if (opts.length > 0) q.answers = opts; // alias for UIs expecting `answers`
-          if (at) {
-            q.answerType = {
-              id: at.answer_type_id,
-              name: at.answer_type_name,
-              code: at.answer_type_code,
-            };
-          }
-          return q;
-        }),
+        // Back-compat flat array
+        questions: flatQuestions,
+        // New: sectioned pages
+        sections,
       },
       // v5 has assignment/trigger; for v1 facade we return a simple stub
       trigger: { id: 0, type: 'transaction' },
@@ -224,29 +254,48 @@ export class SurveysService {
           throw new ForbiddenException('Feedback window has closed');
         }
       }
-      // Prevent duplicates (completed) on families table
-      const dupe = await this.familiesRepo.findOne({
-        where: {
-          survey_id: params.dto.survey_id,
-          linkage_type_NK: params.dto.registration_id,
-        },
-        order: { date_added: 'DESC' as any },
-      });
-      if (dupe && dupe.survey_status === 'completed')
-        throw new ConflictException('Survey already submitted for this registration');
     }
 
-    // Insert family (completed now for v1 facade)
-    const family = await this.familiesRepo.save({
-      survey_id: params.dto.survey_id,
-      linkage_type_id: 0, // registration linkage type placeholder
-      linkage_type_NK: params.dto.registration_id ?? 0,
-      survey_status: 'completed',
-      started_at: new Date(),
-      completed_at: new Date(),
-      status_id: 1,
-    } as any);
-    const familyId = Number(family.survey_family_id);
+    // Upsert/resolve a family record allowing staged completion
+    const existing = await this.familiesRepo.findOne({
+      where: {
+        survey_id: params.dto.survey_id,
+        linkage_type_id: 0 as any,
+        linkage_type_NK: params.dto.registration_id ?? 0,
+      },
+      order: { date_added: 'DESC' as any },
+    });
+
+    if (existing && existing.survey_status === 'completed') {
+      throw new ConflictException('Survey already submitted for this registration');
+    }
+
+    const isFinal = params.dto.is_final !== undefined ? Boolean(params.dto.is_final) : true;
+
+    let familyId: number;
+    if (existing) {
+      // Update timestamps/status on existing in-progress
+      await this.familiesRepo.update(
+        { survey_family_id: existing.survey_family_id } as any,
+        {
+          survey_status: isFinal ? 'completed' : 'in_progress',
+          started_at: existing.started_at ?? new Date(),
+          completed_at: isFinal ? new Date() : null,
+        } as any,
+      );
+      familyId = Number(existing.survey_family_id);
+    } else {
+      const created = await this.familiesRepo.save({
+        survey_id: params.dto.survey_id,
+        linkage_type_id: 0, // registration linkage type placeholder
+        linkage_type_NK: params.dto.registration_id ?? 0,
+        survey_status: isFinal ? 'completed' : 'in_progress',
+        started_at: new Date(),
+        completed_at: isFinal ? new Date() : null,
+        status_id: 1,
+      } as any);
+      familyId = Number(created.survey_family_id);
+    }
 
     if (params.dto.responses?.length) {
       // Build rows with validation/mapping for multiple choice answers
@@ -314,6 +363,12 @@ export class SurveysService {
           );
         }
 
+        // Replace any prior answer for this question/family to support staged edits
+        await this.familyAnswersRepo.delete({
+          survey_family_id: familyId as any,
+          survey_question_id: surveyQuestionId as any,
+        } as any);
+
         rows.push({
           survey_family_id: familyId,
           survey_question_id: surveyQuestionId,
@@ -331,6 +386,8 @@ export class SurveysService {
       survey_id: params.dto.survey_id,
       trigger_id: params.dto.trigger_id,
       registration_id: params.dto.registration_id ?? null,
+      status: isFinal ? 'completed' : 'in_progress',
+      section_id: params.dto.section_id ?? null,
     };
   }
 }

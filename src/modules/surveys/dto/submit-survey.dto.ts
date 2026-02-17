@@ -4,12 +4,25 @@ import { Transform, Type } from 'class-transformer';
 
 export class SubmitSurveyResponseDto {
   @IsInt()
+  @Type(() => Number)
   @Transform(({ value, obj }) => obj?.question_id ?? value)
   question_id!: number;
 
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Transform(({ value, obj }) => obj?.answer_id ?? value)
+  answer_id?: number;
+
+  @IsOptional()
   @IsString()
   @Transform(({ value, obj }) => obj?.answer_value ?? value)
-  answer_value!: string;
+  answer_value?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value, obj }) => obj?.answer_text ?? value)
+  answer_text?: string;
 }
 
 export class SubmitSurveyDto {
@@ -25,6 +38,20 @@ export class SubmitSurveyDto {
   @IsInt()
   @Transform(({ value, obj }) => obj?.registration_id ?? value)
   registration_id?: number;
+
+  // Optional section context for staged submits
+  @IsOptional()
+  @IsInt()
+  @Type(() => Number)
+  @Transform(({ value, obj }) => obj?.section_id ?? value)
+  section_id?: number;
+
+  // When false, treat this as a save-progress (in_progress); when true or omitted, finalize
+  @IsOptional()
+  @Transform(({ value, obj }) =>
+    (obj?.is_final ?? value ?? true) === 'false' ? false : Boolean(obj?.is_final ?? value ?? true),
+  )
+  is_final?: boolean;
 
   @IsOptional()
   @IsInt()
