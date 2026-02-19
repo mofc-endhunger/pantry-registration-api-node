@@ -71,7 +71,13 @@ export class UsersController {
     if (!dbUserId) throw new NotFoundException('User not found');
     // Get the full household template for PATCH
     const household = await this.usersService.getHouseholdTemplateForUser(dbUserId);
-    return household;
+    // Ensure language_id is always present in response
+    try {
+      const u = await this.usersService.findById(dbUserId);
+      return { ...household, language_id: u.language_id ?? null };
+    } catch {
+      return { ...household, language_id: null };
+    }
   }
 
   @Get(':id')

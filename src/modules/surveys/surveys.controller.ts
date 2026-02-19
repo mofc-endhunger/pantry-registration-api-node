@@ -29,11 +29,48 @@ export class SurveysController {
   })
   @ApiOkResponse({ description: 'Active survey or has_active=false' })
   @Get('active')
-  async getActive(@Req() req: Request, @Query('registration_id') registrationId?: string) {
+  async getActive(
+    @Req() req: Request,
+    @Query('registration_id') registrationId?: string,
+    @Query('language_id') languageId?: string,
+  ) {
     const user = req.user as any;
     const guestToken = (req.headers['x-guest-token'] as string) || undefined;
     const id = registrationId ? parseInt(registrationId, 10) : undefined;
-    return this.surveysService.getActive({ user, guestToken, registrationId: id });
+    const lang = languageId ? parseInt(languageId, 10) : undefined;
+    return this.surveysService.getActive({
+      user,
+      guestToken,
+      registrationId: id,
+      languageId: lang,
+    });
+  }
+
+  @UseGuards(GuestOrJwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('Guest-Token')
+  @ApiOperation({
+    summary: 'Get client-side survey bundle',
+    description:
+      'Returns a normalized package (sections, questions, options, rules, progress) for client-driven navigation.',
+  })
+  @ApiOkResponse({ description: 'Survey client bundle or has_active=false' })
+  @Get('client-bundle')
+  async getClientBundle(
+    @Req() req: Request,
+    @Query('registration_id') registrationId?: string,
+    @Query('language_id') languageId?: string,
+  ) {
+    const user = req.user as any;
+    const guestToken = (req.headers['x-guest-token'] as string) || undefined;
+    const id = registrationId ? parseInt(registrationId, 10) : undefined;
+    const lang = languageId ? parseInt(languageId, 10) : undefined;
+    return this.surveysService.getClientBundle({
+      user,
+      guestToken,
+      registrationId: id,
+      languageId: lang,
+    });
   }
 
   @UseGuards(GuestOrJwtAuthGuard)

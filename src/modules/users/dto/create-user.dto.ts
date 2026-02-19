@@ -92,4 +92,9 @@ export class CreateUserDto {
   @IsInt()
   @IsOptional()
   household_id?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @IsOptional()
+  language_id?: number;
 }

@@ -14,6 +14,7 @@ import { PublicSurveyQuestionLibrary } from '../../entities-public/survey-questi
 import { PublicSurveyAnswerLibrary } from '../../entities-public/survey-answer-library.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { PublicAnswerType } from '../../entities-public/types-answer.public.entity';
+import { PublicSurveySkipLogic } from '../../entities-public/survey-skip-logic.public.entity';
 import { Registration } from '../../entities/registration.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { UsersService } from '../users/users.service';
@@ -46,6 +47,8 @@ export class SurveysService {
     private readonly questionMapRepo: Repository<PublicSurveyQuestionMap>,
     @InjectRepository(PublicAnswerType)
     private readonly answerTypesRepo: Repository<PublicAnswerType>,
+    @InjectRepository(PublicSurveySkipLogic)
+    private readonly skipRepo: Repository<PublicSurveySkipLogic>,
     @InjectRepository(Registration) private readonly regsRepo: Repository<Registration>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
     private readonly usersService: UsersService,
@@ -91,15 +94,20 @@ export class SurveysService {
     return date.getHours() * 60 + date.getMinutes();
   }
 
-  async getActive(params: { user: AuthUser; guestToken?: string; registrationId?: number }) {
+  async getActive(params: {
+    user: AuthUser;
+    guestToken?: string;
+    registrationId?: number;
+    languageId?: number;
+  }) {
     // For v1: transactional context only if registrationId provided
     const dbUserId = await this.resolveDbUserId(params.user, params.guestToken);
     let survey: PublicSurvey | null = null;
 
     if (params.registrationId) {
       await this.assertRegistrationOwnership(params.registrationId, dbUserId);
-      // Placeholder strategy: latest active survey in public, with column compatibility
-      survey = await this.fetchLatestActiveSurveyCompat();
+      // Placeholder strategy: latest active survey, prefer requested language if provided
+      survey = await this.fetchLatestActiveSurveyCompat(params.languageId);
     } else {
       // No context → no active survey
       return { has_active: false };
@@ -112,16 +120,29 @@ export class SurveysService {
       where: { survey_id: survey.survey_id, linkage_type_NK: params.registrationId },
       order: { date_added: 'DESC' as any },
     });
-    if (dupe && dupe.survey_status === 'completed') return { has_active: false };
+    if (dupe) {
+      if (dupe.survey_status === 'completed') return { has_active: false };
+      // Respect display/expiry window based on presented_at when assigned
+      if (dupe.presented_at) {
+        const now = new Date();
+        const presentedAt = new Date(dupe.presented_at as any);
+        const expiresAt = new Date(presentedAt.getTime());
+        expiresAt.setDate(expiresAt.getDate() + 7);
+        if (now < presentedAt) return { has_active: false };
+        if (now > expiresAt) return { has_active: false };
+      }
+    }
 
     const maps = await this.questionMapRepo.find({
       where: { survey_id: survey.survey_id, status_id: 1 as any },
       order: { display_order: 'ASC' as any },
     });
     const qIds = maps.map((m) => m.question_id);
+    // Determine language for libraries (prefer requested → survey.language_id)
+    const languageId = params.languageId ?? survey.language_id;
     const questionsLib = qIds.length
       ? await this.questionsLibRepo.find({
-          where: { question_id: In(qIds), language_id: survey.language_id, status_id: 1 as any },
+          where: { question_id: In(qIds), language_id: languageId, status_id: 1 as any },
         })
       : [];
     const byLibId = new Map<number, PublicSurveyQuestionLibrary>();
@@ -138,7 +159,7 @@ export class SurveysService {
     answerTypes.forEach((t) => byTypeId.set(t.answer_type_id, t));
     const answers = qIds.length
       ? await this.answersLibRepo.find({
-          where: { question_id: In(qIds), status_id: 1, language_id: survey.language_id },
+          where: { question_id: In(qIds), status_id: 1, language_id: languageId },
           order: { question_id: 'ASC' as any, display_order: 'ASC' as any },
         })
       : [];
@@ -246,6 +267,7 @@ export class SurveysService {
       survey: {
         id: survey.survey_id,
         title: survey.survey_title,
+        language_id: languageId,
         // Back-compat flat array
         questions: flatQuestions,
         // New: sectioned pages
@@ -259,10 +281,85 @@ export class SurveysService {
     };
   }
 
-  private async fetchLatestActiveSurveyCompat(): Promise<PublicSurvey | null> {
+  // Rich client bundle for client-driven navigation (sections, questions, options, rules, progress)
+  async getClientBundle(params: {
+    user: AuthUser;
+    guestToken?: string;
+    registrationId?: number;
+    languageId?: number;
+  }) {
+    const base = await this.getActive(params);
+    if (!base?.has_active || !base?.survey) return base;
+
+    const surveyId: number = (base.survey as any).id;
+
+    // Build simple indexes for client
+    const sections = (base.survey as any).sections as Array<{
+      id: number | null;
+      order: number;
+      title: string | null;
+      questions: Array<any>;
+    }>;
+    const flatQuestions: Array<any> = (base.survey as any).questions ?? [];
+
+    // Resolve skip logic rules for current survey questions
+    const questionIds = flatQuestions.map((q) => Number(q.id)).filter((n) => Number.isFinite(n));
+    const skipRows = questionIds.length
+      ? await this.skipRepo.find({
+          where: { survey_question_id: In(questionIds), status_id: 1 as any },
+          order: { logic_id: 'ASC' as any },
+        })
+      : [];
+    const skipLogic = skipRows.map((r) => ({
+      source_question_id: r.survey_question_id,
+      answer_id: r.answer_id,
+      destination_question_id: r.destination_survey_question_id,
+    }));
+
+    const questionsById: Record<string, any> = {};
+    const optionsByQuestionId: Record<string, Array<any>> = {};
+    const requiredByQuestionId: Record<string, boolean> = {};
+
+    for (const q of flatQuestions) {
+      questionsById[String(q.id)] = {
+        id: q.id,
+        type: q.type,
+        prompt: q.prompt,
+        order: q.order,
+        section_id: q.section_id ?? null,
+        required: q.required ?? false,
+        answerType: q.answerType ?? undefined,
+      };
+      requiredByQuestionId[String(q.id)] = q.required === true;
+      const opts = Array.isArray(q.options) ? q.options : [];
+      optionsByQuestionId[String(q.id)] = opts;
+    }
+
+    return {
+      ...base,
+      engine: {
+        survey_id: surveyId,
+        language_id: (base as any)?.survey?.language_id ?? 1,
+        sections,
+        questions: flatQuestions,
+        questionsById,
+        optionsByQuestionId,
+        rules: {
+          skipLogic,
+          requiredByQuestionId,
+        },
+      },
+    };
+  }
+
+  private async fetchLatestActiveSurveyCompat(languageId?: number): Promise<PublicSurvey | null> {
     // Private schema uses survey_id/survey_title; prefer query builder for deterministic ordering
     const qb = this.surveysRepo.createQueryBuilder('s');
-    qb.where('s.status_id = :status', { status: 1 }).orderBy('s.survey_id', 'DESC').limit(1);
+    qb.where('s.status_id = :status', { status: 1 });
+    if (typeof languageId === 'number') {
+      qb.andWhere('s.language_id = :lang', { lang: languageId });
+    }
+    qb.orderBy('s.survey_id', 'DESC').limit(1);
     const latest = await qb.getOne();
     return latest ?? null;
   }
@@ -337,6 +434,20 @@ export class SurveysService {
         status_id: 1,
       } as any);
       familyId = Number(created.survey_family_id);
+    }
+
+    // If a family row exists with presented_at, enforce 7-day window from presented_at
+    if (existing?.presented_at) {
+      const now = new Date();
+      const presentedAt = new Date(existing.presented_at as any);
+      const expiresAt = new Date(presentedAt.getTime());
+      expiresAt.setDate(expiresAt.getDate() + 7);
+      if (now < presentedAt) {
+        throw new ForbiddenException('Feedback not yet available for this event');
+      }
+      if (now > expiresAt) {
+        throw new ForbiddenException('Feedback window has closed');
+      }
     }
 
     if (params.dto.responses?.length) {

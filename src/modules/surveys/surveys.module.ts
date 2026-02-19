@@ -7,6 +7,7 @@ import { PublicSurveyQuestionLibrary } from '../../entities-public/survey-questi
 import { PublicSurveyAnswerLibrary } from '../../entities-public/survey-answer-library.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { PublicAnswerType } from '../../entities-public/types-answer.public.entity';
+import { PublicSurveySkipLogic } from '../../entities-public/survey-skip-logic.public.entity';
 import { Registration } from '../../entities/registration.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { SurveysController } from './surveys.controller';
@@ -24,6 +25,7 @@ import { PublicScheduleModule } from '../public-schedule/public-schedule.module'
       PublicSurveyAnswerLibrary,
       PublicSurveyQuestionMap,
       PublicAnswerType,
+      PublicSurveySkipLogic,
     ]),
     UsersModule,
     HouseholdsModule,
