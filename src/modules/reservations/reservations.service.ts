@@ -171,11 +171,19 @@ export class ReservationsService {
         // Survey availability (surface any non-completed survey so UI can decide gating)
         let survey: { id: number; status: string } | null = null;
         try {
-          // Match by registration linkage key; do not require a specific linkage_type_id
-          const fam = await this.familiesRepo.findOne({
-            where: { linkage_type_NK: r.id as any } as any,
-            order: { date_added: 'DESC' as any },
-          });
+          // Match by registration linkage key with loose typing (string/number), else fallback to family_id
+          const fam =
+            (await this.familiesRepo.findOne({
+              where: [
+                { linkage_type_NK: Number(r.id) as any },
+                { linkage_type_NK: String(r.id) as any },
+              ] as any,
+              order: { date_added: 'DESC' as any },
+            })) ||
+            (await this.familiesRepo.findOne({
+              where: { family_id: r.household_id as any } as any,
+              order: { date_added: 'DESC' as any },
+            }));
           if (fam && fam.survey_status !== 'completed') {
             survey = { id: Number(fam.survey_id), status: String(fam.survey_status) };
           }
@@ -289,6 +297,29 @@ export class ReservationsService {
         household_id: r.household_id,
         created_at: r.created_at.toISOString(),
         updated_at: r.updated_at.toISOString(),
+        // Surface survey info for single reservation as well
+        survey: await (async () => {
+          try {
+            const fam =
+              (await this.familiesRepo.findOne({
+                where: [
+                  { linkage_type_NK: Number(r.id) as any },
+                  { linkage_type_NK: String(r.id) as any },
+                ] as any,
+                order: { date_added: 'DESC' as any },
+              })) ||
+              (await this.familiesRepo.findOne({
+                where: { family_id: r.household_id as any } as any,
+                order: { date_added: 'DESC' as any },
+              }));
+            if (fam && fam.survey_status !== 'completed') {
+              return { id: Number(fam.survey_id), status: String(fam.survey_status) };
+            }
+          } catch {
+            // ignore
+          }
+          return null;
+        })(),
       },
     };
   }
