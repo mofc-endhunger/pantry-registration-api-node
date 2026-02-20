@@ -8,10 +8,11 @@ import { UsersModule } from '../users/users.module';
 import { HouseholdsModule } from '../households/households.module';
 import { Authentication } from '../../entities/authentication.entity';
 import { PublicScheduleModule } from '../public-schedule/public-schedule.module';
+import { SurveyFamily } from '../../entities/survey-families.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Registration, EventTimeslot, Authentication]),
+    TypeOrmModule.forFeature([Registration, EventTimeslot, Authentication, SurveyFamily]),
     forwardRef(() => UsersModule),
     forwardRef(() => HouseholdsModule),
     PublicScheduleModule,

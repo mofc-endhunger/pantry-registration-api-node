@@ -8,6 +8,7 @@ import { UsersService } from '../users/users.service';
 import { HouseholdsService } from '../households/households.service';
 import { Authentication } from '../../entities/authentication.entity';
 import { PublicScheduleService } from '../public-schedule/public-schedule.service';
+import { SurveyFamily } from '../../entities/survey-families.entity';
 
 type AuthUser = {
   authType?: string;
@@ -34,6 +35,7 @@ export class ReservationsService {
     @InjectRepository(Registration) private readonly regsRepo: Repository<Registration>,
     @InjectRepository(EventTimeslot) private readonly timesRepo: Repository<EventTimeslot>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
+    @InjectRepository(SurveyFamily) private readonly familiesRepo: Repository<SurveyFamily>,
     private readonly usersService: UsersService,
     private readonly householdsService: HouseholdsService,
     private readonly publicSchedule: PublicScheduleService,
@@ -166,6 +168,32 @@ export class ReservationsService {
             eventName = n ?? undefined;
           }
         }
+        // Survey availability (same logic as registrations list)
+        let survey: { id: number; status: string } | null = null;
+        try {
+          const fam = await this.familiesRepo.findOne({
+            where: {
+              linkage_type_id: 0 as any,
+              linkage_type_NK: r.id as any,
+            },
+            order: { date_added: 'DESC' as any },
+          });
+          if (fam && fam.survey_status !== 'completed') {
+            let actionable = true;
+            if (fam.presented_at) {
+              const now = new Date();
+              const presentedAt = new Date(fam.presented_at as any);
+              const expiresAt = new Date(presentedAt.getTime());
+              expiresAt.setDate(expiresAt.getDate() + 7);
+              if (now < presentedAt || now > expiresAt) actionable = false;
+            }
+            if (actionable)
+              survey = { id: Number(fam.survey_id), status: String(fam.survey_status) };
+          }
+        } catch {
+          // ignore survey lookup errors
+        }
+
         return {
           id: r.id,
           event: {
@@ -188,6 +216,7 @@ export class ReservationsService {
           household_id: r.household_id,
           created_at: r.created_at.toISOString(),
           updated_at: r.updated_at.toISOString(),
+          survey,
         };
       }),
     );
