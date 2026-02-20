@@ -168,7 +168,7 @@ export class ReservationsService {
             eventName = n ?? undefined;
           }
         }
-        // Survey availability (same logic as registrations list)
+        // Survey availability (surface any non-completed survey so UI can decide gating)
         let survey: { id: number; status: string } | null = null;
         try {
           // Match by registration linkage key; do not require a specific linkage_type_id
@@ -177,16 +177,7 @@ export class ReservationsService {
             order: { date_added: 'DESC' as any },
           });
           if (fam && fam.survey_status !== 'completed') {
-            let actionable = true;
-            if (fam.presented_at) {
-              const now = new Date();
-              const presentedAt = new Date(fam.presented_at as any);
-              const expiresAt = new Date(presentedAt.getTime());
-              expiresAt.setDate(expiresAt.getDate() + 7);
-              if (now < presentedAt || now > expiresAt) actionable = false;
-            }
-            if (actionable)
-              survey = { id: Number(fam.survey_id), status: String(fam.survey_status) };
+            survey = { id: Number(fam.survey_id), status: String(fam.survey_status) };
           }
         } catch {
           // ignore survey lookup errors
