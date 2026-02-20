@@ -179,6 +179,16 @@ export class ReservationsService {
             .orderBy('f.date_added', 'DESC')
             .limit(1);
           const fam = await qb.getOne();
+          // debug trace to verify lookup path in live env
+          // eslint-disable-next-line no-console
+          console.log('[reservations] survey lookup', {
+            regId,
+            household_id: r.household_id,
+            found: !!fam,
+            fam_id: fam?.survey_family_id,
+            fam_survey_id: fam?.survey_id,
+            fam_status: fam?.survey_status,
+          });
           if (fam && fam.survey_status !== 'completed') {
             survey = { id: Number(fam.survey_id), status: String(fam.survey_status) };
           }
