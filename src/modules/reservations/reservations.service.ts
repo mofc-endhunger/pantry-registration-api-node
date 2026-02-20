@@ -171,11 +171,9 @@ export class ReservationsService {
         // Survey availability (same logic as registrations list)
         let survey: { id: number; status: string } | null = null;
         try {
+          // Match by registration linkage key; do not require a specific linkage_type_id
           const fam = await this.familiesRepo.findOne({
-            where: {
-              linkage_type_id: 0 as any,
-              linkage_type_NK: r.id as any,
-            },
+            where: { linkage_type_NK: r.id as any } as any,
             order: { date_added: 'DESC' as any },
           });
           if (fam && fam.survey_status !== 'completed') {

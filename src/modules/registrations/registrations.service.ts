@@ -107,10 +107,7 @@ export class RegistrationsService {
       regs.map(async (r) => {
         try {
           const fam = await this.familiesRepo.findOne({
-            where: {
-              linkage_type_id: 0 as any,
-              linkage_type_NK: r.id as any,
-            },
+            where: { linkage_type_NK: r.id as any } as any,
             order: { date_added: 'DESC' as any },
           });
           if (!fam) return { ...r, survey: null };
