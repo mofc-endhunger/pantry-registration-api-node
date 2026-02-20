@@ -171,19 +171,14 @@ export class ReservationsService {
         // Survey availability (surface any non-completed survey so UI can decide gating)
         let survey: { id: number; status: string } | null = null;
         try {
-          // Match by registration linkage key with loose typing (string/number), else fallback to family_id
-          const fam =
-            (await this.familiesRepo.findOne({
-              where: [
-                { linkage_type_NK: Number(r.id) as any },
-                { linkage_type_NK: String(r.id) as any },
-              ] as any,
-              order: { date_added: 'DESC' as any },
-            })) ||
-            (await this.familiesRepo.findOne({
-              where: { family_id: r.household_id as any } as any,
-              order: { date_added: 'DESC' as any },
-            }));
+          // Prefer exact numeric registration id; else fallback to family_id
+          const regId = Number(r.id);
+          const qb = this.familiesRepo.createQueryBuilder('f');
+          qb.where('f.linkage_type_NK = :rid', { rid: regId })
+            .orWhere('f.family_id = :fid', { fid: r.household_id })
+            .orderBy('f.date_added', 'DESC')
+            .limit(1);
+          const fam = await qb.getOne();
           if (fam && fam.survey_status !== 'completed') {
             survey = { id: Number(fam.survey_id), status: String(fam.survey_status) };
           }

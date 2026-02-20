@@ -106,21 +106,16 @@ export class RegistrationsService {
     const withSurvey = await Promise.all(
       regs.map(async (r) => {
         try {
-          const fam = await this.familiesRepo.findOne({
-            where: { linkage_type_NK: r.id as any } as any,
-            order: { date_added: 'DESC' as any },
-          });
+          // Prefer exact registration id; fallback to family_id
+          const qb = this.familiesRepo.createQueryBuilder('f');
+          qb.where('f.linkage_type_NK = :rid', { rid: Number(r.id) })
+            .orWhere('f.family_id = :fid', { fid: r.household_id })
+            .orderBy('f.date_added', 'DESC')
+            .limit(1);
+          const fam = await qb.getOne();
           if (!fam) return { ...r, survey: null };
           // Completed → not actionable
           if (fam.survey_status === 'completed') return { ...r, survey: null };
-          // Enforce availability window based on presented_at (+7 days)
-          if (fam.presented_at) {
-            const now = new Date();
-            const presentedAt = new Date(fam.presented_at as any);
-            const expiresAt = new Date(presentedAt.getTime());
-            expiresAt.setDate(expiresAt.getDate() + 7);
-            if (now < presentedAt || now > expiresAt) return { ...r, survey: null };
-          }
           return {
             ...r,
             survey: {
