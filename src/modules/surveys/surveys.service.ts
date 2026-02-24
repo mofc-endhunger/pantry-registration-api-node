@@ -106,7 +106,6 @@ export class SurveysService {
 
     if (params.registrationId) {
       await this.assertRegistrationOwnership(params.registrationId, dbUserId);
-      // Placeholder strategy: latest active survey, prefer requested language if provided
       survey = await this.fetchLatestActiveSurveyCompat(params.languageId);
     } else {
       // No context → no active survey
@@ -138,13 +137,14 @@ export class SurveysService {
       order: { display_order: 'ASC' as any },
     });
     const qIds = maps.map((m) => m.question_id);
-    // Determine language for libraries (prefer requested → survey.language_id)
-    const languageId = params.languageId ?? survey.language_id;
+    // Use the survey's own language_id — the survey row already represents the correct language
+    const languageId = survey.language_id;
     const questionsLib = qIds.length
       ? await this.questionsLibRepo.find({
           where: { question_id: In(qIds), language_id: languageId, status_id: 1 as any },
         })
       : [];
+
     const byLibId = new Map<number, PublicSurveyQuestionLibrary>();
     questionsLib.forEach((q) => byLibId.set(q.question_id, q));
     const typeIds = Array.from(
@@ -163,6 +163,7 @@ export class SurveysService {
           order: { question_id: 'ASC' as any, display_order: 'ASC' as any },
         })
       : [];
+
     const byQuestion = new Map<number, PublicSurveyAnswerLibrary[]>();
     answers.forEach((a) => {
       const arr = byQuestion.get(a.question_id) ?? [];
@@ -353,15 +354,23 @@ export class SurveysService {
   }
 
   private async fetchLatestActiveSurveyCompat(languageId?: number): Promise<PublicSurvey | null> {
-    // Private schema uses survey_id/survey_title; prefer query builder for deterministic ordering
+    // Try requested language first
+    if (typeof languageId === 'number') {
+      const qb = this.surveysRepo.createQueryBuilder('s');
+      qb.where('s.status_id = :status', { status: 1 });
+      qb.andWhere('s.language_id = :lang', { lang: languageId });
+      qb.orderBy('s.survey_id', 'DESC').limit(1);
+      const match = await qb.getOne();
+      if (match) return match;
+    }
+
+    // Fallback to English
     const qb = this.surveysRepo.createQueryBuilder('s');
     qb.where('s.status_id = :status', { status: 1 });
-    if (typeof languageId === 'number') {
-      qb.andWhere('s.language_id = :lang', { lang: languageId });
-    }
+    qb.andWhere('s.language_id = :lang', { lang: 1 });
     qb.orderBy('s.survey_id', 'DESC').limit(1);
-    const latest = await qb.getOne();
-    return latest ?? null;
+    const english = await qb.getOne();
+    return english ?? null;
   }
 
   async submit(params: {
