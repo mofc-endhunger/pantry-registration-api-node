@@ -5,6 +5,9 @@ export class PublicSurvey {
   @PrimaryGeneratedColumn({ type: 'int', unsigned: true, name: 'survey_id' })
   survey_id!: number;
 
+  @Column({ type: 'int', unsigned: true, name: 'parent_survey_id', nullable: true })
+  parent_survey_id!: number | null;
+
   @Column({ type: 'smallint', unsigned: true, name: 'language_id' })
   language_id!: number;
 

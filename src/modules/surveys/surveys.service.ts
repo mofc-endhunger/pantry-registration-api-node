@@ -112,23 +112,44 @@ export class SurveysService {
       return { has_active: false };
     }
 
-    if (!survey) return { has_active: false };
+    if (!survey) {
+      return { has_active: false };
+    }
 
-    // Prevent duplicates (completed) on families table
+    // Find family by registration + logical survey; prefer in_progress so resume works for all languages
+    const logicalSurveyIds = await this.getLogicalSurveyIds(survey.survey_id);
     const dupe = await this.familiesRepo.findOne({
-      where: { survey_id: survey.survey_id, linkage_type_NK: params.registrationId },
+      where: {
+        survey_id: In(logicalSurveyIds),
+        linkage_type_NK: params.registrationId,
+        survey_status: 'in_progress' as any,
+      } as any,
       order: { date_added: 'DESC' as any },
     });
-    if (dupe) {
-      if (dupe.survey_status === 'completed') return { has_active: false };
-      // Respect display/expiry window based on presented_at when assigned
-      if (dupe.presented_at) {
-        const now = new Date();
-        const presentedAt = new Date(dupe.presented_at as any);
-        const expiresAt = new Date(presentedAt.getTime());
-        expiresAt.setDate(expiresAt.getDate() + 7);
-        if (now < presentedAt) return { has_active: false };
-        if (now > expiresAt) return { has_active: false };
+    if (!dupe) {
+      const completed = await this.familiesRepo.findOne({
+        where: {
+          survey_id: In(logicalSurveyIds),
+          linkage_type_NK: params.registrationId,
+          survey_status: 'completed' as any,
+        } as any,
+        order: { date_added: 'DESC' as any },
+      });
+      if (completed) {
+        return { has_active: false };
+      }
+    }
+    // Only enforce presented_at window for non–in-progress (e.g. scheduled); allow resume of in_progress regardless
+    if (dupe?.presented_at && dupe.survey_status !== 'in_progress') {
+      const now = new Date();
+      const presentedAt = new Date(dupe.presented_at as any);
+      const expiresAt = new Date(presentedAt.getTime());
+      expiresAt.setDate(expiresAt.getDate() + 7);
+      if (now < presentedAt) {
+        return { has_active: false };
+      }
+      if (now > expiresAt) {
+        return { has_active: false };
       }
     }
 
@@ -226,7 +247,7 @@ export class SurveysService {
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
     // Resume support: if an in-progress family exists, return previous answers and next section hint
-    let previousResponses: Array<{
+    const previousResponses: Array<{
       question_id: number;
       answer_id: number | null;
       answer_value: string | null;
@@ -235,16 +256,41 @@ export class SurveysService {
     let progress: { family_id: number; status: string; next_section_id: number | null } | undefined;
     if (dupe && dupe.survey_status !== 'completed') {
       const famId = Number(dupe.survey_family_id);
+      const currentSurveyId = survey.survey_id;
       const existingAnswers = await this.familyAnswersRepo.find({
         where: { survey_family_id: famId as any },
       });
-      const answeredSet = new Set<number>(existingAnswers.map((r) => Number(r.survey_question_id)));
-      previousResponses = existingAnswers.map((r) => ({
-        question_id: Number(r.survey_question_id),
-        answer_id: r.answer_id,
-        answer_value: r.answer_value,
-        answer_text: r.answer_text,
-      }));
+
+      // Map stored answers (may be from any language variant) to current survey's question IDs
+      // via display_order, since each language variant has its own question_id set in the library.
+      const storedSqIds = existingAnswers.map((r) => Number(r.survey_question_id));
+      const mapsForStored =
+        storedSqIds.length > 0
+          ? await this.questionMapRepo.find({
+              where: { survey_question_id: In(storedSqIds), status_id: 1 as any },
+            })
+          : [];
+      const currentMaps = await this.questionMapRepo.find({
+        where: { survey_id: currentSurveyId, status_id: 1 as any },
+      });
+      const storedSqToOrder = new Map<number, number>();
+      mapsForStored.forEach((m) => storedSqToOrder.set(m.survey_question_id, m.display_order));
+      const currentOrderToSq = new Map<number, number>();
+      currentMaps.forEach((m) => currentOrderToSq.set(m.display_order, m.survey_question_id));
+      for (const r of existingAnswers) {
+        const order = storedSqToOrder.get(Number(r.survey_question_id));
+        if (order === undefined) continue;
+        const currentSqId = currentOrderToSq.get(order);
+        if (currentSqId === undefined) continue;
+        previousResponses.push({
+          question_id: currentSqId,
+          answer_id: r.answer_id,
+          answer_value: r.answer_value,
+          answer_text: r.answer_text,
+        });
+      }
+
+      const answeredSet = new Set<number>(previousResponses.map((pr) => pr.question_id));
       // Determine next section: first section with any required question unanswered
       let nextSectionId: number | null = null;
       for (const s of sections) {
@@ -373,6 +419,22 @@ export class SurveysService {
     return english ?? null;
   }
 
+  /**
+   * Returns survey_ids that belong to the same logical survey (self + siblings by parent_survey_id).
+   * Used to share in-progress/completed state across language variants.
+   */
+  private async getLogicalSurveyIds(surveyId: number): Promise<number[]> {
+    const survey = await this.surveysRepo.findOne({ where: { survey_id: surveyId } as any });
+    if (!survey) return [surveyId];
+    const parentId = survey.parent_survey_id ?? survey.survey_id;
+    const rows = await this.surveysRepo
+      .createQueryBuilder('s')
+      .select('s.survey_id')
+      .where('s.survey_id = :parentId OR s.parent_survey_id = :parentId', { parentId })
+      .getMany();
+    return rows.map((s) => s.survey_id);
+  }
+
   async submit(params: {
     user: AuthUser;
     guestToken?: string;
@@ -404,25 +466,36 @@ export class SurveysService {
       }
     }
 
-    // Upsert/resolve a family record allowing staged completion
+    // Resolve family by logical survey; prefer in_progress so all languages update the same row
+    const logicalSurveyIds = await this.getLogicalSurveyIds(params.dto.survey_id);
     const existing = await this.familiesRepo.findOne({
       where: {
-        survey_id: params.dto.survey_id,
+        survey_id: In(logicalSurveyIds),
         linkage_type_id: 0 as any,
         linkage_type_NK: params.dto.registration_id ?? 0,
-      },
+        survey_status: 'in_progress' as any,
+      } as any,
       order: { date_added: 'DESC' as any },
     });
-
-    if (existing && existing.survey_status === 'completed') {
-      throw new ConflictException('Survey already submitted for this registration');
+    if (!existing) {
+      const completed = await this.familiesRepo.findOne({
+        where: {
+          survey_id: In(logicalSurveyIds),
+          linkage_type_id: 0 as any,
+          linkage_type_NK: params.dto.registration_id ?? 0,
+          survey_status: 'completed' as any,
+        } as any,
+        order: { date_added: 'DESC' as any },
+      });
+      if (completed) {
+        throw new ConflictException('Survey already submitted for this registration');
+      }
     }
 
     const isFinal = params.dto.is_final !== undefined ? Boolean(params.dto.is_final) : true;
 
     let familyId: number;
     if (existing) {
-      // Update timestamps/status on existing in-progress
       await this.familiesRepo.update(
         { survey_family_id: existing.survey_family_id } as any,
         {
@@ -433,9 +506,13 @@ export class SurveysService {
       );
       familyId = Number(existing.survey_family_id);
     } else {
+      const surveyRow = await this.surveysRepo.findOne({
+        where: { survey_id: params.dto.survey_id } as any,
+      });
+      const canonicalSurveyId = surveyRow?.parent_survey_id ?? params.dto.survey_id;
       const created = await this.familiesRepo.save({
-        survey_id: params.dto.survey_id,
-        linkage_type_id: 0, // registration linkage type placeholder
+        survey_id: canonicalSurveyId,
+        linkage_type_id: 0,
         linkage_type_NK: params.dto.registration_id ?? 0,
         survey_status: isFinal ? 'completed' : 'in_progress',
         started_at: new Date(),
@@ -445,8 +522,8 @@ export class SurveysService {
       familyId = Number(created.survey_family_id);
     }
 
-    // If a family row exists with presented_at, enforce 7-day window from presented_at
-    if (existing?.presented_at) {
+    // Only enforce presented_at window when not resuming an in_progress survey (allow save progress regardless)
+    if (existing?.presented_at && existing.survey_status !== 'in_progress') {
       const now = new Date();
       const presentedAt = new Date(existing.presented_at as any);
       const expiresAt = new Date(presentedAt.getTime());
@@ -460,7 +537,19 @@ export class SurveysService {
     }
 
     if (params.dto.responses?.length) {
-      // Build rows with validation/mapping for multiple choice answers
+      // Pre-load all question maps for logical survey variants so we can
+      // delete prior answers stored under any language's survey_question_id.
+      const allLogicalMaps = await this.questionMapRepo.find({
+        where: { survey_id: In(logicalSurveyIds), status_id: 1 as any },
+      });
+      // display_order → all survey_question_ids across language variants
+      const orderToAllSqIds = new Map<number, number[]>();
+      for (const m of allLogicalMaps) {
+        const arr = orderToAllSqIds.get(m.display_order) ?? [];
+        arr.push(m.survey_question_id);
+        orderToAllSqIds.set(m.display_order, arr);
+      }
+
       const rows: Array<{
         survey_family_id: number;
         survey_question_id: number;
@@ -472,7 +561,6 @@ export class SurveysService {
       for (const r of params.dto.responses) {
         const surveyQuestionId = Number(r.question_id);
 
-        // Resolve map → library question_id
         const map = await this.questionMapRepo.findOne({
           where: { survey_question_id: surveyQuestionId },
         });
@@ -484,7 +572,6 @@ export class SurveysService {
         let answerValue: string | null = null;
         let answerText: string | null = null;
 
-        // If answer_id provided, validate it belongs to this question_id
         if (typeof (r as any).answer_id === 'number') {
           const a = await this.answersLibRepo.findOne({
             where: {
@@ -499,13 +586,11 @@ export class SurveysService {
             );
           }
           answerId = Number(a.answer_id);
-          // Prefer explicit answer_value from request, else library's coded value (can be NULL)
           answerValue =
             typeof (r as any).answer_value === 'string' && (r as any).answer_value.length > 0
               ? (r as any).answer_value
               : (a.answer_value ?? null);
         } else {
-          // Free text / numeric / scale: take provided answer_value (string) if any
           if (typeof (r as any).answer_value === 'string' && (r as any).answer_value.length > 0) {
             answerValue = (r as any).answer_value;
           } else {
@@ -513,22 +598,21 @@ export class SurveysService {
           }
         }
 
-        // Optional supplemental text
         if (typeof (r as any).answer_text === 'string' && (r as any).answer_text.length > 0) {
           answerText = (r as any).answer_text;
         }
 
-        // At least one of answer_id, answer_value, answer_text should be present
         if (answerId === null && answerValue === null && answerText === null) {
           throw new ConflictException(
             `No response provided for survey_question_id ${surveyQuestionId}`,
           );
         }
 
-        // Replace any prior answer for this question/family to support staged edits
+        // Delete prior answers for this logical question across ALL language variants
+        const siblingIds = orderToAllSqIds.get(map.display_order) ?? [surveyQuestionId];
         await this.familyAnswersRepo.delete({
           survey_family_id: familyId as any,
-          survey_question_id: surveyQuestionId as any,
+          survey_question_id: In(siblingIds) as any,
         } as any);
 
         rows.push({
