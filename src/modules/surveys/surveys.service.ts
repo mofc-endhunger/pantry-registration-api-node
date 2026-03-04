@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Repository, SelectQueryBuilder } from 'typeorm';
 import { SurveyFamily } from '../../entities/survey-families.entity';
 import { SurveyFamilyAnswer } from '../../entities/survey-family-answers.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
@@ -99,16 +99,22 @@ export class SurveysService {
     guestToken?: string;
     registrationId?: number;
     languageId?: number;
+    surveyType?: string;
   }) {
-    // For v1: transactional context only if registrationId provided
     const dbUserId = await this.resolveDbUserId(params.user, params.guestToken);
     let survey: PublicSurvey | null = null;
 
-    if (params.registrationId) {
+    // When registrationId is present but surveyType omitted, default to feedback (registration-scoped flow).
+    const effectiveSurveyType =
+      params.surveyType ?? (params.registrationId ? 'feedback' : undefined);
+
+    if (effectiveSurveyType === 'assessment') {
+      // Assessment surveys are user-level, no registration context required
+      survey = await this.fetchLatestActiveSurveyCompat(params.languageId, effectiveSurveyType);
+    } else if (params.registrationId) {
       await this.assertRegistrationOwnership(params.registrationId, dbUserId);
-      survey = await this.fetchLatestActiveSurveyCompat(params.languageId);
+      survey = await this.fetchLatestActiveSurveyCompat(params.languageId, effectiveSurveyType);
     } else {
-      // No context → no active survey
       return { has_active: false };
     }
 
@@ -116,12 +122,13 @@ export class SurveysService {
       return { has_active: false };
     }
 
-    // Find family by registration + logical survey; prefer in_progress so resume works for all languages
+    // Find family by linkage key + logical survey; prefer in_progress so resume works for all languages
+    const linkageKey = params.registrationId ?? 0;
     const logicalSurveyIds = await this.getLogicalSurveyIds(survey.survey_id);
     const dupe = await this.familiesRepo.findOne({
       where: {
         survey_id: In(logicalSurveyIds),
-        linkage_type_NK: params.registrationId,
+        linkage_type_NK: linkageKey,
         survey_status: 'in_progress' as any,
       } as any,
       order: { date_added: 'DESC' as any },
@@ -130,7 +137,7 @@ export class SurveysService {
       const completed = await this.familiesRepo.findOne({
         where: {
           survey_id: In(logicalSurveyIds),
-          linkage_type_NK: params.registrationId,
+          linkage_type_NK: linkageKey,
           survey_status: 'completed' as any,
         } as any,
         order: { date_added: 'DESC' as any },
@@ -334,6 +341,7 @@ export class SurveysService {
     guestToken?: string;
     registrationId?: number;
     languageId?: number;
+    surveyType?: string;
   }) {
     const base = await this.getActive(params);
     if (!base?.has_active || !base?.survey) return base;
@@ -399,12 +407,28 @@ export class SurveysService {
     };
   }
 
-  private async fetchLatestActiveSurveyCompat(languageId?: number): Promise<PublicSurvey | null> {
+  private async fetchLatestActiveSurveyCompat(
+    languageId?: number,
+    surveyType?: string,
+  ): Promise<PublicSurvey | null> {
+    const ASSESSMENT_TYPE_IDS = [4, 5]; // Health Care Screening, Social Needs Screening
+
+    const applyTypeFilter = (qb: SelectQueryBuilder<PublicSurvey>, type?: string) => {
+      if (type === 'assessment') {
+        qb.andWhere('s.survey_type_id IN (:...typeIds)', { typeIds: ASSESSMENT_TYPE_IDS });
+      } else if (type === 'feedback') {
+        qb.andWhere('(s.survey_type_id NOT IN (:...typeIds) OR s.survey_type_id IS NULL)', {
+          typeIds: ASSESSMENT_TYPE_IDS,
+        });
+      }
+    };
+
     // Try requested language first
     if (typeof languageId === 'number') {
       const qb = this.surveysRepo.createQueryBuilder('s');
       qb.where('s.status_id = :status', { status: 1 });
       qb.andWhere('s.language_id = :lang', { lang: languageId });
+      applyTypeFilter(qb, surveyType);
       qb.orderBy('s.survey_id', 'DESC').limit(1);
       const match = await qb.getOne();
       if (match) return match;
@@ -414,6 +438,7 @@ export class SurveysService {
     const qb = this.surveysRepo.createQueryBuilder('s');
     qb.where('s.status_id = :status', { status: 1 });
     qb.andWhere('s.language_id = :lang', { lang: 1 });
+    applyTypeFilter(qb, surveyType);
     qb.orderBy('s.survey_id', 'DESC').limit(1);
     const english = await qb.getOne();
     return english ?? null;

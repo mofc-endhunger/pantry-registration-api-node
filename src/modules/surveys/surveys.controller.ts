@@ -33,6 +33,7 @@ export class SurveysController {
     @Req() req: Request,
     @Query('registration_id') registrationId?: string,
     @Query('language_id') languageId?: string,
+    @Query('survey_type') surveyType?: string,
   ) {
     const user = req.user as any;
     const guestToken = (req.headers['x-guest-token'] as string) || undefined;
@@ -43,6 +44,7 @@ export class SurveysController {
       guestToken,
       registrationId: id,
       languageId: lang,
+      surveyType,
     });
   }
 
@@ -60,6 +62,7 @@ export class SurveysController {
     @Req() req: Request,
     @Query('registration_id') registrationId?: string,
     @Query('language_id') languageId?: string,
+    @Query('survey_type') surveyType?: string,
   ) {
     const user = req.user as any;
     const guestToken = (req.headers['x-guest-token'] as string) || undefined;
@@ -70,6 +73,7 @@ export class SurveysController {
       guestToken,
       registrationId: id,
       languageId: lang,
+      surveyType,
     });
   }
 

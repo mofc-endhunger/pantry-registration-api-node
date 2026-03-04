@@ -14,6 +14,9 @@ export class PublicSurvey {
   @Column({ type: 'varchar', length: 255, name: 'survey_title' })
   survey_title!: string;
 
+  @Column({ type: 'tinyint', unsigned: true, name: 'survey_type_id', nullable: true })
+  survey_type_id!: number | null;
+
   @Column({ type: 'tinyint', unsigned: true, name: 'status_id', default: () => '1' })
   status_id!: number;
 }
