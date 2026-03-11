@@ -7,6 +7,7 @@ import { Event } from '../../entities/event.entity';
 import { EventTimeslot } from '../../entities/event-timeslot.entity';
 import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
+import { User } from '../../entities/user.entity';
 import { RegistrationsService } from './registrations.service';
 import { CheckInAudit } from '../../entities/checkin-audit.entity';
 import { RegistrationsController } from './registrations.controller';
@@ -27,6 +28,7 @@ import { PantryTrakClient } from '../integrations/pantrytrak.client';
       EventTimeslot,
       Household,
       HouseholdMember,
+      User,
       CheckInAudit,
       Authentication,
       // Needed for survey auto-assignment and history augmentation

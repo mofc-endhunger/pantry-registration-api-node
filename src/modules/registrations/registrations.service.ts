@@ -16,6 +16,9 @@ import { EventTimeslot } from '../../entities/event-timeslot.entity';
 import { UsersService } from '../users/users.service';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
 import { HouseholdsService } from '../households/households.service';
+import { User } from '../../entities/user.entity';
+import { SafeRandom } from '../../common/utils/safe-random';
+import { RegistrantDto } from './dto/register.dto';
 type AuthUser = {
   authType?: string;
   dbUserId?: number;
@@ -23,6 +26,7 @@ type AuthUser = {
   id?: string;
   email?: string;
   username?: string;
+  roles?: string[];
 };
 import { CheckInDto } from './dto/check-in.dto';
 import { CheckInAudit } from '../../entities/checkin-audit.entity';
@@ -40,6 +44,7 @@ export class RegistrationsService {
     @InjectRepository(EventTimeslot) private readonly timesRepo: Repository<EventTimeslot>,
     @InjectRepository(CheckInAudit) private readonly checkinsRepo: Repository<CheckInAudit>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
+    @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(SurveyFamily) private readonly familiesRepo: Repository<SurveyFamily>,
     @InjectRepository(PublicSurvey) private readonly surveysRepo: Repository<PublicSurvey>,
     private readonly usersService: UsersService,
@@ -140,6 +145,7 @@ export class RegistrationsService {
       attendees?: number[];
       event_slot_id?: number;
       event_date_id?: number;
+      registrant?: RegistrantDto;
     },
     guestToken?: string,
   ) {
@@ -165,6 +171,15 @@ export class RegistrationsService {
         const exists = await (this.publicSchedule as any).eventExists(dto.event_id);
         if (!exists) throw new NotFoundException('Event not found');
       }
+    }
+
+    // --- Case manager "register on behalf of" flow ---
+    if (dto.registrant) {
+      const roles: string[] = user?.roles ?? [];
+      if (!roles.includes('case_managers')) {
+        throw new ForbiddenException('Only case managers may register on behalf of another person');
+      }
+      return this.registerOnBehalfOf(user, dto, dto.registrant);
     }
 
     // Resolve household (prefer explicit guest token if provided)
@@ -500,6 +515,269 @@ export class RegistrationsService {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.warn('[Surveys] auto-assign failed', e instanceof Error ? e.message : String(e));
+    }
+
+    return saved;
+  }
+
+  async findByCreatedBy(
+    user: AuthUser,
+    query: {
+      event_id?: number;
+      status?: string;
+      from_date?: string;
+      to_date?: string;
+      limit?: number;
+    },
+  ) {
+    const sub = (user?.userId as string) ?? (user?.id as string);
+    let dbUserId: number | null = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      dbUserId = await this.usersService.findDbUserIdByCognitoUuid(sub);
+    } catch {
+      dbUserId = null;
+    }
+    if (!dbUserId) throw new ForbiddenException('User not found');
+
+    const qb = this.regsRepo
+      .createQueryBuilder('reg')
+      .where('reg.created_by = :cmId', { cmId: dbUserId })
+      .orderBy('reg.created_at', 'DESC')
+      .take(query.limit ?? 50);
+
+    if (query.event_id) {
+      qb.andWhere('reg.event_id = :eventId', { eventId: query.event_id });
+    }
+    if (query.status) {
+      qb.andWhere('reg.status = :status', { status: query.status });
+    }
+    if (query.from_date) {
+      qb.andWhere('reg.created_at >= :from', { from: new Date(query.from_date) });
+    }
+    if (query.to_date) {
+      qb.andWhere('reg.created_at <= :to', { to: new Date(query.to_date) });
+    }
+
+    return qb.getMany();
+  }
+
+  private async generateUniqueIdentificationCode(): Promise<string> {
+    let code: string;
+    do {
+      code = SafeRandom.generateCode(6);
+    } while (await this.userRepo.findOne({ where: { identification_code: code } }));
+    return code;
+  }
+
+  /**
+   * Creates a new guest user + household for the registrant,
+   * then registers them for the event with created_by = case manager.
+   */
+  private async registerOnBehalfOf(
+    caseManager: AuthUser,
+    dto: {
+      event_id: number;
+      timeslot_id?: number;
+      attendees?: number[];
+      event_slot_id?: number;
+      event_date_id?: number;
+    },
+    registrant: RegistrantDto,
+  ) {
+    // Resolve case manager's DB user ID
+    const cmSub = (caseManager?.userId as string) ?? (caseManager?.id as string);
+    let cmDbUserId: number | null = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      cmDbUserId = await this.usersService.findDbUserIdByCognitoUuid(cmSub);
+    } catch {
+      cmDbUserId = null;
+    }
+    if (!cmDbUserId) {
+      // Auto-provision the case manager's DB user
+      const email: string | undefined = (caseManager?.email as string) || undefined;
+      const username: string | undefined = (caseManager?.username as string) || undefined;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const created = await this.usersService.create({
+        email: email ?? `${cmSub}@auto.local`,
+        first_name: username ?? undefined,
+        last_name: undefined,
+        date_of_birth: undefined as any,
+        user_type: 'customer',
+        cognito_uuid: cmSub,
+      } as any);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      cmDbUserId = created.user.id;
+    }
+    if (!cmDbUserId) throw new ForbiddenException('Case manager user not found');
+
+    // Create a new guest user for the registrant
+    const registrantUser = this.userRepo.create({
+      user_type: 'guest',
+      identification_code: await this.generateUniqueIdentificationCode(),
+      first_name: registrant.first_name,
+      last_name: registrant.last_name,
+      phone: registrant.phone ?? null,
+      address_line_1: registrant.address_line_1 ?? null,
+      address_line_2: registrant.address_line_2 ?? null,
+      city: registrant.city ?? null,
+      state: registrant.state ?? null,
+      zip_code: registrant.zip_code ?? null,
+      seniors_in_household: registrant.seniors ?? 0,
+      adults_in_household: registrant.adults ?? 0,
+      children_in_household: registrant.children ?? 0,
+    });
+    await this.userRepo.save(registrantUser);
+
+    // Create household for the registrant
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    await this.householdsService.createHousehold(registrantUser.id, {
+      primary_first_name: registrant.first_name,
+      primary_last_name: registrant.last_name,
+    } as any);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const household_id = await this.householdsService.findHouseholdIdByUserId(registrantUser.id);
+    if (!household_id) throw new ForbiddenException('Failed to create household for registrant');
+
+    // Materialize household member counts if provided
+    const totalMembers =
+      (registrant.seniors ?? 0) + (registrant.adults ?? 0) + (registrant.children ?? 0);
+    if (totalMembers > 0) {
+      try {
+        await this.usersService.updateUserWithHousehold(registrantUser.id, {
+          household_id,
+          seniors_in_household: registrant.seniors ?? 0,
+          adults_in_household: registrant.adults ?? 0,
+          children_in_household: registrant.children ?? 0,
+        } as any);
+      } catch {
+        // best-effort
+      }
+    }
+
+    // Duplicate check (same event + household)
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const whereConditions = dto.event_date_id
+      ? [
+          {
+            event_id: dto.event_id,
+            public_event_date_id: dto.event_date_id,
+            household_id,
+            status: 'confirmed',
+          } as any,
+          {
+            event_id: dto.event_id,
+            public_event_date_id: dto.event_date_id,
+            household_id,
+            status: 'waitlisted',
+          } as any,
+          {
+            event_id: dto.event_id,
+            public_event_date_id: dto.event_date_id,
+            household_id,
+            status: 'checked_in',
+          } as any,
+        ]
+      : [
+          { event_id: dto.event_id, household_id, status: 'confirmed' } as any,
+          { event_id: dto.event_id, household_id, status: 'waitlisted' } as any,
+          { event_id: dto.event_id, household_id, status: 'checked_in' } as any,
+        ];
+    const existing = await this.regsRepo.findOne({ where: whereConditions });
+    if (existing) throw new BadRequestException('Already registered');
+
+    // Capacity check
+    let capacity: number | null = null;
+    let confirmedCount = 0;
+    if (dto.event_slot_id) {
+      const slot = await this.publicSchedule.getSlot(dto.event_slot_id);
+      capacity = slot?.capacity ?? null;
+      if (slot && slot.capacity !== null && (slot.reserved ?? 0) >= (slot.capacity ?? 0)) {
+        confirmedCount = slot.capacity ?? 0;
+      }
+    } else if (dto.timeslot_id) {
+      const timeslot = await this.timesRepo.findOne({ where: { id: dto.timeslot_id } });
+      capacity = timeslot?.capacity ?? null;
+      confirmedCount = await this.regsRepo.count({
+        where: { timeslot_id: dto.event_slot_id, status: 'confirmed' } as any,
+      });
+    } else if (dto.event_date_id) {
+      const date = await this.publicSchedule.getDate(dto.event_date_id);
+      capacity = date?.capacity ?? null;
+      if (date && date.capacity !== null && (date.reserved ?? 0) >= (date.capacity ?? 0)) {
+        confirmedCount = date.capacity ?? 0;
+      }
+    } else {
+      capacity = null;
+      confirmedCount = await this.regsRepo.count({
+        where: { event_id: dto.event_id, status: 'confirmed', timeslot_id: null } as any,
+      });
+    }
+    const hasCapacity = capacity == null || confirmedCount < capacity;
+
+    // Create registration with created_by = case manager
+    const reg = this.regsRepo.create({
+      event_id: dto.event_id,
+      household_id,
+      timeslot_id: dto.timeslot_id ?? null,
+      status: hasCapacity ? 'confirmed' : 'waitlisted',
+      created_by: cmDbUserId,
+      public_event_slot_id: dto.event_slot_id ?? null,
+      public_event_date_id: dto.event_date_id ?? null,
+    } as any);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const savedOrArray = await this.regsRepo.save(reg);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const saved: Registration = Array.isArray(savedOrArray)
+      ? savedOrArray[0]
+      : (savedOrArray as Registration);
+
+    if (Array.isArray(dto.attendees) && dto.attendees.length) {
+      for (const memberId of dto.attendees) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const attendee = this.attendeesRepo.create({
+          registration_id: saved.id,
+          household_member_id: memberId,
+        } as any);
+        await this.attendeesRepo.save(attendee);
+      }
+    }
+
+    // Update public counters
+    if (hasCapacity) {
+      if (dto.event_slot_id) await this.publicSchedule.incrementSlotAndDate(dto.event_slot_id);
+      else if (dto.event_date_id) await this.publicSchedule.incrementDate(dto.event_date_id);
+    }
+
+    // Best-effort PantryTrak sync
+    try {
+      if (this.pantryTrakClient) {
+        this.pantryTrakClient
+          .createReservation({
+            id: saved.id,
+            user_id: saved.created_by as unknown as number,
+            event_date_id: saved.public_event_date_id ?? saved.event_id,
+            event_slot_id: saved.public_event_slot_id ?? null,
+          })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn('[PantryTrak] createReservation failed (on-behalf-of)', msg);
+          });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[PantryTrak] client not available (on-behalf-of)', msg);
+    }
+
+    // Auto-assign survey (best-effort)
+    try {
+      await this.autoAssignSurveyForRegistration(saved);
+    } catch (e) {
+      console.warn(
+        '[Surveys] auto-assign failed (on-behalf-of)',
+        e instanceof Error ? e.message : String(e),
+      );
     }
 
     return saved;
