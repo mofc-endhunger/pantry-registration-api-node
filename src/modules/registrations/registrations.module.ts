@@ -16,6 +16,7 @@ import { PublicScheduleModule } from '../public-schedule/public-schedule.module'
 import { Authentication } from '../../entities/authentication.entity';
 import { SurveyFamily } from '../../entities/survey-families.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
+import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
 
 @Module({
@@ -29,9 +30,9 @@ import { PantryTrakClient } from '../integrations/pantrytrak.client';
       HouseholdMember,
       CheckInAudit,
       Authentication,
-      // Needed for survey auto-assignment and history augmentation
       SurveyFamily,
       PublicSurvey,
+      PublicSurveyQuestionMap,
     ]),
     forwardRef(() => UsersModule),
     forwardRef(() => HouseholdsModule),
