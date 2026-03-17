@@ -16,6 +16,7 @@ import { EventTimeslot } from '../../entities/event-timeslot.entity';
 import { UsersService } from '../users/users.service';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
 import { HouseholdsService } from '../households/households.service';
+import { mapSuffixToId } from '../../common/utils/suffix-mapping';
 type AuthUser = {
   authType?: string;
   dbUserId?: number;
@@ -184,7 +185,7 @@ export class RegistrationsService {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
 
-        // Best-effort: set HOH gender_id from user's gender string if available
+        // Best-effort: sync gender_id and suffix_id from user to HOH member
         try {
           if (household_id) {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -195,23 +196,36 @@ export class RegistrationsService {
                     id: number;
                     is_head_of_household?: boolean;
                     gender_id?: number | null;
+                    suffix_id?: number | null;
                   }>
                 ).find((m) => !!m.is_head_of_household)
               : undefined;
-            const g = (userEntity.gender || '').toString().trim().toLowerCase();
-            const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
-            if (
-              hoh &&
-              mappedGenderId !== undefined &&
-              (hoh.gender_id == null || Number.isNaN(hoh.gender_id))
-            ) {
-              await this.householdsService.updateMember(household_id, hoh.id, dbUserId, {
-                gender_id: mappedGenderId,
-              } as any);
+            if (hoh) {
+              const patch: Record<string, number> = {};
+
+              if (hoh.gender_id == null || Number.isNaN(hoh.gender_id)) {
+                const g = (userEntity.gender || '').toString().trim().toLowerCase();
+                const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
+                if (mappedGenderId !== undefined) patch.gender_id = mappedGenderId;
+              }
+
+              if (hoh.suffix_id == null) {
+                const mappedSuffixId = mapSuffixToId(userEntity.suffix);
+                if (mappedSuffixId !== undefined) patch.suffix_id = mappedSuffixId;
+              }
+
+              if (Object.keys(patch).length > 0) {
+                await this.householdsService.updateMember(
+                  household_id,
+                  hoh.id,
+                  dbUserId,
+                  patch as any,
+                );
+              }
             }
           }
         } catch {
-          // ignore gender sync failures
+          // ignore member sync failures
         }
       } catch {
         // ignore and fall through to error

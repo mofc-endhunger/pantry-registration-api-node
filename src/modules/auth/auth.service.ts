@@ -21,6 +21,7 @@ import { MailerService } from './mailer.service';
 import { TwilioService } from '../../modules/notifications/twilio.service';
 import { JwtService } from '@nestjs/jwt';
 import { SafeRandom } from '../../common/utils/safe-random';
+import { mapSuffixToId } from '../../common/utils/suffix-mapping';
 import { HouseholdsService } from '../households/households.service';
 
 @Injectable()
@@ -252,6 +253,48 @@ export class AuthService {
         householdCreated = !!householdId;
       } catch {
         // If creation fails, proceed; downstream flows still can create on demand
+      }
+    }
+
+    // Best-effort: sync gender_id and suffix_id from guest user to HOH member
+    if (householdId && this.householdsService) {
+      try {
+        const members = await this.householdsService.listMembers(householdId, guestUser.id);
+        const hoh = Array.isArray(members)
+          ? (
+              members as Array<{
+                id: number;
+                is_head_of_household?: boolean;
+                gender_id?: number | null;
+                suffix_id?: number | null;
+              }>
+            ).find((m) => !!m.is_head_of_household)
+          : undefined;
+        if (hoh) {
+          const patch: Record<string, number> = {};
+
+          if (hoh.gender_id == null || Number.isNaN(hoh.gender_id)) {
+            const g = (guestUser.gender || '').toString().trim().toLowerCase();
+            const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
+            if (mappedGenderId !== undefined) patch.gender_id = mappedGenderId;
+          }
+
+          if (hoh.suffix_id == null) {
+            const mappedSuffixId = mapSuffixToId(guestUser.suffix);
+            if (mappedSuffixId !== undefined) patch.suffix_id = mappedSuffixId;
+          }
+
+          if (Object.keys(patch).length > 0) {
+            await this.householdsService.updateMember(
+              householdId,
+              hoh.id,
+              guestUser.id,
+              patch as any,
+            );
+          }
+        }
+      } catch {
+        // best-effort; do not block on member sync
       }
     }
 
