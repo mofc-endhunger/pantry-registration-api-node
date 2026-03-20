@@ -21,6 +21,22 @@ export class RegistrantDto {
 
   @IsOptional()
   @IsString()
+  suffix?: string;
+
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  date_of_birth?: string;
+
+  @IsOptional()
+  @IsString()
   phone?: string;
 
   @IsOptional()
@@ -189,7 +205,7 @@ export class RegisterDto {
   @Transform(({ value, obj }) => {
     const v =
       obj?.synth_adults ?? obj?.adults ?? obj?.adults_count ?? obj?.adults_in_household ?? value;
-    return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
+    return v === '' || v === null || v === undefined ? undefined : parseInt(String(value), 10);
   })
   adults?: number;
 

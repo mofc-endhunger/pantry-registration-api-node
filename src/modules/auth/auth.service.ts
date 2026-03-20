@@ -22,6 +22,7 @@ import { TwilioService } from '../../modules/notifications/twilio.service';
 import { JwtService } from '@nestjs/jwt';
 import { SafeRandom } from '../../common/utils/safe-random';
 import { HouseholdsService } from '../households/households.service';
+import { CreateHouseholdDto } from '../households/dto/create-household.dto';
 
 @Injectable()
 export class AuthService {
@@ -247,7 +248,7 @@ export class AuthService {
           primary_date_of_birth: (guestUser.date_of_birth as unknown as string) || '1900-01-01',
           primary_phone: guestUser.phone ?? undefined,
           primary_email: guestUser.email ?? undefined,
-        } as any);
+        } as CreateHouseholdDto);
         householdId = await this.householdsService.findHouseholdIdByUserId(guestUser.id);
         householdCreated = !!householdId;
       } catch {

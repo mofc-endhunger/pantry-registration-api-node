@@ -34,6 +34,7 @@ import { PublicScheduleService } from '../public-schedule/public-schedule.servic
 import { Authentication } from '../../entities/authentication.entity';
 import { SurveyFamily } from '../../entities/survey-families.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
+import { CognitoService } from '../auth/cognito.service';
 
 @Injectable()
 export class RegistrationsService {
@@ -52,7 +53,38 @@ export class RegistrationsService {
     private readonly publicSchedule: PublicScheduleService,
     @Optional() @InjectRepository(Event) private readonly eventsRepo?: Repository<Event>,
     @Optional() private readonly pantryTrakClient?: PantryTrakClient,
+    @Optional() private readonly cognitoService?: CognitoService,
   ) {}
+
+  /**
+   * Resolve a real email for a Cognito user.  Tries the JWT claim first, then
+   * falls back to an AdminGetUser call.  Returns `${sub}@auto.local` only as
+   * an absolute last resort so the caller can always create a user record.
+   */
+  private async resolveEmail(jwtEmail: string | undefined, sub: string): Promise<string> {
+    if (jwtEmail) return jwtEmail;
+    if (this.cognitoService) {
+      const looked = await this.cognitoService.getEmailBySub(sub);
+      if (looked) return looked;
+    }
+    return `${sub}@auto.local`;
+  }
+
+  /**
+   * After finding an existing DB user, heal any `@auto.local` email that was
+   * persisted during an earlier session where the real email was unavailable.
+   */
+  private async healEmailIfNeeded(dbUserId: number, sub: string): Promise<void> {
+    if (!this.cognitoService) return;
+    try {
+      const realEmail = await this.cognitoService.getEmailBySub(sub);
+      if (realEmail) {
+        await this.usersService.healAutoLocalEmail(dbUserId, realEmail);
+      }
+    } catch {
+      // non-critical — don't block the request
+    }
+  }
 
   async listForEvent(eventId: number) {
     return this.regsRepo.find({ where: { event_id: eventId } });
@@ -76,20 +108,19 @@ export class RegistrationsService {
       } catch {
         dbUserId = null;
       }
-      if (!dbUserId) {
-        // Auto-provision to ensure we can resolve a household and list registrations
-        const email: string | undefined = (user?.email as string) || undefined;
+      if (dbUserId) {
+        void this.healEmailIfNeeded(dbUserId, sub);
+      } else {
+        const resolvedEmail = await this.resolveEmail((user?.email as string) || undefined, sub);
         const username: string | undefined = (user?.username as string) || undefined;
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const created = await this.usersService.create({
-          email: email ?? `${sub}@auto.local`,
+          email: resolvedEmail,
           first_name: username ?? undefined,
           last_name: undefined,
           date_of_birth: undefined as any,
           user_type: 'customer',
           cognito_uuid: sub,
         } as any);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         dbUserId = created.user.id;
       }
     }
@@ -198,20 +229,19 @@ export class RegistrationsService {
       } catch {
         dbUserId = null;
       }
-      if (!dbUserId) {
-        // Auto-provision Cognito user and household if not found
-        const email: string | undefined = (user?.email as string) || undefined;
+      if (dbUserId) {
+        void this.healEmailIfNeeded(dbUserId, sub);
+      } else {
+        const resolvedEmail = await this.resolveEmail((user?.email as string) || undefined, sub);
         const username: string | undefined = (user?.username as string) || undefined;
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         const created = await this.usersService.create({
-          email: email ?? `${sub}@auto.local`,
+          email: resolvedEmail,
           first_name: username ?? undefined,
           last_name: undefined,
           date_of_birth: undefined as any,
           user_type: 'customer',
           cognito_uuid: sub,
         } as any);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         dbUserId = created.user.id;
       }
     }
@@ -540,11 +570,39 @@ export class RegistrationsService {
     }
     if (!dbUserId) throw new ForbiddenException('User not found');
 
+    // Exclude the CM's own household so self-registrations don't appear
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const cmHouseholdId = await this.householdsService.findHouseholdIdByUserId(dbUserId);
+
     const qb = this.regsRepo
       .createQueryBuilder('reg')
+      .leftJoin(
+        'household_members',
+        'hm',
+        'hm.household_id = reg.household_id AND hm.is_head_of_household = 1',
+      )
+      .leftJoin('users', 'u', 'u.id = hm.user_id')
+      .select([
+        'reg.id AS id',
+        'reg.event_id AS event_id',
+        'reg.household_id AS household_id',
+        'reg.status AS status',
+        'reg.created_by AS created_by',
+        'reg.public_event_date_id AS event_date_id',
+        'reg.public_event_slot_id AS event_slot_id',
+        'reg.created_at AS created_at',
+        'u.first_name AS registrant_first_name',
+        'u.last_name AS registrant_last_name',
+        'u.phone AS registrant_phone',
+        'u.email AS registrant_email',
+      ])
       .where('reg.created_by = :cmId', { cmId: dbUserId })
       .orderBy('reg.created_at', 'DESC')
       .take(query.limit ?? 50);
+
+    if (cmHouseholdId) {
+      qb.andWhere('reg.household_id != :cmHhId', { cmHhId: cmHouseholdId });
+    }
 
     if (query.event_id) {
       qb.andWhere('reg.event_id = :eventId', { eventId: query.event_id });
@@ -559,7 +617,58 @@ export class RegistrationsService {
       qb.andWhere('reg.created_at <= :to', { to: new Date(query.to_date) });
     }
 
-    return qb.getMany();
+    const rows = await qb.getRawMany();
+
+    // Resolve event names and dates from the public database (freshtrak_public).
+    // Uses a retry to handle cold connection-pool scenarios where the first
+    // query against the public DataSource fails transiently.
+    const dateIds = [
+      ...new Set(rows.map((r: any) => Number(r.event_date_id)).filter((id) => id > 0)),
+    ];
+    const eventNameMap = new Map<number, string>();
+    const eventDateIsoMap = new Map<number, string>();
+
+    const resolveWithRetry = async <T>(
+      fn: (id: number) => Promise<T | null>,
+      id: number,
+    ): Promise<T | null> => {
+      try {
+        return await fn(id);
+      } catch {
+        // Single retry after a short delay to handle cold-pool / transient failures
+        try {
+          await new Promise((r) => setTimeout(r, 150));
+          return await fn(id);
+        } catch (retryErr) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[findByCreatedBy] Failed to resolve public data for event_date_id=${id} after retry`,
+            retryErr instanceof Error ? retryErr.message : String(retryErr),
+          );
+          return null;
+        }
+      }
+    };
+
+    await Promise.all(
+      dateIds.map(async (dateId) => {
+        const [name, iso] = await Promise.all([
+          resolveWithRetry((id) => this.publicSchedule.getEventNameForDateId(id), dateId),
+          resolveWithRetry((id) => this.publicSchedule.getDateIsoForDateId(id), dateId),
+        ]);
+        if (name) eventNameMap.set(dateId, name);
+        if (iso) eventDateIsoMap.set(dateId, iso);
+      }),
+    );
+
+    return rows.map((r: any) => {
+      const id = Number(r.event_date_id);
+      return {
+        ...r,
+        event_name: id > 0 ? (eventNameMap.get(id) ?? null) : null,
+        event_date: id > 0 ? (eventDateIsoMap.get(id) ?? null) : null,
+      };
+    });
   }
 
   private async generateUniqueIdentificationCode(): Promise<string> {
@@ -594,20 +703,22 @@ export class RegistrationsService {
     } catch {
       cmDbUserId = null;
     }
-    if (!cmDbUserId) {
-      // Auto-provision the case manager's DB user
-      const email: string | undefined = (caseManager?.email as string) || undefined;
+    if (cmDbUserId) {
+      void this.healEmailIfNeeded(cmDbUserId, cmSub);
+    } else {
+      const resolvedEmail = await this.resolveEmail(
+        (caseManager?.email as string) || undefined,
+        cmSub,
+      );
       const username: string | undefined = (caseManager?.username as string) || undefined;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const created = await this.usersService.create({
-        email: email ?? `${cmSub}@auto.local`,
+        email: resolvedEmail,
         first_name: username ?? undefined,
         last_name: undefined,
         date_of_birth: undefined as any,
         user_type: 'customer',
         cognito_uuid: cmSub,
       } as any);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       cmDbUserId = created.user.id;
     }
     if (!cmDbUserId) throw new ForbiddenException('Case manager user not found');
@@ -618,6 +729,10 @@ export class RegistrationsService {
       identification_code: await this.generateUniqueIdentificationCode(),
       first_name: registrant.first_name,
       last_name: registrant.last_name,
+      suffix: registrant.suffix ?? null,
+      gender: registrant.gender ?? null,
+      email: registrant.email ?? null,
+      date_of_birth: registrant.date_of_birth ?? null,
       phone: registrant.phone ?? null,
       address_line_1: registrant.address_line_1 ?? null,
       address_line_2: registrant.address_line_2 ?? null,
@@ -903,34 +1018,33 @@ export class RegistrationsService {
     const reg = await this.regsRepo.findOne({ where: { id: dto.registration_id } });
     if (!reg) throw new NotFoundException('Registration not found');
     // Resolve household via JWT sub
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const checkInSub = (user?.userId as string) ?? (user?.id as string);
     let dbUserId =
       user?.authType === 'guest' && typeof user.dbUserId === 'number'
         ? user.dbUserId
         : await (async () => {
             try {
-              return await this.usersService.findDbUserIdByCognitoUuid(
-                (user?.userId as string) ?? (user?.id as string),
-              );
+              return await this.usersService.findDbUserIdByCognitoUuid(checkInSub);
             } catch {
               return null;
             }
           })();
-    if (!dbUserId) {
-      // Attempt to auto-provision as in registration flow
-      const sub = (user?.userId as string) ?? (user?.id as string);
-      const email: string | undefined = (user?.email as string) || undefined;
+    if (dbUserId) {
+      void this.healEmailIfNeeded(dbUserId, checkInSub);
+    } else {
+      const resolvedEmail = await this.resolveEmail(
+        (user?.email as string) || undefined,
+        checkInSub,
+      );
       const username: string | undefined = (user?.username as string) || undefined;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const created = await this.usersService.create({
-        email: email ?? `${sub}@auto.local`,
+        email: resolvedEmail,
         first_name: username ?? undefined,
         last_name: undefined,
         date_of_birth: undefined as any,
         user_type: 'customer',
-        cognito_uuid: sub,
+        cognito_uuid: checkInSub,
       } as any);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       dbUserId = created.user.id;
     }
     const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);

@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, BeforeInsert, BeforeUpdate } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  BeforeInsert,
+  BeforeUpdate,
+} from 'typeorm';
 import { User } from './user.entity';
 import { randomBytes } from 'crypto';
 

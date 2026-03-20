@@ -7,7 +7,6 @@ import { Event } from '../../entities/event.entity';
 import { EventTimeslot } from '../../entities/event-timeslot.entity';
 import { Household } from '../../entities/household.entity';
 import { HouseholdMember } from '../../entities/household-member.entity';
-import { User } from '../../entities/user.entity';
 import { RegistrationsService } from './registrations.service';
 import { CheckInAudit } from '../../entities/checkin-audit.entity';
 import { RegistrationsController } from './registrations.controller';
@@ -15,9 +14,11 @@ import { UsersModule } from '../users/users.module';
 import { HouseholdsModule } from '../households/households.module';
 import { PublicScheduleModule } from '../public-schedule/public-schedule.module';
 import { Authentication } from '../../entities/authentication.entity';
+import { User } from '../../entities/user.entity';
 import { SurveyFamily } from '../../entities/survey-families.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
+import { CognitoService } from '../auth/cognito.service';
 
 @Module({
   imports: [
@@ -28,10 +29,9 @@ import { PantryTrakClient } from '../integrations/pantrytrak.client';
       EventTimeslot,
       Household,
       HouseholdMember,
-      User,
       CheckInAudit,
       Authentication,
-      // Needed for survey auto-assignment and history augmentation
+      User,
       SurveyFamily,
       PublicSurvey,
     ]),
@@ -41,6 +41,6 @@ import { PantryTrakClient } from '../integrations/pantrytrak.client';
     JwtModule.register({}),
   ],
   controllers: [RegistrationsController],
-  providers: [RegistrationsService, PantryTrakClient],
+  providers: [RegistrationsService, PantryTrakClient, CognitoService],
 })
 export class RegistrationsModule {}

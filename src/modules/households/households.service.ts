@@ -183,9 +183,7 @@ export class HouseholdsService {
     if (Array.isArray(dto.members)) {
       // Get IDs of members in the payload (excluding new members with null/undefined id)
       const payloadMemberIds = new Set(
-        dto.members
-          .filter((m: any) => m.id != null)
-          .map((m: any) => Number(m.id))
+        dto.members.filter((m) => m.id != null).map((m) => Number(m.id)),
       );
 
       // Deactivate members that exist in DB but are NOT in the payload
@@ -271,7 +269,6 @@ export class HouseholdsService {
 
     return updated;
   }
- 
 
   private withComputedCounts(household: Household): HouseholdWithCounts {
     const members: HouseholdMember[] = household.members || [];

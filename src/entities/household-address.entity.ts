@@ -5,8 +5,6 @@ import {
   ManyToOne,
   BeforeInsert,
   BeforeUpdate,
-  DeleteDateColumn,
-  Index,
   JoinColumn,
 } from 'typeorm';
 import { Household } from './household.entity';

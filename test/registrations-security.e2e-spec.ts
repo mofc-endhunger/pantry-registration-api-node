@@ -26,8 +26,14 @@ describe('Registrations security and tokens (E2E)', () => {
       eventsRepo.create({ name: 'Staff List Event', is_active: true } as any),
     );
     const email = `staff-deny+${Date.now()}@example.com`;
-    await request(app.getHttpServer()).post('/auth/register').send({ email, password: 'Pw!23456' }).expect(201);
-    const login = await request(app.getHttpServer()).post('/auth/login').send({ email, password: 'Pw!23456' }).expect(201);
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email, password: 'Pw!23456' })
+      .expect(201);
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'Pw!23456' })
+      .expect(201);
     const jwt = login.body.access_token as string;
     await request(app.getHttpServer())
       .get(`/registrations/event/${(event as any).id}`)
@@ -46,4 +52,3 @@ describe('Registrations security and tokens (E2E)', () => {
     expect([401, 403]).toContain(res.status);
   });
 });
-
