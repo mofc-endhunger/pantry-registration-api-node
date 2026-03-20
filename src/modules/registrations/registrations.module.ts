@@ -17,6 +17,7 @@ import { Authentication } from '../../entities/authentication.entity';
 import { User } from '../../entities/user.entity';
 import { SurveyFamily } from '../../entities/survey-families.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
+import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
 import { CognitoService } from '../auth/cognito.service';
 
@@ -34,6 +35,7 @@ import { CognitoService } from '../auth/cognito.service';
       User,
       SurveyFamily,
       PublicSurvey,
+      PublicSurveyQuestionMap,
     ]),
     forwardRef(() => UsersModule),
     forwardRef(() => HouseholdsModule),

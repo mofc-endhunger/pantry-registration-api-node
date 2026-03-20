@@ -34,6 +34,8 @@ import { PublicScheduleService } from '../public-schedule/public-schedule.servic
 import { Authentication } from '../../entities/authentication.entity';
 import { SurveyFamily } from '../../entities/survey-families.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
+import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
+import { isSurveyActionable } from '../../common/utils/survey-actionable';
 import { CognitoService } from '../auth/cognito.service';
 
 @Injectable()
@@ -48,6 +50,8 @@ export class RegistrationsService {
     @InjectRepository(User) private readonly userRepo: Repository<User>,
     @InjectRepository(SurveyFamily) private readonly familiesRepo: Repository<SurveyFamily>,
     @InjectRepository(PublicSurvey) private readonly surveysRepo: Repository<PublicSurvey>,
+    @InjectRepository(PublicSurveyQuestionMap)
+    private readonly questionMapRepo: Repository<PublicSurveyQuestionMap>,
     private readonly usersService: UsersService,
     private readonly householdsService: HouseholdsService,
     private readonly publicSchedule: PublicScheduleService,
@@ -84,6 +88,10 @@ export class RegistrationsService {
     } catch {
       // non-critical — don't block the request
     }
+  }
+
+  private get surveyRepos() {
+    return { surveysRepo: this.surveysRepo, questionMapRepo: this.questionMapRepo };
   }
 
   async listForEvent(eventId: number) {
@@ -138,20 +146,20 @@ export class RegistrationsService {
       order: { created_at: 'DESC' } as any,
     });
 
-    // Augment event history with survey availability so UI can prompt
     const withSurvey = await Promise.all(
       regs.map(async (r) => {
         try {
-          // Prefer exact registration id; fallback to family_id
-          const qb = this.familiesRepo.createQueryBuilder('f');
-          qb.where('f.linkage_type_NK = :rid', { rid: Number(r.id) })
-            .orWhere('f.family_id = :fid', { fid: r.household_id })
-            .orderBy('f.date_added', 'DESC')
-            .limit(1);
-          const fam = await qb.getOne();
+          const fam =
+            (await this.familiesRepo.findOne({
+              where: { linkage_type_NK: Number(r.id) },
+              order: { date_added: 'DESC' },
+            })) ??
+            (await this.familiesRepo.findOne({
+              where: { family_id: r.household_id },
+              order: { date_added: 'DESC' },
+            }));
           if (!fam) return { ...r, survey: null };
-          // Completed → not actionable
-          if (fam.survey_status === 'completed') return { ...r, survey: null };
+          if (!(await isSurveyActionable(fam, this.surveyRepos))) return { ...r, survey: null };
           return {
             ...r,
             survey: {

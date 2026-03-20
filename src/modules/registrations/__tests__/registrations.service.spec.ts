@@ -14,6 +14,7 @@ import { Authentication } from '../../../entities/authentication.entity';
 import { User } from '../../../entities/user.entity';
 import { SurveyFamily } from '../../../entities/survey-families.entity';
 import { PublicSurvey } from '../../../entities-public/survey.public.entity';
+import { PublicSurveyQuestionMap } from '../../../entities-public/survey-question-map.public.entity';
 
 describe('RegistrationsService', () => {
   let service: RegistrationsService;
@@ -44,6 +45,10 @@ describe('RegistrationsService', () => {
         // New repositories injected in service
         { provide: getRepositoryToken(SurveyFamily), useValue: createRepoMock<SurveyFamily>() },
         { provide: getRepositoryToken(PublicSurvey), useValue: createRepoMock<PublicSurvey>() },
+        {
+          provide: getRepositoryToken(PublicSurveyQuestionMap),
+          useValue: createRepoMock<PublicSurveyQuestionMap>(),
+        },
         { provide: UsersService, useValue: createUsersServiceMock() },
         { provide: HouseholdsService, useValue: createHouseholdsServiceMock() },
         { provide: PublicScheduleService, useValue: createPublicScheduleMock() },

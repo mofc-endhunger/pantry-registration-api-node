@@ -9,6 +9,9 @@ import { HouseholdsService } from '../households/households.service';
 import { Authentication } from '../../entities/authentication.entity';
 import { PublicScheduleService } from '../public-schedule/public-schedule.service';
 import { SurveyFamily } from '../../entities/survey-families.entity';
+import { PublicSurvey } from '../../entities-public/survey.public.entity';
+import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
+import { isSurveyActionable } from '../../common/utils/survey-actionable';
 
 type AuthUser = {
   authType?: string;
@@ -36,6 +39,9 @@ export class ReservationsService {
     @InjectRepository(EventTimeslot) private readonly timesRepo: Repository<EventTimeslot>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
     @InjectRepository(SurveyFamily) private readonly familiesRepo: Repository<SurveyFamily>,
+    @InjectRepository(PublicSurvey) private readonly surveysRepo: Repository<PublicSurvey>,
+    @InjectRepository(PublicSurveyQuestionMap)
+    private readonly questionMapRepo: Repository<PublicSurveyQuestionMap>,
     private readonly usersService: UsersService,
     private readonly householdsService: HouseholdsService,
     private readonly publicSchedule: PublicScheduleService,
@@ -53,6 +59,10 @@ export class ReservationsService {
     const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(sub);
     if (!dbUserId) throw new ForbiddenException('User not found');
     return dbUserId;
+  }
+
+  private get surveyRepos() {
+    return { surveysRepo: this.surveysRepo, questionMapRepo: this.questionMapRepo };
   }
 
   private coerceDateOnly(d: Date | null | undefined): string | null {
@@ -84,8 +94,16 @@ export class ReservationsService {
 
     const rows = await qb.getRawAndEntities();
 
-    // Compute date ISO using public IDs
+    const PAST_EVENT_WINDOW_DAYS = 30;
+    const SURVEY_EXPIRY_DAYS = 14;
+
     const todayIso = new Date().toISOString().slice(0, 10);
+    const pastCutoff = new Date();
+    pastCutoff.setDate(pastCutoff.getDate() - PAST_EVENT_WINDOW_DAYS);
+    const pastCutoffIso = pastCutoff.toISOString().slice(0, 10);
+    const surveyExpiryCutoff = new Date();
+    surveyExpiryCutoff.setDate(surveyExpiryCutoff.getDate() - SURVEY_EXPIRY_DAYS);
+    const surveyExpiryCutoffIso = surveyExpiryCutoff.toISOString().slice(0, 10);
     const computeDateIso = async (r: Registration): Promise<string | null> => {
       if ((r as any).public_event_date_id) {
         return this.publicSchedule.getDateIsoForDateId((r as any).public_event_date_id as number);
@@ -112,7 +130,8 @@ export class ReservationsService {
       const type = params.type ?? 'all';
       if (type === 'all') return true;
       if (!d) return false;
-      return type === 'upcoming' ? d >= todayIso : d < todayIso;
+      if (type === 'upcoming') return d >= todayIso;
+      return d < todayIso && d >= pastCutoffIso;
     };
 
     const filtered = withDates.filter(({ dateIso }) => inRange(dateIso) && byType(dateIso));
@@ -123,11 +142,33 @@ export class ReservationsService {
       ({ dateIso }) => dateIso != null && dateIso >= todayIso,
     ).length;
     const pastCount = baseWindow.filter(
-      ({ dateIso }) => dateIso != null && dateIso < todayIso,
+      ({ dateIso }) => dateIso != null && dateIso < todayIso && dateIso >= pastCutoffIso,
     ).length;
     const total = filtered.length;
 
-    // Map entities to read model
+    // Best-effort: expire survey_families for reservations older than the survey window
+    const expired = withDates.filter(
+      ({ dateIso }) => dateIso != null && dateIso < surveyExpiryCutoffIso,
+    );
+    if (expired.length > 0) {
+      Promise.all(
+        expired.map(async ({ r }) => {
+          try {
+            const fam = await this.familiesRepo.findOne({
+              where: { linkage_type_NK: Number(r.id) },
+              order: { date_added: 'DESC' },
+            });
+            if (fam && fam.survey_status !== 'completed' && fam.survey_status !== 'expired') {
+              fam.survey_status = 'expired';
+              await this.familiesRepo.save(fam);
+            }
+          } catch {
+            // ignore
+          }
+        }),
+      ).catch(() => {});
+    }
+
     // Sort by date desc then created_at desc
     filtered.sort((a, b) => {
       if (a.dateIso && b.dateIso) return b.dateIso.localeCompare(a.dateIso);
@@ -168,28 +209,19 @@ export class ReservationsService {
             eventName = n ?? undefined;
           }
         }
-        // Survey availability (surface any non-completed survey so UI can decide gating)
         let survey: { id: number; status: string } | null = null;
         try {
-          // Prefer exact numeric registration id; else fallback to family_id
           const regId = Number(r.id);
-          const qb = this.familiesRepo.createQueryBuilder('f');
-          qb.where('f.linkage_type_NK = :rid', { rid: regId })
-            .orWhere('f.family_id = :fid', { fid: r.household_id })
-            .orderBy('f.date_added', 'DESC')
-            .limit(1);
-          const fam = await qb.getOne();
-          // debug trace to verify lookup path in live env
-          // eslint-disable-next-line no-console
-          console.log('[reservations] survey lookup', {
-            regId,
-            household_id: r.household_id,
-            found: !!fam,
-            fam_id: fam?.survey_family_id,
-            fam_survey_id: fam?.survey_id,
-            fam_status: fam?.survey_status,
-          });
-          if (fam && fam.survey_status !== 'completed') {
+          const fam =
+            (await this.familiesRepo.findOne({
+              where: { linkage_type_NK: regId },
+              order: { date_added: 'DESC' },
+            })) ??
+            (await this.familiesRepo.findOne({
+              where: { family_id: r.household_id },
+              order: { date_added: 'DESC' },
+            }));
+          if (fam && (await isSurveyActionable(fam, this.surveyRepos))) {
             survey = { id: Number(fam.survey_id), status: String(fam.survey_status) };
           }
         } catch {
@@ -302,22 +334,18 @@ export class ReservationsService {
         household_id: r.household_id,
         created_at: r.created_at.toISOString(),
         updated_at: r.updated_at.toISOString(),
-        // Surface survey info for single reservation as well
         survey: await (async () => {
           try {
             const fam =
               (await this.familiesRepo.findOne({
-                where: [
-                  { linkage_type_NK: Number(r.id) as any },
-                  { linkage_type_NK: String(r.id) as any },
-                ] as any,
-                order: { date_added: 'DESC' as any },
-              })) ||
+                where: { linkage_type_NK: Number(r.id) },
+                order: { date_added: 'DESC' },
+              })) ??
               (await this.familiesRepo.findOne({
-                where: { family_id: r.household_id as any } as any,
-                order: { date_added: 'DESC' as any },
+                where: { family_id: r.household_id },
+                order: { date_added: 'DESC' },
               }));
-            if (fam && fam.survey_status !== 'completed') {
+            if (fam && (await isSurveyActionable(fam, this.surveyRepos))) {
               return { id: Number(fam.survey_id), status: String(fam.survey_status) };
             }
           } catch {

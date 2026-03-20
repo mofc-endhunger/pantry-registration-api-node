@@ -9,10 +9,19 @@ import { HouseholdsModule } from '../households/households.module';
 import { Authentication } from '../../entities/authentication.entity';
 import { PublicScheduleModule } from '../public-schedule/public-schedule.module';
 import { SurveyFamily } from '../../entities/survey-families.entity';
+import { PublicSurvey } from '../../entities-public/survey.public.entity';
+import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Registration, EventTimeslot, Authentication, SurveyFamily]),
+    TypeOrmModule.forFeature([
+      Registration,
+      EventTimeslot,
+      Authentication,
+      SurveyFamily,
+      PublicSurvey,
+      PublicSurveyQuestionMap,
+    ]),
     forwardRef(() => UsersModule),
     forwardRef(() => HouseholdsModule),
     PublicScheduleModule,
