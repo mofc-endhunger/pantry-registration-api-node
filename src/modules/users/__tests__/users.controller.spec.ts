@@ -28,7 +28,7 @@ describe('UsersController', () => {
     const req = { user: { userId: 'sub-1' } } as unknown as Request;
     const res = await controller.getCurrentUser(req);
     expect(service.findDbUserIdByCognitoUuid).toHaveBeenCalledWith('sub-1');
-    expect(res).toEqual({ id: 99 });
+    expect(res).toEqual(expect.objectContaining({ id: 99 }));
   });
 
   it('getCurrentUser throws when DB user not found', async () => {

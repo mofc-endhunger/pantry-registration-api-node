@@ -57,6 +57,9 @@ export class User {
   @Column({ type: 'varchar', length: 255, nullable: true, default: null })
   email?: string | null;
 
+  @Column({ type: 'int', nullable: true, default: null })
+  language_id?: number | null;
+
   @Column({ type: 'varchar', length: 255, nullable: true, default: null })
   address_line_1?: string | null;
 

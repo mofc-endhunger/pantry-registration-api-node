@@ -1,0 +1,117 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
+import { Controller, Get, Post, Query, Req, UseGuards, Body } from '@nestjs/common';
+import type { Request } from 'express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOkResponse,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
+import { GuestOrJwtAuthGuard } from '../auth/guest-or-jwt.guard';
+import { SurveysService } from './surveys.service';
+import { SubmitSurveyDto } from './dto/submit-survey.dto';
+
+@ApiTags('surveys')
+@Controller('surveys')
+export class SurveysController {
+  constructor(private readonly surveysService: SurveysService) {}
+
+  @UseGuards(GuestOrJwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('Guest-Token')
+  @ApiOperation({
+    summary: 'Get active survey for context',
+    description:
+      'Evaluates transactional eligibility based on registration_id and returns a form if available.',
+  })
+  @ApiOkResponse({ description: 'Active survey or has_active=false' })
+  @Get('active')
+  async getActive(
+    @Req() req: Request,
+    @Query('registration_id') registrationId?: string,
+    @Query('language_id') languageId?: string,
+  ) {
+    const user = req.user as any;
+    const guestToken = (req.headers['x-guest-token'] as string) || undefined;
+    const id = registrationId ? parseInt(registrationId, 10) : undefined;
+    const lang = languageId ? parseInt(languageId, 10) : undefined;
+    return this.surveysService.getActive({
+      user,
+      guestToken,
+      registrationId: id,
+      languageId: lang,
+    });
+  }
+
+  @UseGuards(GuestOrJwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('Guest-Token')
+  @ApiOperation({
+    summary: 'Get client-side survey bundle',
+    description:
+      'Returns a normalized package (sections, questions, options, rules, progress) for client-driven navigation.',
+  })
+  @ApiOkResponse({ description: 'Survey client bundle or has_active=false' })
+  @Get('client-bundle')
+  async getClientBundle(
+    @Req() req: Request,
+    @Query('registration_id') registrationId?: string,
+    @Query('language_id') languageId?: string,
+  ) {
+    const user = req.user as any;
+    const guestToken = (req.headers['x-guest-token'] as string) || undefined;
+    const id = registrationId ? parseInt(registrationId, 10) : undefined;
+    const lang = languageId ? parseInt(languageId, 10) : undefined;
+    return this.surveysService.getClientBundle({
+      user,
+      guestToken,
+      registrationId: id,
+      languageId: lang,
+    });
+  }
+
+  @UseGuards(GuestOrJwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiSecurity('Guest-Token')
+  @ApiOperation({
+    summary: 'Submit survey form',
+    description:
+      'Persists a form submission and responses. Enforces 14-day window for transactional context.',
+  })
+  @ApiBody({
+    type: SubmitSurveyDto,
+    examples: {
+      transactional: {
+        summary: 'Transactional survey submission',
+        value: {
+          survey_id: 1,
+          trigger_id: 10,
+          registration_id: 12345,
+          overall_rating: 5,
+          comments: 'Great experience, thank you!',
+          responses: [
+            { question_id: 101, answer_value: '5' },
+            { question_id: 102, answer_value: '4' },
+            { question_id: 103, answer_value: '5' },
+          ],
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Submission created' })
+  @ApiResponse({ status: 409, description: 'Duplicate submission' })
+  @Post('submit')
+  async submit(@Req() req: Request, @Body() dto: SubmitSurveyDto) {
+    const user = req.user as any;
+    const guestToken = (req.headers['x-guest-token'] as string) || undefined;
+    const ip =
+      (req.headers['x-forwarded-for'] as string) ||
+      (req.socket?.remoteAddress as string) ||
+      undefined;
+    const userAgent = (req.headers['user-agent'] as string) || undefined;
+    return this.surveysService.submit({ user, guestToken, dto, meta: { ip, userAgent } });
+  }
+}

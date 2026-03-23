@@ -29,6 +29,10 @@ import { CheckInDto } from './dto/check-in.dto';
 import { CheckInAudit } from '../../entities/checkin-audit.entity';
 import { PublicScheduleService } from '../public-schedule/public-schedule.service';
 import { Authentication } from '../../entities/authentication.entity';
+import { SurveyFamily } from '../../entities/survey-families.entity';
+import { PublicSurvey } from '../../entities-public/survey.public.entity';
+import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
+import { isSurveyActionable } from '../../common/utils/survey-actionable';
 
 @Injectable()
 export class RegistrationsService {
@@ -39,12 +43,20 @@ export class RegistrationsService {
     @InjectRepository(EventTimeslot) private readonly timesRepo: Repository<EventTimeslot>,
     @InjectRepository(CheckInAudit) private readonly checkinsRepo: Repository<CheckInAudit>,
     @InjectRepository(Authentication) private readonly authRepo: Repository<Authentication>,
+    @InjectRepository(SurveyFamily) private readonly familiesRepo: Repository<SurveyFamily>,
+    @InjectRepository(PublicSurvey) private readonly surveysRepo: Repository<PublicSurvey>,
+    @InjectRepository(PublicSurveyQuestionMap)
+    private readonly questionMapRepo: Repository<PublicSurveyQuestionMap>,
     private readonly usersService: UsersService,
     private readonly householdsService: HouseholdsService,
     private readonly publicSchedule: PublicScheduleService,
     @Optional() @InjectRepository(Event) private readonly eventsRepo?: Repository<Event>,
     @Optional() private readonly pantryTrakClient?: PantryTrakClient,
   ) {}
+
+  private get surveyRepos() {
+    return { surveysRepo: this.surveysRepo, questionMapRepo: this.questionMapRepo };
+  }
 
   async listForEvent(eventId: number) {
     return this.regsRepo.find({ where: { event_id: eventId } });
@@ -90,7 +102,7 @@ export class RegistrationsService {
     const household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
     if (!household_id) throw new ForbiddenException('Household not resolved');
 
-    return this.regsRepo.find({
+    const regs = await this.regsRepo.find({
       where: [
         { household_id, status: 'confirmed' } as any,
         { household_id, status: 'waitlisted' } as any,
@@ -98,6 +110,35 @@ export class RegistrationsService {
       ],
       order: { created_at: 'DESC' } as any,
     });
+
+    const withSurvey = await Promise.all(
+      regs.map(async (r) => {
+        try {
+          const fam =
+            (await this.familiesRepo.findOne({
+              where: { linkage_type_NK: Number(r.id) },
+              order: { date_added: 'DESC' },
+            })) ??
+            (await this.familiesRepo.findOne({
+              where: { family_id: r.household_id },
+              order: { date_added: 'DESC' },
+            }));
+          if (!fam) return { ...r, survey: null };
+          if (!(await isSurveyActionable(fam, this.surveyRepos))) return { ...r, survey: null };
+          return {
+            ...r,
+            survey: {
+              id: fam.survey_id,
+              status: fam.survey_status,
+            },
+          };
+        } catch {
+          return { ...r, survey: null };
+        }
+      }),
+    );
+
+    return withSurvey;
   }
 
   async registerForEvent(
@@ -475,6 +516,14 @@ export class RegistrationsService {
       console.warn('[PantryTrak] client not available', msg);
     }
 
+    // Auto-assign survey family (best-effort; non-blocking)
+    try {
+      await this.autoAssignSurveyForRegistration(saved);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[Surveys] auto-assign failed', e instanceof Error ? e.message : String(e));
+    }
+
     return saved;
   }
 
@@ -513,6 +562,84 @@ export class RegistrationsService {
     else if (reg.public_event_date_id)
       await this.publicSchedule.decrementDate(reg.public_event_date_id);
     return reg;
+  }
+
+  private async autoAssignSurveyForRegistration(reg: Registration) {
+    // Only assign for confirmed registrations
+    if (reg.status !== 'confirmed') return;
+
+    // Find latest active survey matching language/status (system/type filters pending schema confirmation)
+    // Prefer user's language if available; fallback to English (1)
+    let langId = 1;
+    try {
+      const creator = await this.usersService.findById(reg.created_by as unknown as number);
+      if (creator?.language_id && Number.isFinite(Number(creator.language_id))) {
+        langId = Number(creator.language_id);
+      }
+    } catch {
+      // ignore, keep default
+    }
+
+    const qb = this.surveysRepo.createQueryBuilder('s');
+    qb.where('s.status_id = :status', { status: 1 })
+      .andWhere('s.language_id = :lang', { lang: langId })
+      .orderBy('s.survey_id', 'DESC')
+      .limit(1);
+    const survey = await qb.getOne();
+    if (!survey) return;
+
+    // Avoid duplicate family rows for same registration/survey
+    const existing = await this.familiesRepo.findOne({
+      where: {
+        survey_id: survey.survey_id,
+        linkage_type_id: 0 as any,
+        linkage_type_NK: reg.id as any,
+      },
+      order: { date_added: 'DESC' as any },
+    });
+    if (existing) return;
+
+    // Compute display (presented_at) as end of event occurrence
+    let presentedAt: Date = new Date();
+    try {
+      if (reg.public_event_slot_id) {
+        const [dateIso, times] = await Promise.all([
+          this.publicSchedule.getDateIsoForSlotId(reg.public_event_slot_id),
+          this.publicSchedule.getTimesForSlotId(reg.public_event_slot_id),
+        ]);
+        if (dateIso) {
+          const end = times?.end_time ?? '23:59:59';
+          presentedAt = new Date(`${dateIso}T${end}`);
+        }
+      } else if (reg.public_event_date_id) {
+        const [dateIso, times] = await Promise.all([
+          this.publicSchedule.getDateIsoForDateId(reg.public_event_date_id),
+          this.publicSchedule.getTimesForDateId(reg.public_event_date_id),
+        ]);
+        if (dateIso) {
+          const end = times?.end_time ?? '23:59:59';
+          presentedAt = new Date(`${dateIso}T${end}`);
+        }
+      } else if (reg.timeslot_id) {
+        const t = await this.timesRepo.findOne({ where: { id: reg.timeslot_id } });
+        if (t?.end_at) presentedAt = new Date(t.end_at);
+      }
+    } catch {
+      // ignore time resolution errors; fallback to now
+    }
+
+    await this.familiesRepo.save({
+      survey_id: survey.survey_id,
+      family_id: reg.household_id,
+      family_member_id: null,
+      linkage_type_id: 0, // registration linkage
+      linkage_type_NK: reg.id,
+      survey_status: 'scheduled',
+      presented_at: presentedAt,
+      started_at: null,
+      completed_at: null,
+      status_id: 1,
+    } as any);
   }
 
   async checkIn(user: AuthUser, dto: CheckInDto) {
