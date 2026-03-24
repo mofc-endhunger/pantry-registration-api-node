@@ -33,6 +33,7 @@ import { SurveyFamily } from '../../entities/survey-families.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { isSurveyActionable } from '../../common/utils/survey-actionable';
+import { FEEDBACK_SURVEY_TYPE_ID } from '../../common/constants/survey.constants';
 
 @Injectable()
 export class RegistrationsService {
@@ -568,8 +569,6 @@ export class RegistrationsService {
     // Only assign for confirmed registrations
     if (reg.status !== 'confirmed') return;
 
-    // Find latest active survey matching language/status (system/type filters pending schema confirmation)
-    // Prefer user's language if available; fallback to English (1)
     let langId = 1;
     try {
       const creator = await this.usersService.findById(reg.created_by as unknown as number);
@@ -583,6 +582,7 @@ export class RegistrationsService {
     const qb = this.surveysRepo.createQueryBuilder('s');
     qb.where('s.status_id = :status', { status: 1 })
       .andWhere('s.language_id = :lang', { lang: langId })
+      .andWhere('s.survey_type_id = :type', { type: FEEDBACK_SURVEY_TYPE_ID })
       .orderBy('s.survey_id', 'DESC')
       .limit(1);
     const survey = await qb.getOne();

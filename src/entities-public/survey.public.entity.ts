@@ -11,6 +11,9 @@ export class PublicSurvey {
   @Column({ type: 'smallint', unsigned: true, name: 'language_id' })
   language_id!: number;
 
+  @Column({ type: 'smallint', unsigned: true, name: 'survey_type_id' })
+  survey_type_id!: number;
+
   @Column({ type: 'varchar', length: 255, name: 'survey_title' })
   survey_title!: string;
 
