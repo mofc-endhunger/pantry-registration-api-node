@@ -30,6 +30,7 @@ function createRepoMock<T extends ObjectLiteral>(): jest.Mocked<Repository<T>> {
     query: jest.fn(),
     delete: jest.fn(),
     insert: jest.fn(),
+    upsert: jest.fn(),
     createQueryBuilder: jest.fn(),
   } as any;
 }

@@ -539,25 +539,13 @@ export class SurveysService {
     }
 
     if (params.dto.responses?.length) {
-      // Pre-load all question maps for logical survey variants so we can
-      // delete prior answers stored under any language's survey_question_id.
-      const allLogicalMaps = await this.questionMapRepo.find({
-        where: { survey_id: In(logicalSurveyIds), status_id: 1 as any },
-      });
-      // display_order → all survey_question_ids across language variants
-      const orderToAllSqIds = new Map<number, number[]>();
-      for (const m of allLogicalMaps) {
-        const arr = orderToAllSqIds.get(m.display_order) ?? [];
-        arr.push(m.survey_question_id);
-        orderToAllSqIds.set(m.display_order, arr);
-      }
-
       const rows: Array<{
         survey_family_id: number;
         survey_question_id: number;
         answer_id: number | null;
         answer_value: string | null;
         answer_text: string | null;
+        answered_at: Date;
       }> = [];
 
       for (const r of params.dto.responses) {
@@ -610,23 +598,17 @@ export class SurveysService {
           );
         }
 
-        // Delete prior answers for this logical question across ALL language variants
-        const siblingIds = orderToAllSqIds.get(map.display_order) ?? [surveyQuestionId];
-        await this.familyAnswersRepo.delete({
-          survey_family_id: familyId as any,
-          survey_question_id: In(siblingIds) as any,
-        } as any);
-
         rows.push({
           survey_family_id: familyId,
           survey_question_id: surveyQuestionId,
           answer_id: answerId,
           answer_value: answerValue,
           answer_text: answerText,
+          answered_at: new Date(),
         });
       }
 
-      await this.familyAnswersRepo.insert(rows as any);
+      await this.familyAnswersRepo.upsert(rows as any, ['survey_family_id', 'survey_question_id']);
     }
 
     return {
