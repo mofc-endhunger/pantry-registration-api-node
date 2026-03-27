@@ -21,6 +21,7 @@ import { UsersService } from '../users/users.service';
 import { HouseholdsService } from '../households/households.service';
 import { PublicScheduleService } from '../public-schedule/public-schedule.service';
 import { SubmitSurveyDto } from './dto/submit-survey.dto';
+import { FEEDBACK_SURVEY_TYPE_ID } from '../../common/constants/survey.constants';
 
 type AuthUser = {
   authType?: string;
@@ -400,11 +401,11 @@ export class SurveysService {
   }
 
   private async fetchLatestActiveSurveyCompat(languageId?: number): Promise<PublicSurvey | null> {
-    // Try requested language first
     if (typeof languageId === 'number') {
       const qb = this.surveysRepo.createQueryBuilder('s');
       qb.where('s.status_id = :status', { status: 1 });
       qb.andWhere('s.language_id = :lang', { lang: languageId });
+      qb.andWhere('s.survey_type_id = :type', { type: FEEDBACK_SURVEY_TYPE_ID });
       qb.orderBy('s.survey_id', 'DESC').limit(1);
       const match = await qb.getOne();
       if (match) return match;
@@ -414,6 +415,7 @@ export class SurveysService {
     const qb = this.surveysRepo.createQueryBuilder('s');
     qb.where('s.status_id = :status', { status: 1 });
     qb.andWhere('s.language_id = :lang', { lang: 1 });
+    qb.andWhere('s.survey_type_id = :type', { type: FEEDBACK_SURVEY_TYPE_ID });
     qb.orderBy('s.survey_id', 'DESC').limit(1);
     const english = await qb.getOne();
     return english ?? null;
