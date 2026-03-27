@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Unique } from 'typeorm';
 
 @Entity('survey_family_answers')
+@Unique('uq_sfa_response', ['survey_family_id', 'survey_question_id'])
 export class SurveyFamilyAnswer {
   @PrimaryGeneratedColumn({ type: 'bigint', unsigned: true, name: 'survey_family_answer_id' })
   survey_family_answer_id!: number;
