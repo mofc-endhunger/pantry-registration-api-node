@@ -63,4 +63,8 @@ export class UpdateUserWithHouseholdDto extends UpdateHouseholdDto {
   @IsOptional()
   @IsInt()
   children?: number;
+
+  @IsOptional()
+  @IsInt()
+  language_id?: number;
 }

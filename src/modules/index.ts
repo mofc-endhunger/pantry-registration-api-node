@@ -7,6 +7,8 @@ import { HouseholdsModule } from './households/households.module';
 import { EventsModule } from './events/events.module';
 import { RegistrationsModule } from './registrations/registrations.module';
 import { ReservationsModule } from './reservations/reservations.module';
+import { FeedbackModule } from './feedback/feedback.module';
+import { SurveysModule } from './surveys/surveys.module';
 
 export const FeatureModules = [
   HealthModule,
@@ -18,4 +20,6 @@ export const FeatureModules = [
   EventsModule,
   RegistrationsModule,
   ReservationsModule,
+  FeedbackModule,
+  SurveysModule,
 ];

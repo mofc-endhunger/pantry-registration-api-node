@@ -279,66 +279,28 @@ export class PublicScheduleService {
 
   // Flexible query helpers to handle schema variations across environments
   private async queryEventFlexible(eventId: number): Promise<{ id: number; name: string } | null> {
-    const attempts: Array<{ sql: string; args: Array<number> }> = [
-      { sql: 'SELECT id, name FROM events WHERE id = ? LIMIT 1', args: [eventId] },
-      { sql: 'SELECT id, event_name AS name FROM events WHERE id = ? LIMIT 1', args: [eventId] },
-      {
-        sql: 'SELECT event_id AS id, name FROM events WHERE event_id = ? LIMIT 1',
-        args: [eventId],
-      },
-      {
-        sql: 'SELECT event_id AS id, event_name AS name FROM events WHERE event_id = ? LIMIT 1',
-        args: [eventId],
-      },
-    ];
-    for (const a of attempts) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        const row = (await this.eventsRepo.query(a.sql, a.args))?.[0];
-        if (row) return { id: Number(row.id), name: String(row.name) };
-      } catch {
-        // try next
-      }
-    }
-    return null;
+    // FreshTrak public schema: events(event_id, event_name)
+    const row = (
+      await this.eventsRepo.query(
+        'SELECT event_id AS id, event_name AS name FROM events WHERE event_id = ? LIMIT 1',
+        [eventId],
+      )
+    )?.[0];
+    return row ? { id: Number(row.id), name: String(row.name) } : null;
   }
 
   private async queryEventsListFlexible(
     whereSql: string,
     args: Array<string | number>,
   ): Promise<Array<{ event_id: number; name: string }>> {
-    const attempts: Array<string> = [
-      `SELECT DISTINCT e.id AS event_id, e.name
-       FROM events e
-       JOIN event_dates d ON d.event_id = e.id
-       ${whereSql}
-       ORDER BY e.id ASC`,
-      `SELECT DISTINCT e.id AS event_id, e.event_name AS name
-       FROM events e
-       JOIN event_dates d ON d.event_id = e.id
-       ${whereSql}
-       ORDER BY e.id ASC`,
-      `SELECT DISTINCT e.event_id AS event_id, e.name
+    // FreshTrak public schema: events(event_id, event_name)
+    const sql = `SELECT DISTINCT e.event_id AS event_id, e.event_name AS name
        FROM events e
        JOIN event_dates d ON d.event_id = e.event_id
        ${whereSql}
-       ORDER BY e.event_id ASC`,
-      `SELECT DISTINCT e.event_id AS event_id, e.event_name AS name
-       FROM events e
-       JOIN event_dates d ON d.event_id = e.event_id
-       ${whereSql}
-       ORDER BY e.event_id ASC`,
-    ];
-    for (const sql of attempts) {
-      try {
-        // eslint-disable-next-line no-await-in-loop
-        const rows = await this.eventsRepo.query(sql, args);
-        if (Array.isArray(rows)) return rows;
-      } catch {
-        // try next
-      }
-    }
-    return [];
+       ORDER BY e.event_id ASC`;
+    const rows = await this.eventsRepo.query(sql, args);
+    return Array.isArray(rows) ? rows : [];
   }
   // Build legacy-style structure for a single event_date with nested hours and slots
   async buildEventDateStructure(eventDateId: number) {

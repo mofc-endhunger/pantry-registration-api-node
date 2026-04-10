@@ -50,6 +50,7 @@ export class UsersService {
       email: user.email,
       permission_to_email: user.permission_to_email,
       permission_to_text: user.permission_to_text,
+      language_id: user.language_id ?? null,
     };
   }
 
@@ -269,6 +270,7 @@ export class UsersService {
         typeof dto.permission_to_email === 'boolean' ? dto.permission_to_email : undefined,
       permission_to_text:
         typeof dto.permission_to_text === 'boolean' ? dto.permission_to_text : undefined,
+      language_id: typeof dto.language_id === 'number' ? dto.language_id : undefined,
       // Add more user fields as needed
     };
     // Only perform update when at least one field is actually defined to avoid
