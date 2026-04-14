@@ -9,6 +9,7 @@ import { UpdateUserWithHouseholdDto } from './dto/update-user-with-household.dto
 import { HouseholdsService } from '../households/households.service';
 import { UpsertMemberDto } from '../households/dto/upsert-member.dto';
 import { SafeRandom } from '../../common/utils/safe-random';
+import { mapSuffixToId } from '../../common/utils/suffix-mapping';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
 
 // Minimal shape needed from HouseholdsService.getHouseholdById
@@ -153,7 +154,7 @@ export class UsersService {
     // Always use savedUser.id for all downstream calls
     const userId = savedUser.id;
 
-    // Create household and add user as head_of_household
+    // Create household (HouseholdsService guards against duplicates and will reuse existing)
     const household = await this.householdsService.createHousehold(userId, {
       primary_first_name: savedUser.first_name ?? undefined,
       primary_last_name: savedUser.last_name ?? undefined,
@@ -317,32 +318,45 @@ export class UsersService {
       householdPatch as Parameters<typeof this.householdsService.updateHousehold>[2],
     );
 
-    // Ensure head-of-household has gender_id set from user's gender if available
+    // Ensure head-of-household has gender_id and suffix_id set from user data
     try {
-      const membersForGender = await this.householdsService.listMembers(householdId, id);
-      const hohMember = Array.isArray(membersForGender)
+      const membersForSync = await this.householdsService.listMembers(householdId, id);
+      const hohMember = Array.isArray(membersForSync)
         ? (
-            membersForGender as Array<{
+            membersForSync as Array<{
               id: number;
               is_head_of_household?: boolean;
               gender_id?: number | null;
+              suffix_id?: number | null;
             }>
           ).find((m) => !!m.is_head_of_household)
         : undefined;
-      if (hohMember && (hohMember.gender_id == null || Number.isNaN(hohMember.gender_id))) {
-        // Map user's string gender to a numeric gender_id commonly used downstream
-        // 1 = male, 2 = female (fallback: leave unset)
+      if (hohMember) {
         const headUser = await this.findById(id);
-        const g = (headUser.gender || '').toString().trim().toLowerCase();
-        const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
-        if (mappedGenderId !== undefined) {
-          await this.householdsService.updateMember(householdId, hohMember.id, id, {
-            gender_id: mappedGenderId,
-          } as UpsertMemberDto);
+        const patch: Record<string, number> = {};
+
+        if (hohMember.gender_id == null || Number.isNaN(hohMember.gender_id)) {
+          const g = (headUser.gender || '').toString().trim().toLowerCase();
+          const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
+          if (mappedGenderId !== undefined) patch.gender_id = mappedGenderId;
+        }
+
+        if (hohMember.suffix_id == null) {
+          const mappedSuffixId = mapSuffixToId(headUser.suffix);
+          if (mappedSuffixId !== undefined) patch.suffix_id = mappedSuffixId;
+        }
+
+        if (Object.keys(patch).length > 0) {
+          await this.householdsService.updateMember(
+            householdId,
+            hohMember.id,
+            id,
+            patch as UpsertMemberDto,
+          );
         }
       }
     } catch {
-      // best-effort; do not block on gender sync
+      // best-effort; do not block on member sync
     }
 
     // After household update, add placeholder members to reach desired counts (if provided).

@@ -139,6 +139,24 @@ Important: Counts are NON‑inclusive of the head‑of‑household (HOH). The HO
 - For guests, always include `X-Guest-Token` so expansion applies to the correct household.
 - The head‑of‑household remains active; we never auto‑deactivate HOH.
 
+## Duplicate household prevention (production hotfix)
+
+### Problem
+
+- In some flows we created a new household unconditionally during user creation/auto‑provision, causing the same user to own multiple households.
+
+### Minimal fix (implemented)
+
+- UsersService.create now reuses an existing HOH household for the user if one already exists (via `findHouseholdIdByUserId`) and only creates a new household when none exists.
+- HouseholdsService.createHousehold now first checks for an existing HOH household for the `primaryUserId` and returns it instead of creating a new one.
+
+### Optimal solution (backlog)
+
+- Add a database uniqueness constraint to prevent multiple HOH rows for the same user (e.g., unique on `(user_id, is_head_of_household)` with application‑level guard since partial indexes vary by engine).
+- Wrap “ensure household exists” in a transaction (find‑or‑create/upsert) to avoid races under concurrency.
+- Unify guest→JWT account linking to ensure auto‑provisioned guest records consolidate to the same household upon upgrade.
+  ‑ Add a reconciliation job to detect users with >1 household and consolidate references.
+
 ## Summary of endpoints to remember
 
 - Guest lifecycle

@@ -19,6 +19,7 @@ import { HouseholdsService } from '../households/households.service';
 import { User } from '../../entities/user.entity';
 import { SafeRandom } from '../../common/utils/safe-random';
 import { RegistrantDto } from './dto/register.dto';
+import { mapSuffixToId } from '../../common/utils/suffix-mapping';
 type AuthUser = {
   authType?: string;
   dbUserId?: number;
@@ -37,6 +38,7 @@ import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { isSurveyActionable } from '../../common/utils/survey-actionable';
 import { CognitoService } from '../auth/cognito.service';
+import { FEEDBACK_SURVEY_TYPE_ID } from '../../common/constants/survey.constants';
 
 @Injectable()
 export class RegistrationsService {
@@ -270,7 +272,7 @@ export class RegistrationsService {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
 
-        // Best-effort: set HOH gender_id from user's gender string if available
+        // Best-effort: sync gender_id and suffix_id from user to HOH member
         try {
           if (household_id) {
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -281,23 +283,36 @@ export class RegistrationsService {
                     id: number;
                     is_head_of_household?: boolean;
                     gender_id?: number | null;
+                    suffix_id?: number | null;
                   }>
                 ).find((m) => !!m.is_head_of_household)
               : undefined;
-            const g = (userEntity.gender || '').toString().trim().toLowerCase();
-            const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
-            if (
-              hoh &&
-              mappedGenderId !== undefined &&
-              (hoh.gender_id == null || Number.isNaN(hoh.gender_id))
-            ) {
-              await this.householdsService.updateMember(household_id, hoh.id, dbUserId, {
-                gender_id: mappedGenderId,
-              } as any);
+            if (hoh) {
+              const patch: Record<string, number> = {};
+
+              if (hoh.gender_id == null || Number.isNaN(hoh.gender_id)) {
+                const g = (userEntity.gender || '').toString().trim().toLowerCase();
+                const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
+                if (mappedGenderId !== undefined) patch.gender_id = mappedGenderId;
+              }
+
+              if (hoh.suffix_id == null) {
+                const mappedSuffixId = mapSuffixToId(userEntity.suffix);
+                if (mappedSuffixId !== undefined) patch.suffix_id = mappedSuffixId;
+              }
+
+              if (Object.keys(patch).length > 0) {
+                await this.householdsService.updateMember(
+                  household_id,
+                  hoh.id,
+                  dbUserId,
+                  patch as any,
+                );
+              }
             }
           }
         } catch {
-          // ignore gender sync failures
+          // ignore member sync failures
         }
       } catch {
         // ignore and fall through to error
@@ -947,8 +962,6 @@ export class RegistrationsService {
     // Only assign for confirmed registrations
     if (reg.status !== 'confirmed') return;
 
-    // Find latest active survey matching language/status (system/type filters pending schema confirmation)
-    // Prefer user's language if available; fallback to English (1)
     let langId = 1;
     try {
       const creator = await this.usersService.findById(reg.created_by as unknown as number);
@@ -962,6 +975,7 @@ export class RegistrationsService {
     const qb = this.surveysRepo.createQueryBuilder('s');
     qb.where('s.status_id = :status', { status: 1 })
       .andWhere('s.language_id = :lang', { lang: langId })
+      .andWhere('s.survey_type_id = :type', { type: FEEDBACK_SURVEY_TYPE_ID })
       .orderBy('s.survey_id', 'DESC')
       .limit(1);
     const survey = await qb.getOne();
