@@ -27,8 +27,8 @@ describe('PublicScheduleService', () => {
   let slotsRepo: jest.Mocked<Repository<PublicEventSlot>>;
   let datesRepo: jest.Mocked<Repository<PublicEventDate>>;
   let hoursRepo: jest.Mocked<Repository<PublicEventHour>>;
-  let dimTimesRepo: jest.Mocked<Repository<PublicDimTime>>;
-  let eventsRepo: jest.Mocked<Repository<PublicEvent>>;
+  let _dimTimesRepo: jest.Mocked<Repository<PublicDimTime>>;
+  let _eventsRepo: jest.Mocked<Repository<PublicEvent>>;
 
   beforeEach(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -61,8 +61,8 @@ describe('PublicScheduleService', () => {
     slotsRepo = moduleRef.get(getRepositoryToken(PublicEventSlot, 'public'));
     datesRepo = moduleRef.get(getRepositoryToken(PublicEventDate, 'public'));
     hoursRepo = moduleRef.get(getRepositoryToken(PublicEventHour, 'public'));
-    dimTimesRepo = moduleRef.get(getRepositoryToken(PublicDimTime, 'public'));
-    eventsRepo = moduleRef.get(getRepositoryToken(PublicEvent, 'public'));
+    _dimTimesRepo = moduleRef.get(getRepositoryToken(PublicDimTime, 'public'));
+    _eventsRepo = moduleRef.get(getRepositoryToken(PublicEvent, 'public'));
   });
 
   it('incrementSlotAndDate increments both when available', async () => {

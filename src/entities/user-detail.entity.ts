@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, BeforeInsert, BeforeUpdate } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  BeforeInsert,
+  BeforeUpdate,
+} from 'typeorm';
 import { User } from './user.entity';
 
 @Entity('user_details')
