@@ -355,16 +355,7 @@ export class RegistrationsService {
       );
       let hasAnyCount = (desiredSeniors ?? 0) + (desiredAdults ?? 0) + (desiredChildren ?? 0) > 0;
 
-      // Debug logging
-      console.log('[registerForEvent] Household counts check:', {
-        dto: JSON.stringify(dto),
-        desiredSeniors,
-        desiredAdults,
-        desiredChildren,
-        hasAnyCount,
-        household_id,
-        dbUserId,
-      });
+      // intentionally no-op: count resolution handled below
 
       if (!hasAnyCount) {
         // Fallback: if registration payload omitted counts, use user's snapshot counts
@@ -374,12 +365,6 @@ export class RegistrationsService {
           const snapA = toInt((userEntity as any).adults_in_household);
           const snapC = toInt((userEntity as any).children_in_household);
           const hasSnap = snapS + snapA + snapC > 0;
-          console.log('[registerForEvent] No counts in payload; snapshot fallback:', {
-            snapS,
-            snapA,
-            snapC,
-            hasSnap,
-          });
           if (hasSnap) {
             hasAnyCount = true;
             // Convert snapshot (inclusive of HOH) to exclusive counts by subtracting HOH category
@@ -413,7 +398,6 @@ export class RegistrationsService {
               adults_in_household: exclA,
               children_in_household: exclC,
             } as any);
-            console.log('[registerForEvent] Household expanded using snapshot counts');
           }
         } catch (e) {
           console.warn(
@@ -424,16 +408,12 @@ export class RegistrationsService {
       }
 
       if (hasAnyCount) {
-        console.log('[registerForEvent] Calling updateUserWithHousehold with counts');
         await this.usersService.updateUserWithHousehold(dbUserId, {
           household_id: household_id,
           seniors_in_household: desiredSeniors,
           adults_in_household: desiredAdults,
           children_in_household: desiredChildren,
         } as any);
-        console.log('[registerForEvent] Successfully updated household counts');
-      } else {
-        console.log('[registerForEvent] No counts provided, skipping household expansion');
       }
     } catch (err) {
       // best-effort; continue on failure but log the error
@@ -888,13 +868,13 @@ export class RegistrationsService {
       else if (dto.event_date_id) await this.publicSchedule.incrementDate(dto.event_date_id);
     }
 
-    // Best-effort PantryTrak sync
+    // Best-effort PantryTrak sync — use the registrant's user ID, not the case manager's
     try {
       if (this.pantryTrakClient) {
         this.pantryTrakClient
           .createReservation({
             id: saved.id,
-            user_id: saved.created_by as unknown as number,
+            user_id: registrantUser.id,
             event_date_id: saved.public_event_date_id ?? saved.event_id,
             event_slot_id: saved.public_event_slot_id ?? null,
           })

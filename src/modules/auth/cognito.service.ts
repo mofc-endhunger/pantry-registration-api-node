@@ -62,8 +62,7 @@ export class CognitoService {
     } catch (err) {
       // eslint-disable-next-line no-console
       console.warn(
-        '[CognitoService] getEmailBySub failed for',
-        sub,
+        '[CognitoService] getEmailBySub failed:',
         err instanceof Error ? err.message : String(err),
       );
       return null;
