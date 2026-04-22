@@ -748,6 +748,16 @@ export class RegistrationsService {
     });
     await this.userRepo.save(registrantUser);
 
+    // Sync registrant to PantryTrak immediately after creation so the user record
+    // exists before the reservation is sent, regardless of household member counts.
+    try {
+      if (this.pantryTrakClient) {
+        await this.pantryTrakClient.createUser(registrantUser);
+      }
+    } catch {
+      // Non-blocking: PantryTrak sync failure must not prevent registration
+    }
+
     // Create household for the registrant
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     await this.householdsService.createHousehold(registrantUser.id, {
