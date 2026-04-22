@@ -37,7 +37,6 @@ import { SurveyFamily } from '../../entities/survey-families.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { isSurveyActionable } from '../../common/utils/survey-actionable';
-import { CognitoService } from '../auth/cognito.service';
 import { FEEDBACK_SURVEY_TYPE_ID } from '../../common/constants/survey.constants';
 
 @Injectable()
@@ -59,34 +58,29 @@ export class RegistrationsService {
     private readonly publicSchedule: PublicScheduleService,
     @Optional() @InjectRepository(Event) private readonly eventsRepo?: Repository<Event>,
     @Optional() private readonly pantryTrakClient?: PantryTrakClient,
-    @Optional() private readonly cognitoService?: CognitoService,
   ) {}
 
   /**
-   * Resolve a real email for a Cognito user.  Tries the JWT claim first, then
-   * falls back to an AdminGetUser call.  Returns `${sub}@auto.local` only as
-   * an absolute last resort so the caller can always create a user record.
+   * Resolve a real email for a Cognito user.  Uses the JWT claim directly.
+   * Returns `${sub}@auto.local` only as an absolute last resort so the caller
+   * can always create a user record.  If this placeholder is persisted it
+   * signals that the frontend is sending an access token (no email claim)
+   * instead of an ID token — fix the token type, not the server code.
    */
-  private async resolveEmail(jwtEmail: string | undefined, sub: string): Promise<string> {
+  private resolveEmail(jwtEmail: string | undefined, sub: string): string {
     if (jwtEmail) return jwtEmail;
-    if (this.cognitoService) {
-      const looked = await this.cognitoService.getEmailBySub(sub);
-      if (looked) return looked;
-    }
     return `${sub}@auto.local`;
   }
 
   /**
    * After finding an existing DB user, heal any `@auto.local` email that was
    * persisted during an earlier session where the real email was unavailable.
+   * Uses the email from the current JWT — no Cognito API call needed.
    */
-  private async healEmailIfNeeded(dbUserId: number, sub: string): Promise<void> {
-    if (!this.cognitoService) return;
+  private async healEmailIfNeeded(dbUserId: number, jwtEmail: string | undefined): Promise<void> {
+    if (!jwtEmail) return;
     try {
-      const realEmail = await this.cognitoService.getEmailBySub(sub);
-      if (realEmail) {
-        await this.usersService.healAutoLocalEmail(dbUserId, realEmail);
-      }
+      await this.usersService.healAutoLocalEmail(dbUserId, jwtEmail);
     } catch {
       // non-critical — don't block the request
     }
@@ -119,9 +113,9 @@ export class RegistrationsService {
         dbUserId = null;
       }
       if (dbUserId) {
-        void this.healEmailIfNeeded(dbUserId, sub);
+        void this.healEmailIfNeeded(dbUserId, (user?.email as string) || undefined);
       } else {
-        const resolvedEmail = await this.resolveEmail((user?.email as string) || undefined, sub);
+        const resolvedEmail = this.resolveEmail((user?.email as string) || undefined, sub);
         const username: string | undefined = (user?.username as string) || undefined;
         const created = await this.usersService.create({
           email: resolvedEmail,
@@ -240,9 +234,9 @@ export class RegistrationsService {
         dbUserId = null;
       }
       if (dbUserId) {
-        void this.healEmailIfNeeded(dbUserId, sub);
+        void this.healEmailIfNeeded(dbUserId, (user?.email as string) || undefined);
       } else {
-        const resolvedEmail = await this.resolveEmail((user?.email as string) || undefined, sub);
+        const resolvedEmail = this.resolveEmail((user?.email as string) || undefined, sub);
         const username: string | undefined = (user?.username as string) || undefined;
         const created = await this.usersService.create({
           email: resolvedEmail,
@@ -707,12 +701,9 @@ export class RegistrationsService {
       cmDbUserId = null;
     }
     if (cmDbUserId) {
-      void this.healEmailIfNeeded(cmDbUserId, cmSub);
+      void this.healEmailIfNeeded(cmDbUserId, (caseManager?.email as string) || undefined);
     } else {
-      const resolvedEmail = await this.resolveEmail(
-        (caseManager?.email as string) || undefined,
-        cmSub,
-      );
+      const resolvedEmail = this.resolveEmail((caseManager?.email as string) || undefined, cmSub);
       const username: string | undefined = (caseManager?.username as string) || undefined;
       const created = await this.usersService.create({
         email: resolvedEmail,
@@ -1042,12 +1033,9 @@ export class RegistrationsService {
             }
           })();
     if (dbUserId) {
-      void this.healEmailIfNeeded(dbUserId, checkInSub);
+      void this.healEmailIfNeeded(dbUserId, (user?.email as string) || undefined);
     } else {
-      const resolvedEmail = await this.resolveEmail(
-        (user?.email as string) || undefined,
-        checkInSub,
-      );
+      const resolvedEmail = this.resolveEmail((user?.email as string) || undefined, checkInSub);
       const username: string | undefined = (user?.username as string) || undefined;
       const created = await this.usersService.create({
         email: resolvedEmail,

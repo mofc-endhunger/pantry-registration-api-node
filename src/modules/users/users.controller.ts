@@ -12,7 +12,6 @@ import {
   UseGuards,
   Req,
   NotFoundException,
-  Optional,
 } from '@nestjs/common';
 
 import { ApiBearerAuth } from '@nestjs/swagger';
@@ -20,7 +19,6 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserWithHouseholdDto } from './dto/update-user-with-household.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { CognitoService } from '../auth/cognito.service';
 
 import type { Request } from 'express';
 
@@ -43,10 +41,7 @@ export class UsersController {
   async restore(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.restoreUser(id);
   }
-  constructor(
-    private readonly usersService: UsersService,
-    @Optional() private readonly cognitoService?: CognitoService,
-  ) {}
+  constructor(private readonly usersService: UsersService) {}
 
   @Post()
   async create(@Body() createUserDto: CreateUserDto, @Req() req: Request) {
@@ -76,13 +71,11 @@ export class UsersController {
     const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(cognitoUuid);
     if (!dbUserId) throw new NotFoundException('User not found');
 
-    // Self-heal @auto.local emails by looking up the real email from Cognito
-    if (this.cognitoService) {
+    // Self-heal @auto.local emails using the email claim already present in the JWT
+    const jwtEmail = (req.user as { email?: string } | undefined)?.email;
+    if (jwtEmail) {
       try {
-        const realEmail = await this.cognitoService.getEmailBySub(cognitoUuid);
-        if (realEmail) {
-          await this.usersService.healAutoLocalEmail(dbUserId, realEmail);
-        }
+        await this.usersService.healAutoLocalEmail(dbUserId, jwtEmail);
       } catch {
         // non-critical
       }
