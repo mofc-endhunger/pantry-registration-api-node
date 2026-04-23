@@ -236,6 +236,17 @@ export class UsersService {
     } catch {
       // ignore if read-only
     }
+
+    // Best-effort sync to PantryTrak on creation
+    try {
+      if (this.pantryTrakClient) {
+        const userForSync = await this.findById(userId);
+        await this.pantryTrakClient.createUser(userForSync);
+      }
+    } catch {
+      // Non-blocking: PantryTrak sync failure must not prevent user creation
+    }
+
     return { user: savedUser, household_id: householdId };
   }
 

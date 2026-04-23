@@ -37,7 +37,6 @@ import { SurveyFamily } from '../../entities/survey-families.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { isSurveyActionable } from '../../common/utils/survey-actionable';
-import { CognitoService } from '../auth/cognito.service';
 import { FEEDBACK_SURVEY_TYPE_ID } from '../../common/constants/survey.constants';
 
 @Injectable()
@@ -59,34 +58,29 @@ export class RegistrationsService {
     private readonly publicSchedule: PublicScheduleService,
     @Optional() @InjectRepository(Event) private readonly eventsRepo?: Repository<Event>,
     @Optional() private readonly pantryTrakClient?: PantryTrakClient,
-    @Optional() private readonly cognitoService?: CognitoService,
   ) {}
 
   /**
-   * Resolve a real email for a Cognito user.  Tries the JWT claim first, then
-   * falls back to an AdminGetUser call.  Returns `${sub}@auto.local` only as
-   * an absolute last resort so the caller can always create a user record.
+   * Resolve a real email for a Cognito user.  Uses the JWT claim directly.
+   * Returns `${sub}@auto.local` only as an absolute last resort so the caller
+   * can always create a user record.  If this placeholder is persisted it
+   * signals that the frontend is sending an access token (no email claim)
+   * instead of an ID token — fix the token type, not the server code.
    */
-  private async resolveEmail(jwtEmail: string | undefined, sub: string): Promise<string> {
+  private resolveEmail(jwtEmail: string | undefined, sub: string): string {
     if (jwtEmail) return jwtEmail;
-    if (this.cognitoService) {
-      const looked = await this.cognitoService.getEmailBySub(sub);
-      if (looked) return looked;
-    }
     return `${sub}@auto.local`;
   }
 
   /**
    * After finding an existing DB user, heal any `@auto.local` email that was
    * persisted during an earlier session where the real email was unavailable.
+   * Uses the email from the current JWT — no Cognito API call needed.
    */
-  private async healEmailIfNeeded(dbUserId: number, sub: string): Promise<void> {
-    if (!this.cognitoService) return;
+  private async healEmailIfNeeded(dbUserId: number, jwtEmail: string | undefined): Promise<void> {
+    if (!jwtEmail) return;
     try {
-      const realEmail = await this.cognitoService.getEmailBySub(sub);
-      if (realEmail) {
-        await this.usersService.healAutoLocalEmail(dbUserId, realEmail);
-      }
+      await this.usersService.healAutoLocalEmail(dbUserId, jwtEmail);
     } catch {
       // non-critical — don't block the request
     }
@@ -119,9 +113,9 @@ export class RegistrationsService {
         dbUserId = null;
       }
       if (dbUserId) {
-        void this.healEmailIfNeeded(dbUserId, sub);
+        void this.healEmailIfNeeded(dbUserId, (user?.email as string) || undefined);
       } else {
-        const resolvedEmail = await this.resolveEmail((user?.email as string) || undefined, sub);
+        const resolvedEmail = this.resolveEmail((user?.email as string) || undefined, sub);
         const username: string | undefined = (user?.username as string) || undefined;
         const created = await this.usersService.create({
           email: resolvedEmail,
@@ -240,9 +234,9 @@ export class RegistrationsService {
         dbUserId = null;
       }
       if (dbUserId) {
-        void this.healEmailIfNeeded(dbUserId, sub);
+        void this.healEmailIfNeeded(dbUserId, (user?.email as string) || undefined);
       } else {
-        const resolvedEmail = await this.resolveEmail((user?.email as string) || undefined, sub);
+        const resolvedEmail = this.resolveEmail((user?.email as string) || undefined, sub);
         const username: string | undefined = (user?.username as string) || undefined;
         const created = await this.usersService.create({
           email: resolvedEmail,
@@ -355,16 +349,7 @@ export class RegistrationsService {
       );
       let hasAnyCount = (desiredSeniors ?? 0) + (desiredAdults ?? 0) + (desiredChildren ?? 0) > 0;
 
-      // Debug logging
-      console.log('[registerForEvent] Household counts check:', {
-        dto: JSON.stringify(dto),
-        desiredSeniors,
-        desiredAdults,
-        desiredChildren,
-        hasAnyCount,
-        household_id,
-        dbUserId,
-      });
+      // intentionally no-op: count resolution handled below
 
       if (!hasAnyCount) {
         // Fallback: if registration payload omitted counts, use user's snapshot counts
@@ -374,12 +359,6 @@ export class RegistrationsService {
           const snapA = toInt((userEntity as any).adults_in_household);
           const snapC = toInt((userEntity as any).children_in_household);
           const hasSnap = snapS + snapA + snapC > 0;
-          console.log('[registerForEvent] No counts in payload; snapshot fallback:', {
-            snapS,
-            snapA,
-            snapC,
-            hasSnap,
-          });
           if (hasSnap) {
             hasAnyCount = true;
             // Convert snapshot (inclusive of HOH) to exclusive counts by subtracting HOH category
@@ -413,7 +392,6 @@ export class RegistrationsService {
               adults_in_household: exclA,
               children_in_household: exclC,
             } as any);
-            console.log('[registerForEvent] Household expanded using snapshot counts');
           }
         } catch (e) {
           console.warn(
@@ -424,16 +402,12 @@ export class RegistrationsService {
       }
 
       if (hasAnyCount) {
-        console.log('[registerForEvent] Calling updateUserWithHousehold with counts');
         await this.usersService.updateUserWithHousehold(dbUserId, {
           household_id: household_id,
           seniors_in_household: desiredSeniors,
           adults_in_household: desiredAdults,
           children_in_household: desiredChildren,
         } as any);
-        console.log('[registerForEvent] Successfully updated household counts');
-      } else {
-        console.log('[registerForEvent] No counts provided, skipping household expansion');
       }
     } catch (err) {
       // best-effort; continue on failure but log the error
@@ -727,12 +701,9 @@ export class RegistrationsService {
       cmDbUserId = null;
     }
     if (cmDbUserId) {
-      void this.healEmailIfNeeded(cmDbUserId, cmSub);
+      void this.healEmailIfNeeded(cmDbUserId, (caseManager?.email as string) || undefined);
     } else {
-      const resolvedEmail = await this.resolveEmail(
-        (caseManager?.email as string) || undefined,
-        cmSub,
-      );
+      const resolvedEmail = this.resolveEmail((caseManager?.email as string) || undefined, cmSub);
       const username: string | undefined = (caseManager?.username as string) || undefined;
       const created = await this.usersService.create({
         email: resolvedEmail,
@@ -767,6 +738,16 @@ export class RegistrationsService {
       children_in_household: registrant.children ?? 0,
     });
     await this.userRepo.save(registrantUser);
+
+    // Sync registrant to PantryTrak immediately after creation so the user record
+    // exists before the reservation is sent, regardless of household member counts.
+    try {
+      if (this.pantryTrakClient) {
+        await this.pantryTrakClient.createUser(registrantUser);
+      }
+    } catch {
+      // Non-blocking: PantryTrak sync failure must not prevent registration
+    }
 
     // Create household for the registrant
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
@@ -888,13 +869,13 @@ export class RegistrationsService {
       else if (dto.event_date_id) await this.publicSchedule.incrementDate(dto.event_date_id);
     }
 
-    // Best-effort PantryTrak sync
+    // Best-effort PantryTrak sync — use the registrant's user ID, not the case manager's
     try {
       if (this.pantryTrakClient) {
         this.pantryTrakClient
           .createReservation({
             id: saved.id,
-            user_id: saved.created_by as unknown as number,
+            user_id: registrantUser.id,
             event_date_id: saved.public_event_date_id ?? saved.event_id,
             event_slot_id: saved.public_event_slot_id ?? null,
           })
@@ -1052,12 +1033,9 @@ export class RegistrationsService {
             }
           })();
     if (dbUserId) {
-      void this.healEmailIfNeeded(dbUserId, checkInSub);
+      void this.healEmailIfNeeded(dbUserId, (user?.email as string) || undefined);
     } else {
-      const resolvedEmail = await this.resolveEmail(
-        (user?.email as string) || undefined,
-        checkInSub,
-      );
+      const resolvedEmail = this.resolveEmail((user?.email as string) || undefined, checkInSub);
       const username: string | undefined = (user?.username as string) || undefined;
       const created = await this.usersService.create({
         email: resolvedEmail,
