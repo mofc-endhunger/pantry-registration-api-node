@@ -3,12 +3,83 @@ import {
   IsArray,
   IsInt,
   IsOptional,
+  IsString,
   ArrayNotEmpty,
   ArrayUnique,
   ValidateNested,
   IsObject,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+
+export class RegistrantDto {
+  @IsString()
+  first_name!: string;
+
+  @IsString()
+  last_name!: string;
+
+  @IsOptional()
+  @IsString()
+  suffix?: string;
+
+  @IsOptional()
+  @IsString()
+  gender?: string;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  date_of_birth?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  address_line_1?: string;
+
+  @IsOptional()
+  @IsString()
+  address_line_2?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  state?: string;
+
+  @IsOptional()
+  @IsString()
+  zip_code?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Transform(({ value }) =>
+    value === '' || value === null || value === undefined ? undefined : parseInt(String(value), 10),
+  )
+  seniors?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Transform(({ value }) =>
+    value === '' || value === null || value === undefined ? undefined : parseInt(String(value), 10),
+  )
+  adults?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Transform(({ value }) =>
+    value === '' || value === null || value === undefined ? undefined : parseInt(String(value), 10),
+  )
+  children?: number;
+}
 
 export class RegisterHouseholdCountsDto {
   @IsOptional()
@@ -105,6 +176,16 @@ export class RegisterDto {
   @Type(() => RegisterHouseholdCountsDto)
   counts?: RegisterHouseholdCountsDto;
 
+  @ApiPropertyOptional({
+    description:
+      'Registrant data for case manager "register on behalf of" flow. Only accepted from users in the case_managers Cognito group.',
+    type: RegistrantDto,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RegistrantDto)
+  registrant?: RegistrantDto;
+
   // Optional top-level aliases (simple format)
   @IsOptional()
   @IsInt()
@@ -124,7 +205,7 @@ export class RegisterDto {
   @Transform(({ value, obj }) => {
     const v =
       obj?.synth_adults ?? obj?.adults ?? obj?.adults_count ?? obj?.adults_in_household ?? value;
-    return v === '' || v === null || v === undefined ? undefined : parseInt(String(v), 10);
+    return v === '' || v === null || v === undefined ? undefined : parseInt(String(value), 10);
   })
   adults?: number;
 

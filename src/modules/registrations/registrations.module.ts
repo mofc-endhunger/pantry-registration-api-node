@@ -14,10 +14,12 @@ import { UsersModule } from '../users/users.module';
 import { HouseholdsModule } from '../households/households.module';
 import { PublicScheduleModule } from '../public-schedule/public-schedule.module';
 import { Authentication } from '../../entities/authentication.entity';
+import { User } from '../../entities/user.entity';
 import { SurveyFamily } from '../../entities/survey-families.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
+import { CognitoService } from '../auth/cognito.service';
 
 @Module({
   imports: [
@@ -30,6 +32,7 @@ import { PantryTrakClient } from '../integrations/pantrytrak.client';
       HouseholdMember,
       CheckInAudit,
       Authentication,
+      User,
       SurveyFamily,
       PublicSurvey,
       PublicSurveyQuestionMap,
@@ -40,6 +43,6 @@ import { PantryTrakClient } from '../integrations/pantrytrak.client';
     JwtModule.register({}),
   ],
   controllers: [RegistrationsController],
-  providers: [RegistrationsService, PantryTrakClient],
+  providers: [RegistrationsService, PantryTrakClient, CognitoService],
 })
 export class RegistrationsModule {}

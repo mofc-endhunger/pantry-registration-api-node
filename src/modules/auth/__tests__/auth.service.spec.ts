@@ -49,7 +49,7 @@ describe('AuthService - requestPasswordReset', () => {
     service = moduleRef.get(AuthService);
     usersRepo = moduleRef.get(getRepositoryToken(User));
     resetRepo = moduleRef.get(getRepositoryToken(PasswordResetToken));
-    mailer = moduleRef.get(MailerService) as any;
+    mailer = moduleRef.get(MailerService);
   });
 
   it('returns generic message if email not found', async () => {
@@ -63,7 +63,7 @@ describe('AuthService - requestPasswordReset', () => {
   it('saves reset token and sends email; ignores send errors in test', async () => {
     usersRepo.findOne.mockResolvedValue({ id: 1, email: 'user@example.com' } as any);
     resetRepo.save.mockResolvedValue({ id: 123 } as any);
-    (mailer.sendResetEmail as jest.Mock).mockRejectedValueOnce(new Error('smtp down'));
+    mailer.sendResetEmail.mockRejectedValueOnce(new Error('smtp down'));
 
     const res = await service.requestPasswordReset({ email: 'user@example.com' });
 

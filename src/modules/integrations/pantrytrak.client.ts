@@ -47,8 +47,11 @@ export class PantryTrakClient {
     }
     const url = this.urlFor('api/create_freshtrak_user.php');
     const payload = JSON.stringify(user);
-    logger.log(`[createUser] POST ${url}`);
-    logger.log(`[createUser] Payload: ${payload}`);
+    const userId =
+      user && typeof user === 'object' && 'id' in user
+        ? String((user as Record<string, unknown>).id)
+        : 'unknown';
+    logger.log(`[createUser] POST ${url} userId=${userId}`);
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -59,7 +62,7 @@ export class PantryTrakClient {
         body: payload,
       });
       const body: unknown = await response.json().catch(() => null);
-      logger.log(`[createUser] Response: status=${response.status}, body=${JSON.stringify(body)}`);
+      logger.log(`[createUser] Response: status=${response.status}, success=${response.ok}`);
       if (!response.ok) {
         return { success: false, status: response.status, body, error: `HTTP ${response.status}` };
       }

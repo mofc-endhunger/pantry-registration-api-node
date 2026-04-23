@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+
 import { Injectable, NotFoundException, Inject, forwardRef, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -234,6 +236,17 @@ export class UsersService {
     } catch {
       // ignore if read-only
     }
+
+    // Best-effort sync to PantryTrak on creation
+    try {
+      if (this.pantryTrakClient) {
+        const userForSync = await this.findById(userId);
+        await this.pantryTrakClient.createUser(userForSync);
+      }
+    } catch {
+      // Non-blocking: PantryTrak sync failure must not prevent user creation
+    }
+
     return { user: savedUser, household_id: householdId };
   }
 
@@ -241,6 +254,20 @@ export class UsersService {
     const user = await this.userRepository.findOneBy({ id });
     if (!user) throw new NotFoundException('User not found');
     return user;
+  }
+
+  /**
+   * If the user's stored email is an auto-generated placeholder (`@auto.local`),
+   * update it to the real email.  Returns true when an update was performed.
+   */
+  async healAutoLocalEmail(userId: number, realEmail: string): Promise<boolean> {
+    if (!realEmail || realEmail.includes('@auto.local')) return false;
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) return false;
+    const currentEmail: string | null | undefined = user.email;
+    if (!currentEmail || !currentEmail.includes('@auto.local')) return false;
+    await this.userRepository.update(userId, { email: realEmail } as Partial<User>);
+    return true;
   }
 
   async findByIdentificationCode(identification_code: string): Promise<User> {
@@ -331,7 +358,12 @@ export class UsersService {
         }
 
         if (Object.keys(patch).length > 0) {
-          await this.householdsService.updateMember(householdId, hohMember.id, id, patch as any);
+          await this.householdsService.updateMember(
+            householdId,
+            hohMember.id,
+            id,
+            patch as UpsertMemberDto,
+          );
         }
       }
     } catch {
@@ -480,8 +512,8 @@ export class UsersService {
               );
             })
             .sort((a, b) => {
-              const at = a.created_at ? new Date(a.created_at as any).getTime() : 0;
-              const bt = b.created_at ? new Date(b.created_at as any).getTime() : 0;
+              const at = a.created_at ? new Date(a.created_at as string).getTime() : 0;
+              const bt = b.created_at ? new Date(b.created_at as string).getTime() : 0;
               return bt - at;
             })
             .slice(0, excess);
