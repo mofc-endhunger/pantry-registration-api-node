@@ -46,7 +46,16 @@ export class PantryTrakClient {
       return { success: false, error: 'disabled' };
     }
     const url = this.urlFor('api/create_freshtrak_user.php');
-    const payload = JSON.stringify(user);
+    // Strip binary/internal fields before serializing. cognito_uuid is a raw
+    // Buffer (16-byte binary) that JSON.stringify renders as {"type":"Buffer","data":[...]}
+    // which PantryTrak cannot parse and will reject with a 403.
+    const sanitized =
+      user && typeof user === 'object'
+        ? Object.fromEntries(
+            Object.entries(user as Record<string, unknown>).filter(([k]) => k !== 'cognito_uuid'),
+          )
+        : user;
+    const payload = JSON.stringify(sanitized);
     const userId =
       user && typeof user === 'object' && 'id' in user
         ? String((user as Record<string, unknown>).id)
