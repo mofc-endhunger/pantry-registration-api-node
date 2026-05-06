@@ -64,6 +64,7 @@ export class PantryTrakClient {
       const body: unknown = await response.json().catch(() => null);
       logger.log(`[createUser] Response: status=${response.status}, success=${response.ok}`);
       if (!response.ok) {
+        logger.warn(`[createUser] Failed (HTTP ${response.status}): ${JSON.stringify(body)}`);
         return { success: false, status: response.status, body, error: `HTTP ${response.status}` };
       }
       return { success: true, status: response.status, body };

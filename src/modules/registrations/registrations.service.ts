@@ -514,27 +514,38 @@ export class RegistrationsService {
       if (dto.event_slot_id) await this.publicSchedule.incrementSlotAndDate(dto.event_slot_id);
       else if (dto.event_date_id) await this.publicSchedule.incrementDate(dto.event_date_id);
     }
-    // Best-effort sync to PantryTrak (fire-and-forget)
-    try {
-      if (this.pantryTrakClient) {
-        this.pantryTrakClient
-          .createReservation({
-            id: saved.id,
-            user_id: saved.created_by as unknown as number,
-            event_date_id: saved.public_event_date_id ?? saved.event_id,
-            event_slot_id: saved.public_event_slot_id ?? null,
-          })
-          .catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            // eslint-disable-next-line no-console
-            console.warn('[PantryTrak] createReservation failed', msg);
-          });
+    // Sync to PantryTrak: ensure user exists in PT before creating the reservation.
+    // Fire-and-forget but sequential — createReservation is skipped if createUser fails
+    // so we never end up with an orphaned reservation that has no associated PT user.
+    void (async () => {
+      if (!this.pantryTrakClient) return;
+      try {
+        const userForSync = await this.usersService.findById(dbUserId);
+        const userResult = await this.pantryTrakClient.createUser(userForSync);
+        if (!userResult.success) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[PantryTrak] createUser failed (status=${userResult.status}), skipping createReservation to avoid orphaned reservation`,
+            userResult.body,
+          );
+          return;
+        }
+        const resResult = await this.pantryTrakClient.createReservation({
+          id: saved.id,
+          user_id: saved.created_by as unknown as number,
+          event_date_id: saved.public_event_date_id ?? saved.event_id,
+          event_slot_id: saved.public_event_slot_id ?? null,
+        });
+        if (!resResult.success) {
+          // eslint-disable-next-line no-console
+          console.warn('[PantryTrak] createReservation failed', resResult.status, resResult.body);
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // eslint-disable-next-line no-console
+        console.warn('[PantryTrak] sync error during registerForEvent', msg);
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      // eslint-disable-next-line no-console
-      console.warn('[PantryTrak] client not available', msg);
-    }
+    })();
 
     // Auto-assign survey family (best-effort; non-blocking)
     try {
