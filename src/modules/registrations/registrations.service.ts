@@ -523,12 +523,27 @@ export class RegistrationsService {
         const userForSync = await this.usersService.findById(dbUserId);
         const userResult = await this.pantryTrakClient.createUser(userForSync);
         if (!userResult.success) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[PantryTrak] createUser failed (status=${userResult.status}), skipping createReservation to avoid orphaned reservation`,
-            userResult.body,
-          );
-          return;
+          if (userResult.status === 403) {
+            // A 403 from createUser means PT already has this user (e.g. as a guest whose
+            // user_type we are trying to change to 'customer' — PT rejects the type change
+            // but the user record IS valid in PT).  The upgradeGuest flow now attempts to
+            // sync the type change proactively, so this should become rare.  Either way,
+            // the user exists in PT by their id and we can safely create the reservation.
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[PantryTrak] createUser returned 403 for userId=${dbUserId} (user already exists in PT), proceeding with createReservation`,
+              userResult.body,
+            );
+          } else {
+            // Any other failure (401, 5xx, network error) means the user may genuinely
+            // not exist in PT — skip createReservation to avoid an orphaned reservation.
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[PantryTrak] createUser failed (status=${userResult.status}), skipping createReservation to avoid orphaned reservation`,
+              userResult.body,
+            );
+            return;
+          }
         }
         const resResult = await this.pantryTrakClient.createReservation({
           id: saved.id,
