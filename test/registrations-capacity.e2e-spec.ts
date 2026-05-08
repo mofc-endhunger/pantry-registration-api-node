@@ -73,4 +73,3 @@ describe('Registrations capacity/waitlist (E2E)', () => {
     }
   });
 });
-

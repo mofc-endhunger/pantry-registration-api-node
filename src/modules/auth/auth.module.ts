@@ -17,6 +17,7 @@ import { Authentication } from '../../entities/authentication.entity';
 import { Credential } from '../../entities/credential.entity';
 import { GuestOrJwtAuthGuard } from './guest-or-jwt.guard';
 import { HouseholdsModule } from '../households/households.module';
+import { PantryTrakClient } from '../integrations/pantrytrak.client';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { HouseholdsModule } from '../households/households.module';
     GuestOrJwtAuthGuard,
     MailerService,
     RolesGuard,
+    PantryTrakClient,
   ],
   exports: [JwtAuthGuard, GuestOrJwtAuthGuard, RolesGuard],
 })

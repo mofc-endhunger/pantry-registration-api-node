@@ -25,6 +25,55 @@ export class PantryTrakClient {
     return String(e);
   }
 
+  // PII fields that are masked in failure logs. Length and a flag of "interesting"
+  // characters (the kinds that trip WAF SQLi/XSS rules) are preserved so we can
+  // correlate which field's content is the trigger without leaking the value.
+  private static readonly PII_FIELDS = new Set([
+    'first_name',
+    'middle_name',
+    'last_name',
+    'phone',
+    'address_line_1',
+    'address_line_2',
+    'date_of_birth',
+    'license_plate',
+  ]);
+
+  private static describeWafShape(value: string): string {
+    const flags: string[] = [];
+    if (/['"`]/.test(value)) flags.push('quote');
+    if (/[<>]/.test(value)) flags.push('angle');
+    if (/--|\/\*|\*\//.test(value)) flags.push('sqlcomment');
+    if (/[;()]/.test(value)) flags.push('punct');
+    if (/\\/.test(value)) flags.push('bslash');
+    if (/\b(select|union|drop|insert|update|delete|script|onerror|onload)\b/i.test(value))
+      flags.push('keyword');
+    if (/[^\x20-\x7e]/.test(value)) flags.push('nonascii');
+    return `len=${value.length}${flags.length ? ' flags=' + flags.join(',') : ''}`;
+  }
+
+  private static redactForLog(obj: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (v == null) {
+        out[k] = v;
+        continue;
+      }
+      if (k === 'email' && typeof v === 'string') {
+        const at = v.lastIndexOf('@');
+        const domain = at >= 0 ? v.slice(at + 1) : '';
+        out[k] = `<redacted ${PantryTrakClient.describeWafShape(v)}${domain ? ' domain=' + domain : ''}>`;
+        continue;
+      }
+      if (PantryTrakClient.PII_FIELDS.has(k) && typeof v === 'string') {
+        out[k] = `<redacted ${PantryTrakClient.describeWafShape(v)}>`;
+        continue;
+      }
+      out[k] = v;
+    }
+    return out;
+  }
+
   private makeBearer(): string {
     if (!this.token || !this.secret)
       throw new Error('PANTRY_TRAK_TOKEN or PANTRY_TRAK_SECRET not configured');
@@ -46,9 +95,29 @@ export class PantryTrakClient {
       return { success: false, error: 'disabled' };
     }
     const url = this.urlFor('api/create_freshtrak_user.php');
-    const payload = JSON.stringify(user);
-    logger.log(`[createUser] POST ${url}`);
-    logger.log(`[createUser] Payload: ${payload}`);
+    // Build the payload sent to PantryTrak.
+    // Strip cognito_uuid — it is a raw 16-byte Buffer that JSON.stringify renders as
+    // {"type":"Buffer","data":[...]} which PT cannot parse, causing a 403.
+    // PT's endpoint is a simple INSERT ON DUPLICATE KEY UPDATE and accepts all user_type
+    // values (guest, customer, registered), so the local user_type is sent as-is.
+    // All string columns in the PT users table are nullable, so null values are fine.
+    const sanitized: Record<string, unknown> =
+      user && typeof user === 'object'
+        ? Object.fromEntries(
+            Object.entries(user as Record<string, unknown>).filter(([k]) => k !== 'cognito_uuid'),
+          )
+        : {};
+    const payload = JSON.stringify(sanitized);
+    const userId =
+      user && typeof user === 'object' && 'id' in user
+        ? String((user as Record<string, unknown>).id)
+        : 'unknown';
+    logger.log(`[createUser] POST ${url} userId=${userId}`);
+    // TEMP DEBUG: logging the raw outgoing payload (PII included) so we can
+    // diff a working guest-upgrade call against a failing registered-first
+    // call and identify which field's content is tripping WAF. Revert to
+    // PantryTrakClient.redactForLog(sanitized) once the trigger is found.
+    logger.log(`[createUser] payloadBytes=${payload.length} payload=${payload}`);
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -59,8 +128,24 @@ export class PantryTrakClient {
         body: payload,
       });
       const body: unknown = await response.json().catch(() => null);
-      logger.log(`[createUser] Response: status=${response.status}, body=${JSON.stringify(body)}`);
+      logger.log(`[createUser] Response: status=${response.status}, success=${response.ok}`);
       if (!response.ok) {
+        // Log response headers on failure — helps distinguish an Apache/WAF 403
+        // (Content-Type: text/html, X-*-ModSecurity headers) from a PHP-level response.
+        const headerDump: Record<string, string> = {};
+        response.headers.forEach((value, key) => {
+          headerDump[key] = value;
+        });
+        // AWS-issued 403s come back with x-amzn-trace-id / x-amz-request-id;
+        // capture them so PT ops can correlate to a specific WAF/ALB log entry.
+        const traceId =
+          response.headers.get('x-amzn-trace-id') || response.headers.get('x-amz-request-id') || '';
+        // TEMP DEBUG: logging the raw outgoing payload (PII included). Revert
+        // to PantryTrakClient.redactForLog(sanitized) once the WAF trigger is
+        // identified.
+        logger.warn(
+          `[createUser] Failed (HTTP ${response.status}) userId=${userId} traceId=${traceId} payloadBytes=${payload.length} payload=${payload} headers=${JSON.stringify(headerDump)} body=${JSON.stringify(body)}`,
+        );
         return { success: false, status: response.status, body, error: `HTTP ${response.status}` };
       }
       return { success: true, status: response.status, body };

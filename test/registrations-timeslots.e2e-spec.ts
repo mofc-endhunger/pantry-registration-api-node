@@ -40,8 +40,14 @@ describe('Registrations timeslot flow (E2E)', () => {
 
     // Prepare a JWT user
     const email = `ts+${Date.now()}@example.com`;
-    await request(app.getHttpServer()).post('/auth/register').send({ email, password: 'Pw!23456' }).expect(201);
-    const login = await request(app.getHttpServer()).post('/auth/login').send({ email, password: 'Pw!23456' }).expect(201);
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email, password: 'Pw!23456' })
+      .expect(201);
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'Pw!23456' })
+      .expect(201);
     const jwt = login.body.access_token as string;
 
     // First registration for timeslot is confirmed
@@ -74,4 +80,3 @@ describe('Registrations timeslot flow (E2E)', () => {
       .expect(200);
   });
 });
-

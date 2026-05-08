@@ -18,7 +18,7 @@ export class AuthCallbacksService {
 
   async facebookCallback(facebookDto: FacebookAuthCallbackDto) {
     // 1. Verify Facebook token (stub, always true for now)
-    const isValid = await this.verifyFacebookToken(facebookDto.accessToken, facebookDto.userID);
+    const isValid = this.verifyFacebookToken(facebookDto.accessToken, facebookDto.userID);
     if (!isValid) throw new UnauthorizedException('Invalid Facebook token');
 
     // 2. Find or create identity
@@ -61,7 +61,7 @@ export class AuthCallbacksService {
   }
 
   // Stub for Facebook token verification
-  async verifyFacebookToken(accessToken: string, userID: string): Promise<boolean> {
+  verifyFacebookToken(_accessToken: string, _userID: string): boolean {
     // TODO: Integrate with Facebook API
     return true;
   }

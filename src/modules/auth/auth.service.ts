@@ -23,6 +23,8 @@ import { JwtService } from '@nestjs/jwt';
 import { SafeRandom } from '../../common/utils/safe-random';
 import { mapSuffixToId } from '../../common/utils/suffix-mapping';
 import { HouseholdsService } from '../households/households.service';
+import { CreateHouseholdDto } from '../households/dto/create-household.dto';
+import { PantryTrakClient } from '../integrations/pantrytrak.client';
 
 @Injectable()
 export class AuthService {
@@ -39,6 +41,7 @@ export class AuthService {
     private readonly credentialRepository: Repository<Credential>,
     @Optional() private readonly householdsService?: HouseholdsService,
     @Optional() private readonly twilioService?: TwilioService,
+    @Optional() private readonly pantryTrakClient?: PantryTrakClient,
   ) {}
 
   private async generateUniqueIdentificationCode(): Promise<string> {
@@ -248,7 +251,7 @@ export class AuthService {
           primary_date_of_birth: (guestUser.date_of_birth as unknown as string) || '1900-01-01',
           primary_phone: guestUser.phone ?? undefined,
           primary_email: guestUser.email ?? undefined,
-        } as any);
+        } as CreateHouseholdDto);
         householdId = await this.householdsService.findHouseholdIdByUserId(guestUser.id);
         householdCreated = !!householdId;
       } catch {
@@ -296,6 +299,29 @@ export class AuthService {
       } catch {
         // best-effort; do not block on member sync
       }
+    }
+
+    // Best-effort: push the upgraded user (now user_type='customer') to PantryTrak so
+    // the type change is reflected before any subsequent reservation is attempted.
+    if (this.pantryTrakClient) {
+      try {
+        const ptResult = await this.pantryTrakClient.createUser(guestUser);
+        if (!ptResult.success) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[PantryTrak] upgradeGuest: createUser failed for userId=${guestUser.id} (status=${ptResult.status})`,
+            ptResult.body,
+          );
+        }
+      } catch {
+        // Non-blocking — a sync failure must not prevent the upgrade from completing
+      }
+    } else {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[PantryTrak] upgradeGuest: pantryTrakClient not available, skipping PT sync for userId=' +
+          String(guestUser.id),
+      );
     }
 
     // Invalidate the guest token (delete or expire it)

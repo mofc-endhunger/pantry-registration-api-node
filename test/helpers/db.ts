@@ -48,7 +48,7 @@ export async function truncateAll(): Promise<void> {
     try {
       // Use TRUNCATE if table exists; ignore errors for missing tables
       await query(`TRUNCATE TABLE \`${t}\``);
-    } catch (_) {
+    } catch {
       // ignore
     }
   }

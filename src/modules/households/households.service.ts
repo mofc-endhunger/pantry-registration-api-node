@@ -188,8 +188,8 @@ export class HouseholdsService {
     if (Array.isArray(dto.members)) {
       const membersInput = dto.members as Array<Partial<HouseholdMember>>;
       // Get IDs of members in the payload (excluding new members with null/undefined id)
-      const payloadMemberIds = new Set<number>(
-        membersInput.filter((m) => m.id != null).map((m) => Number(m.id)),
+      const payloadMemberIds = new Set(
+        dto.members.filter((m) => m.id != null).map((m) => Number(m.id)),
       );
 
       // Deactivate members that exist in DB but are NOT in the payload
