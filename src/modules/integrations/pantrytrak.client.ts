@@ -113,13 +113,11 @@ export class PantryTrakClient {
         ? String((user as Record<string, unknown>).id)
         : 'unknown';
     logger.log(`[createUser] POST ${url} userId=${userId}`);
-    // Log the redacted outgoing payload on every call so we can diff a working
-    // guest-upgrade call against a failing registered-first call without having
-    // to force a failure. Same redaction as the failure path.
-    const redactedOutgoing = PantryTrakClient.redactForLog(sanitized);
-    logger.log(
-      `[createUser] payloadBytes=${payload.length} payload=${JSON.stringify(redactedOutgoing)}`,
-    );
+    // TEMP DEBUG: logging the raw outgoing payload (PII included) so we can
+    // diff a working guest-upgrade call against a failing registered-first
+    // call and identify which field's content is tripping WAF. Revert to
+    // PantryTrakClient.redactForLog(sanitized) once the trigger is found.
+    logger.log(`[createUser] payloadBytes=${payload.length} payload=${payload}`);
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -142,12 +140,11 @@ export class PantryTrakClient {
         // capture them so PT ops can correlate to a specific WAF/ALB log entry.
         const traceId =
           response.headers.get('x-amzn-trace-id') || response.headers.get('x-amz-request-id') || '';
-        // Redact PII before logging the outgoing payload, but preserve length +
-        // shape flags per field so we can spot which field's content is matching
-        // a WAF rule when comparing a working vs. failing call.
-        const redacted = PantryTrakClient.redactForLog(sanitized);
+        // TEMP DEBUG: logging the raw outgoing payload (PII included). Revert
+        // to PantryTrakClient.redactForLog(sanitized) once the WAF trigger is
+        // identified.
         logger.warn(
-          `[createUser] Failed (HTTP ${response.status}) userId=${userId} traceId=${traceId} payloadBytes=${payload.length} payload=${JSON.stringify(redacted)} headers=${JSON.stringify(headerDump)} body=${JSON.stringify(body)}`,
+          `[createUser] Failed (HTTP ${response.status}) userId=${userId} traceId=${traceId} payloadBytes=${payload.length} payload=${payload} headers=${JSON.stringify(headerDump)} body=${JSON.stringify(body)}`,
         );
         return { success: false, status: response.status, body, error: `HTTP ${response.status}` };
       }
