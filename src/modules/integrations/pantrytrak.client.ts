@@ -113,6 +113,13 @@ export class PantryTrakClient {
         ? String((user as Record<string, unknown>).id)
         : 'unknown';
     logger.log(`[createUser] POST ${url} userId=${userId}`);
+    // Log the redacted outgoing payload on every call so we can diff a working
+    // guest-upgrade call against a failing registered-first call without having
+    // to force a failure. Same redaction as the failure path.
+    const redactedOutgoing = PantryTrakClient.redactForLog(sanitized);
+    logger.log(
+      `[createUser] payloadBytes=${payload.length} payload=${JSON.stringify(redactedOutgoing)}`,
+    );
     try {
       const response = await fetch(url, {
         method: 'POST',
