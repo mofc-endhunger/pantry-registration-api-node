@@ -46,15 +46,18 @@ export class PantryTrakClient {
       return { success: false, error: 'disabled' };
     }
     const url = this.urlFor('api/create_freshtrak_user.php');
-    // Strip binary/internal fields before serializing. cognito_uuid is a raw
-    // Buffer (16-byte binary) that JSON.stringify renders as {"type":"Buffer","data":[...]}
-    // which PantryTrak cannot parse and will reject with a 403.
-    const sanitized =
+    // Build the payload sent to PantryTrak.
+    // Strip cognito_uuid — it is a raw 16-byte Buffer that JSON.stringify renders as
+    // {"type":"Buffer","data":[...]} which PT cannot parse, causing a 403.
+    // PT's endpoint is a simple INSERT ON DUPLICATE KEY UPDATE and accepts all user_type
+    // values (guest, customer, registered), so the local user_type is sent as-is.
+    // All string columns in the PT users table are nullable, so null values are fine.
+    const sanitized: Record<string, unknown> =
       user && typeof user === 'object'
         ? Object.fromEntries(
             Object.entries(user as Record<string, unknown>).filter(([k]) => k !== 'cognito_uuid'),
           )
-        : user;
+        : {};
     const payload = JSON.stringify(sanitized);
     const userId =
       user && typeof user === 'object' && 'id' in user
@@ -73,7 +76,15 @@ export class PantryTrakClient {
       const body: unknown = await response.json().catch(() => null);
       logger.log(`[createUser] Response: status=${response.status}, success=${response.ok}`);
       if (!response.ok) {
-        logger.warn(`[createUser] Failed (HTTP ${response.status}): ${JSON.stringify(body)}`);
+        // Log response headers on failure — helps distinguish an Apache/WAF 403
+        // (Content-Type: text/html, X-*-ModSecurity headers) from a PHP-level response.
+        const headerDump: Record<string, string> = {};
+        response.headers.forEach((value, key) => {
+          headerDump[key] = value;
+        });
+        logger.warn(
+          `[createUser] Failed (HTTP ${response.status}) headers=${JSON.stringify(headerDump)} body=${JSON.stringify(body)}`,
+        );
         return { success: false, status: response.status, body, error: `HTTP ${response.status}` };
       }
       return { success: true, status: response.status, body };
