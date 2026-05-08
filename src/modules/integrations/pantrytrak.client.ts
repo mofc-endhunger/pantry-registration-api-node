@@ -29,7 +29,14 @@ export class PantryTrakClient {
     if (!this.token || !this.secret)
       throw new Error('PANTRY_TRAK_TOKEN or PANTRY_TRAK_SECRET not configured');
     const payload = { token: this.token, time: Math.floor(Date.now() / 1000) };
-    const signed = this.jwtService.sign(payload, { secret: this.secret, algorithm: 'HS256' });
+    // noTimestamp prevents jwtService from injecting an `iat` claim.
+    // Our JWT payload must be exactly {token, time} — identical to what the Postman
+    // tests use — so that PHP's base64_decode-based signature verification matches.
+    const signed = this.jwtService.sign(payload, {
+      secret: this.secret,
+      algorithm: 'HS256',
+      noTimestamp: true,
+    });
     return `Bearer ${signed}`;
   }
 
@@ -70,6 +77,10 @@ export class PantryTrakClient {
         headers: {
           Authorization: this.makeBearer(),
           'Content-Type': 'application/json',
+          Accept: 'application/json, */*',
+          // Use a recognisable User-Agent rather than the default "undici" sent by
+          // Node's built-in fetch, which some Apache/ModSecurity rulesets block.
+          'User-Agent': 'PantryRegistrationAPI/1.0',
         },
         body: payload,
       });
@@ -115,6 +126,8 @@ export class PantryTrakClient {
         headers: {
           Authorization: this.makeBearer(),
           'Content-Type': 'application/json',
+          Accept: 'application/json, */*',
+          'User-Agent': 'PantryRegistrationAPI/1.0',
         },
         body: payloadStr,
       });
