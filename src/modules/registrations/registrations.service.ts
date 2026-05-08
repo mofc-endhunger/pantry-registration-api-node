@@ -523,27 +523,18 @@ export class RegistrationsService {
         const userForSync = await this.usersService.findById(dbUserId);
         const userResult = await this.pantryTrakClient.createUser(userForSync);
         if (!userResult.success) {
-          if (userResult.status === 403) {
-            // A 403 from createUser means PT already has this user (e.g. as a guest whose
-            // user_type we are trying to change to 'customer' — PT rejects the type change
-            // but the user record IS valid in PT).  The upgradeGuest flow now attempts to
-            // sync the type change proactively, so this should become rare.  Either way,
-            // the user exists in PT by their id and we can safely create the reservation.
-            // eslint-disable-next-line no-console
-            console.warn(
-              `[PantryTrak] createUser returned 403 for userId=${dbUserId} (user already exists in PT), proceeding with createReservation`,
-              userResult.body,
-            );
-          } else {
-            // Any other failure (401, 5xx, network error) means the user may genuinely
-            // not exist in PT — skip createReservation to avoid an orphaned reservation.
-            // eslint-disable-next-line no-console
-            console.warn(
-              `[PantryTrak] createUser failed (status=${userResult.status}), skipping createReservation to avoid orphaned reservation`,
-              userResult.body,
-            );
-            return;
-          }
+          // Skip createReservation entirely — every reservation in PT must be
+          // attached to a user record. Creating a reservation with no matching
+          // user would leave an orphan in PT, which is worse than having no
+          // reservation there at all (the registration still exists in
+          // freshtrak_private and can be re-synced once the createUser issue
+          // is resolved).
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[PantryTrak] createUser failed (status=${userResult.status}), skipping createReservation to avoid orphan`,
+            userResult.body,
+          );
+          return;
         }
         const resResult = await this.pantryTrakClient.createReservation({
           id: saved.id,
@@ -767,9 +758,20 @@ export class RegistrationsService {
 
     // Sync registrant to PantryTrak immediately after creation so the user record
     // exists before the reservation is sent, regardless of household member counts.
+    // Track success so we can skip createReservation on failure and avoid orphan
+    // reservations in PT (every PT reservation must be attached to a PT user).
+    let ptUserCreated = false;
     try {
       if (this.pantryTrakClient) {
-        await this.pantryTrakClient.createUser(registrantUser);
+        const r = await this.pantryTrakClient.createUser(registrantUser);
+        ptUserCreated = !!r.success;
+        if (!r.success) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[PantryTrak] createUser failed (on-behalf-of, status=${r.status}), reservation sync will be skipped`,
+            r.body,
+          );
+        }
       }
     } catch {
       // Non-blocking: PantryTrak sync failure must not prevent registration
@@ -895,24 +897,32 @@ export class RegistrationsService {
       else if (dto.event_date_id) await this.publicSchedule.incrementDate(dto.event_date_id);
     }
 
-    // Best-effort PantryTrak sync — use the registrant's user ID, not the case manager's
-    try {
-      if (this.pantryTrakClient) {
-        this.pantryTrakClient
-          .createReservation({
-            id: saved.id,
-            user_id: registrantUser.id,
-            event_date_id: saved.public_event_date_id ?? saved.event_id,
-            event_slot_id: saved.public_event_slot_id ?? null,
-          })
-          .catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.warn('[PantryTrak] createReservation failed (on-behalf-of)', msg);
-          });
+    // Best-effort PantryTrak sync — use the registrant's user ID, not the case manager's.
+    // Only proceed if the earlier createUser succeeded; otherwise we'd create an orphan
+    // reservation in PT with no matching user record.
+    if (ptUserCreated) {
+      try {
+        if (this.pantryTrakClient) {
+          this.pantryTrakClient
+            .createReservation({
+              id: saved.id,
+              user_id: registrantUser.id,
+              event_date_id: saved.public_event_date_id ?? saved.event_id,
+              event_slot_id: saved.public_event_slot_id ?? null,
+            })
+            .catch((err: unknown) => {
+              const msg = err instanceof Error ? err.message : String(err);
+              console.warn('[PantryTrak] createReservation failed (on-behalf-of)', msg);
+            });
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('[PantryTrak] client not available (on-behalf-of)', msg);
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn('[PantryTrak] client not available (on-behalf-of)', msg);
+    } else {
+      console.warn(
+        '[PantryTrak] skipping createReservation (on-behalf-of) — createUser did not succeed',
+      );
     }
 
     // Auto-assign survey (best-effort)
