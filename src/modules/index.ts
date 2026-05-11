@@ -9,6 +9,7 @@ import { RegistrationsModule } from './registrations/registrations.module';
 import { ReservationsModule } from './reservations/reservations.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { SurveysModule } from './surveys/surveys.module';
+import { FavoritesModule } from './favorites/favorites.module';
 
 export const FeatureModules = [
   HealthModule,
@@ -22,4 +23,5 @@ export const FeatureModules = [
   ReservationsModule,
   FeedbackModule,
   SurveysModule,
+  FavoritesModule,
 ];
