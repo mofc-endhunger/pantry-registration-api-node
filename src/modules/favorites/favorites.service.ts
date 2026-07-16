@@ -7,6 +7,10 @@ import { FavoriteResponseDto, FavoritesListResponseDto } from './dto/favorite-re
 interface MysqlError extends Error {
   code?: string;
   errno?: number;
+  driverError?: {
+    code?: string;
+    errno?: number;
+  };
 }
 
 @Injectable()
@@ -44,7 +48,13 @@ export class FavoritesService {
       };
     } catch (err) {
       const mysqlErr = err as MysqlError;
-      if (mysqlErr.errno === 1062 || mysqlErr.code === 'ER_DUP_ENTRY') {
+      const driverErr = mysqlErr.driverError;
+      if (
+        mysqlErr.errno === 1062 ||
+        mysqlErr.code === 'ER_DUP_ENTRY' ||
+        driverErr?.errno === 1062 ||
+        driverErr?.code === 'ER_DUP_ENTRY'
+      ) {
         throw new ConflictException('Event already in favorites');
       }
       throw err;
