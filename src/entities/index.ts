@@ -20,3 +20,4 @@ export { SurveyAssignment } from './survey-assignment.entity';
 export { SurveyTrigger } from './survey-triggers.entity';
 export { SurveySubmission } from './survey-submissions.entity';
 export { SurveyResponse } from './survey-responses.entity';
+export { UserEventFavorite } from './user-event-favorite.entity';
