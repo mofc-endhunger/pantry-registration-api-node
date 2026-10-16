@@ -241,6 +241,99 @@ describe('UsersService', () => {
     );
   });
 
+  /* SUP-1001 — the users row must mirror the head of household's personal
+     fields. The public client sends the head WITHOUT a user_id, so the match
+     falls back to is_head_of_household; gender and suffix cross from the
+     member's ids to the user's strings. */
+  describe('updateUserWithHousehold mirrors the head of household onto the users row (SUP-1001)', () => {
+    it('finds the head by is_head_of_household when no member carries user_id', async () => {
+      usersRepo.findOneBy.mockResolvedValueOnce({ id: 10 } as any);
+      const dto: any = {
+        household_id: 77,
+        members: [
+          {
+            id: 5,
+            first_name: 'Jane',
+            middle_name: 'Q',
+            last_name: 'Doe',
+            date_of_birth: '1990-01-01',
+            is_head_of_household: 1,
+            is_active: 1,
+            gender_id: 2,
+            suffix_id: 3,
+          },
+          { id: 6, first_name: 'Kid', last_name: 'Doe', date_of_birth: '2015-05-05', gender_id: 1 },
+        ],
+      };
+      await service.updateUserWithHousehold(10, dto);
+      expect(usersRepo.update).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({
+          first_name: 'Jane',
+          middle_name: 'Q',
+          last_name: 'Doe',
+          date_of_birth: '1990-01-01',
+          gender: 'female',
+          suffix: 'II',
+        }),
+      );
+    });
+
+    it('prefers the member whose user_id is this user over the head flag', async () => {
+      usersRepo.findOneBy.mockResolvedValueOnce({ id: 10 } as any);
+      const dto: any = {
+        household_id: 77,
+        members: [
+          { id: 5, first_name: 'Head', last_name: 'Flag', is_head_of_household: 1, gender_id: 1 },
+          { id: 6, user_id: '10', first_name: 'Me', last_name: 'Myself', gender_id: 3 },
+        ],
+      };
+      await service.updateUserWithHousehold(10, dto);
+      const [, patch] = usersRepo.update.mock.calls[0] as [number, Record<string, unknown>];
+      expect(patch).toMatchObject({ first_name: 'Me', last_name: 'Myself', gender: 'other' });
+    });
+
+    it.each([
+      [1, 'male'],
+      [2, 'female'],
+      [3, 'other'],
+      [4, 'prefer_not_to_say'],
+    ])('writes gender_id %i as users.gender %s', async (gender_id, gender) => {
+      usersRepo.findOneBy.mockResolvedValueOnce({ id: 10 } as any);
+      const dto: any = {
+        household_id: 77,
+        members: [{ id: 5, is_head_of_household: 1, gender_id }],
+      };
+      await service.updateUserWithHousehold(10, dto);
+      expect(usersRepo.update).toHaveBeenCalledWith(10, expect.objectContaining({ gender }));
+    });
+
+    it('leaves gender and suffix alone when the head carries null or unknown ids', async () => {
+      usersRepo.findOneBy.mockResolvedValueOnce({ id: 10 } as any);
+      const dto: any = {
+        household_id: 77,
+        city: 'Columbus',
+        members: [{ id: 5, is_head_of_household: 1, gender_id: null, suffix_id: 99 }],
+      };
+      await service.updateUserWithHousehold(10, dto);
+      const [, patch] = usersRepo.update.mock.calls[0] as [number, Record<string, unknown>];
+      expect(patch).toEqual({ city: 'Columbus' });
+    });
+
+    it('does not touch the users row when there is no head and nothing else to write', async () => {
+      usersRepo.findOneBy.mockResolvedValueOnce({ id: 10 } as any);
+      const dto: any = {
+        household_id: 77,
+        members: [{ id: 6, first_name: 'Kid', last_name: 'Doe', gender_id: 1 }],
+      };
+      await service.updateUserWithHousehold(10, dto);
+      // The counts snapshot (`update({ id }, counts)`) still runs; the
+      // personal-fields update (`update(10, patch)`) must not.
+      const personal = usersRepo.update.mock.calls.filter(([where]) => where === 10);
+      expect(personal).toEqual([]);
+    });
+  });
+
   it('updateUserWithHousehold updates permission flags when provided', async () => {
     usersRepo.findOneBy.mockResolvedValueOnce({ id: 10 } as any);
     const dto: any = {

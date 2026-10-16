@@ -9,7 +9,8 @@ import { UpdateUserWithHouseholdDto } from './dto/update-user-with-household.dto
 import { HouseholdsService } from '../households/households.service';
 import { UpsertMemberDto } from '../households/dto/upsert-member.dto';
 import { SafeRandom } from '../../common/utils/safe-random';
-import { mapSuffixToId } from '../../common/utils/suffix-mapping';
+import { mapIdToSuffix, mapSuffixToId } from '../../common/utils/suffix-mapping';
+import { mapGenderToId, mapIdToGender } from '../../common/utils/gender-mapping';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
 
 // Minimal shape needed from HouseholdsService.getHouseholdById
@@ -280,12 +281,23 @@ export class UsersService {
     id: number,
     dto: UpdateUserWithHouseholdDto,
   ): Promise<{ user: User; household: HouseholdWithCounts }> {
-    // Update user fields (only those that exist on the user entity)
+    // The member who IS this user: matched by user_id when the client sends
+    // it, otherwise the head of household. The public client's setup wizard
+    // and account page send the head without a user_id, which used to mean
+    // none of these fields ever reached the users row (SUP-1001).
+    const hohMember =
+      dto.members?.find((m) => m.user_id != null && m.user_id == id?.toString()) ??
+      dto.members?.find((m) => !!m.is_head_of_household);
+    // Update user fields (only those that exist on the user entity). The
+    // users row stores gender and suffix as strings where the member row
+    // stores ids; an id outside the known set leaves the user's value alone.
     const userUpdate: Partial<User> = {
-      first_name: dto.members?.find((m) => m.user_id == id?.toString())?.first_name ?? undefined,
-      last_name: dto.members?.find((m) => m.user_id == id?.toString())?.last_name ?? undefined,
-      date_of_birth:
-        dto.members?.find((m) => m.user_id == id?.toString())?.date_of_birth ?? undefined,
+      first_name: hohMember?.first_name ?? undefined,
+      middle_name: hohMember?.middle_name ?? undefined,
+      last_name: hohMember?.last_name ?? undefined,
+      date_of_birth: hohMember?.date_of_birth ?? undefined,
+      gender: mapIdToGender(hohMember?.gender_id),
+      suffix: mapIdToSuffix(hohMember?.suffix_id),
       address_line_1: dto.address_line_1,
       address_line_2: dto.address_line_2,
       city: dto.city,
@@ -347,8 +359,7 @@ export class UsersService {
         const patch: Record<string, number> = {};
 
         if (hohMember.gender_id == null || Number.isNaN(hohMember.gender_id)) {
-          const g = (headUser.gender || '').toString().trim().toLowerCase();
-          const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
+          const mappedGenderId = mapGenderToId(headUser.gender);
           if (mappedGenderId !== undefined) patch.gender_id = mappedGenderId;
         }
 
