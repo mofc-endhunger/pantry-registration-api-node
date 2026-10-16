@@ -51,7 +51,7 @@ export async function createUserWithCredential(
     identification_code: partial.identification_code ?? `id_${Date.now()}`,
     user_type: partial.user_type ?? 'customer',
   } as any);
-  const saved = (await usersRepo.save(user as any)) as any as User;
+  const saved = (await usersRepo.save(user as any)) as User;
   const secret = await bcrypt.hash(password, 12);
   await credRepo.save(credRepo.create({ user_id: (saved as any).id, secret } as any) as any);
   return { user: saved, password };

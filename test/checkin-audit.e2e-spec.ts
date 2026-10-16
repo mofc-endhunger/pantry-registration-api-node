@@ -29,8 +29,14 @@ describe('Check-in audit (E2E)', () => {
       eventsRepo.create({ name: 'Audit Event', is_active: true } as any),
     );
     const email = `audit+${Date.now()}@example.com`;
-    await request(app.getHttpServer()).post('/auth/register').send({ email, password: 'Pw!23456' }).expect(201);
-    const login = await request(app.getHttpServer()).post('/auth/login').send({ email, password: 'Pw!23456' }).expect(201);
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email, password: 'Pw!23456' })
+      .expect(201);
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password: 'Pw!23456' })
+      .expect(201);
     const jwt = login.body.access_token as string;
 
     const regRes = await request(app.getHttpServer())
@@ -49,4 +55,3 @@ describe('Check-in audit (E2E)', () => {
     expect(audits.length).toBeGreaterThan(0);
   });
 });
-

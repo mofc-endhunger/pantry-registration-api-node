@@ -3,6 +3,7 @@ import {
   CognitoIdentityProviderClient,
   SignUpCommand,
   InitiateAuthCommand,
+  AdminGetUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import * as crypto from 'crypto';
 
@@ -43,5 +44,28 @@ export class CognitoService {
       },
     });
     return this.client.send(command);
+  }
+
+  /**
+   * Look up a Cognito user's email by their `sub` (UUID).
+   * Returns null when the attribute is absent or the call fails.
+   */
+  async getEmailBySub(sub: string): Promise<string | null> {
+    try {
+      const command = new AdminGetUserCommand({
+        UserPoolId: process.env.COGNITO_USER_POOL_ID,
+        Username: sub,
+      });
+      const result = await this.client.send(command);
+      const emailAttr = result.UserAttributes?.find((a) => a.Name === 'email');
+      return emailAttr?.Value ?? null;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[CognitoService] getEmailBySub failed:',
+        err instanceof Error ? err.message : String(err),
+      );
+      return null;
+    }
   }
 }

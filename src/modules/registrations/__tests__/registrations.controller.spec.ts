@@ -6,6 +6,7 @@ class RegistrationsServiceMock implements Partial<RegistrationsService> {
   listForEvent = jest.fn();
   listForMe = jest.fn();
   registerForEvent = jest.fn();
+  findByCreatedBy = jest.fn();
   cancelRegistration = jest.fn();
   checkIn = jest.fn();
 }
@@ -20,14 +21,14 @@ describe('RegistrationsController', () => {
   });
 
   it('listForEvent delegates to service with parsed eventId', async () => {
-    (service.listForEvent as jest.Mock).mockResolvedValueOnce([{ id: 1 }] as any);
+    service.listForEvent.mockResolvedValueOnce([{ id: 1 }] as any);
     const result = await controller.listForEvent(42);
     expect(service.listForEvent).toHaveBeenCalledWith(42);
     expect(result).toEqual([{ id: 1 }]);
   });
 
   it('listForMe passes user and guest token from request', async () => {
-    (service.listForMe as jest.Mock).mockResolvedValueOnce([{ id: 2 }] as any);
+    service.listForMe.mockResolvedValueOnce([{ id: 2 }] as any);
     const req = {
       user: { sub: 'abc' },
       headers: { 'x-guest-token': 'guest-123' },
@@ -38,7 +39,7 @@ describe('RegistrationsController', () => {
   });
 
   it('register forwards dto, user, and optional guest token', async () => {
-    (service.registerForEvent as jest.Mock).mockResolvedValueOnce({
+    service.registerForEvent.mockResolvedValueOnce({
       id: 10,
       status: 'confirmed',
     } as any);
@@ -53,7 +54,7 @@ describe('RegistrationsController', () => {
   });
 
   it('cancel calls service with user and id', async () => {
-    (service.cancelRegistration as jest.Mock).mockResolvedValueOnce({
+    service.cancelRegistration.mockResolvedValueOnce({
       id: 11,
       status: 'cancelled',
     } as any);
@@ -64,7 +65,7 @@ describe('RegistrationsController', () => {
   });
 
   it('checkIn calls service with user and dto', async () => {
-    (service.checkIn as jest.Mock).mockResolvedValueOnce({ id: 12, status: 'checked_in' } as any);
+    service.checkIn.mockResolvedValueOnce({ id: 12, status: 'checked_in' } as any);
     const req = { user: { sub: 'user2' } } as unknown as Request;
     const dto = { registration_id: 12, attendee_ids: [] } as any;
     const result = await controller.checkIn(dto, req);

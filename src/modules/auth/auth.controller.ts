@@ -10,7 +10,7 @@ import {
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import { AuthRegisterDto } from './dto/register.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { FacebookAuthDto } from './dto/facebook-auth.dto';
@@ -34,7 +34,7 @@ export class AuthController {
 
   @Post('register')
   @ApiBearerAuth('JWT-auth')
-  async register(@Body() registerDto: RegisterDto) {
+  async register(@Body() registerDto: AuthRegisterDto) {
     return this.authService.register(registerDto);
   }
 
