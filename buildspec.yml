@@ -2,7 +2,7 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      nodejs: 20
+      nodejs: 22
     on-failure: ABORT
   pre_build:
     on-failure: ABORT
@@ -16,7 +16,7 @@ phases:
       - echo "SOURCE VERSION $CODEBUILD_SOURCE_VERSION"
       - echo "RESOLVED VERSION $CODEBUILD_RESOLVED_SOURCE_VERSION"
       - echo "Building Docker image..."
-      - docker build -t $IMAGE:$CODEBUILD_BUILD_NUMBER --target $TARGET .
+      - docker build --pull -t $IMAGE:$CODEBUILD_BUILD_NUMBER --target $TARGET .
       - if [[ "$ENVIRONMENT" == "prod" || "$ENVIRONMENT" == "beta" ]]; then echo "Tagging for beta/prod..." && docker tag $IMAGE:$CODEBUILD_BUILD_NUMBER $REPOSITORY/$IMAGE:$IMAGE_TAG && docker tag $IMAGE:$CODEBUILD_BUILD_NUMBER $REPOSITORY/$IMAGE:$CODEBUILD_BUILD_NUMBER; fi
       - if [[ "$ENVIRONMENT" == "dev" ]]; then echo "Tagging for dev environment..." && BRANCH=$(echo $CODEBUILD_SOURCE_VERSION | sed 's/[^a-zA-Z0-9]/-/g') && SHA=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-7) && DEV_TAG="${BRANCH}-${SHA}" && echo "DEV TAG $DEV_TAG" && docker tag $IMAGE:$CODEBUILD_BUILD_NUMBER $REPOSITORY/$IMAGE:$DEV_TAG && echo $DEV_TAG > DEV_TAG.txt; fi
   post_build:
