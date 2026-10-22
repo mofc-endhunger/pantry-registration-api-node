@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+
 import { Injectable, NotFoundException, Inject, forwardRef, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -7,7 +9,8 @@ import { UpdateUserWithHouseholdDto } from './dto/update-user-with-household.dto
 import { HouseholdsService } from '../households/households.service';
 import { UpsertMemberDto } from '../households/dto/upsert-member.dto';
 import { SafeRandom } from '../../common/utils/safe-random';
-import { mapSuffixToId } from '../../common/utils/suffix-mapping';
+import { mapIdToSuffix, mapSuffixToId } from '../../common/utils/suffix-mapping';
+import { mapGenderToId, mapIdToGender } from '../../common/utils/gender-mapping';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
 
 // Minimal shape needed from HouseholdsService.getHouseholdById
@@ -234,6 +237,17 @@ export class UsersService {
     } catch {
       // ignore if read-only
     }
+
+    // Best-effort sync to PantryTrak on creation
+    try {
+      if (this.pantryTrakClient) {
+        const userForSync = await this.findById(userId);
+        await this.pantryTrakClient.createUser(userForSync);
+      }
+    } catch {
+      // Non-blocking: PantryTrak sync failure must not prevent user creation
+    }
+
     return { user: savedUser, household_id: householdId };
   }
 
@@ -241,6 +255,20 @@ export class UsersService {
     const user = await this.userRepository.findOneBy({ id });
     if (!user) throw new NotFoundException('User not found');
     return user;
+  }
+
+  /**
+   * If the user's stored email is an auto-generated placeholder (`@auto.local`),
+   * update it to the real email.  Returns true when an update was performed.
+   */
+  async healAutoLocalEmail(userId: number, realEmail: string): Promise<boolean> {
+    if (!realEmail || realEmail.includes('@auto.local')) return false;
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) return false;
+    const currentEmail: string | null | undefined = user.email;
+    if (!currentEmail || !currentEmail.includes('@auto.local')) return false;
+    await this.userRepository.update(userId, { email: realEmail } as Partial<User>);
+    return true;
   }
 
   async findByIdentificationCode(identification_code: string): Promise<User> {
@@ -253,12 +281,23 @@ export class UsersService {
     id: number,
     dto: UpdateUserWithHouseholdDto,
   ): Promise<{ user: User; household: HouseholdWithCounts }> {
-    // Update user fields (only those that exist on the user entity)
+    // The member who IS this user: matched by user_id when the client sends
+    // it, otherwise the head of household. The public client's setup wizard
+    // and account page send the head without a user_id, which used to mean
+    // none of these fields ever reached the users row (SUP-1001).
+    const hohMember =
+      dto.members?.find((m) => m.user_id != null && m.user_id == id?.toString()) ??
+      dto.members?.find((m) => !!m.is_head_of_household);
+    // Update user fields (only those that exist on the user entity). The
+    // users row stores gender and suffix as strings where the member row
+    // stores ids; an id outside the known set leaves the user's value alone.
     const userUpdate: Partial<User> = {
-      first_name: dto.members?.find((m) => m.user_id == id?.toString())?.first_name ?? undefined,
-      last_name: dto.members?.find((m) => m.user_id == id?.toString())?.last_name ?? undefined,
-      date_of_birth:
-        dto.members?.find((m) => m.user_id == id?.toString())?.date_of_birth ?? undefined,
+      first_name: hohMember?.first_name ?? undefined,
+      middle_name: hohMember?.middle_name ?? undefined,
+      last_name: hohMember?.last_name ?? undefined,
+      date_of_birth: hohMember?.date_of_birth ?? undefined,
+      gender: mapIdToGender(hohMember?.gender_id),
+      suffix: mapIdToSuffix(hohMember?.suffix_id),
       address_line_1: dto.address_line_1,
       address_line_2: dto.address_line_2,
       city: dto.city,
@@ -320,8 +359,7 @@ export class UsersService {
         const patch: Record<string, number> = {};
 
         if (hohMember.gender_id == null || Number.isNaN(hohMember.gender_id)) {
-          const g = (headUser.gender || '').toString().trim().toLowerCase();
-          const mappedGenderId = g === 'male' ? 1 : g === 'female' ? 2 : undefined;
+          const mappedGenderId = mapGenderToId(headUser.gender);
           if (mappedGenderId !== undefined) patch.gender_id = mappedGenderId;
         }
 
@@ -331,7 +369,12 @@ export class UsersService {
         }
 
         if (Object.keys(patch).length > 0) {
-          await this.householdsService.updateMember(householdId, hohMember.id, id, patch as any);
+          await this.householdsService.updateMember(
+            householdId,
+            hohMember.id,
+            id,
+            patch as UpsertMemberDto,
+          );
         }
       }
     } catch {
@@ -480,8 +523,8 @@ export class UsersService {
               );
             })
             .sort((a, b) => {
-              const at = a.created_at ? new Date(a.created_at as any).getTime() : 0;
-              const bt = b.created_at ? new Date(b.created_at as any).getTime() : 0;
+              const at = a.created_at ? new Date(a.created_at as string).getTime() : 0;
+              const bt = b.created_at ? new Date(b.created_at as string).getTime() : 0;
               return bt - at;
             })
             .slice(0, excess);

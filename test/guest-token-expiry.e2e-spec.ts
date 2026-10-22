@@ -36,7 +36,9 @@ describe('Guest token expiry (E2E)', () => {
     // Expire it in DB
     const record = await authRepo.findOne({ where: { token } });
     expect(record).toBeTruthy();
-    await authRepo.update({ id: (record as any).id }, { expires_at: new Date(Date.now() - 60_000) } as any);
+    await authRepo.update({ id: (record as any).id }, {
+      expires_at: new Date(Date.now() - 60_000),
+    } as any);
 
     const res = await request(app.getHttpServer())
       .post('/registrations')
@@ -45,4 +47,3 @@ describe('Guest token expiry (E2E)', () => {
     expect([401, 403]).toContain(res.status);
   });
 });
-

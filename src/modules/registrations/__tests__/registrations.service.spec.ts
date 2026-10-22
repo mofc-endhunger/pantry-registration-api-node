@@ -11,6 +11,7 @@ import { PublicScheduleService } from '../../public-schedule/public-schedule.ser
 import { UsersService } from '../../users/users.service';
 import { HouseholdsService } from '../../households/households.service';
 import { Authentication } from '../../../entities/authentication.entity';
+import { User } from '../../../entities/user.entity';
 import { SurveyFamily } from '../../../entities/survey-families.entity';
 import { PublicSurvey } from '../../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../../entities-public/survey-question-map.public.entity';
@@ -40,6 +41,7 @@ describe('RegistrationsService', () => {
         { provide: getRepositoryToken(EventTimeslot), useValue: createRepoMock<EventTimeslot>() },
         { provide: getRepositoryToken(CheckInAudit), useValue: createRepoMock<CheckInAudit>() },
         { provide: getRepositoryToken(Authentication), useValue: createRepoMock<Authentication>() },
+        { provide: getRepositoryToken(User), useValue: createRepoMock<User>() },
         // New repositories injected in service
         { provide: getRepositoryToken(SurveyFamily), useValue: createRepoMock<SurveyFamily>() },
         { provide: getRepositoryToken(PublicSurvey), useValue: createRepoMock<PublicSurvey>() },

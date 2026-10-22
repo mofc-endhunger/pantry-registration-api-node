@@ -8,6 +8,7 @@ import { User } from '../../entities/user.entity';
 import { UserDetail } from '../../entities/user-detail.entity';
 import { HouseholdsModule } from '../households/households.module';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
+import { CognitoService } from '../auth/cognito.service';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { PantryTrakClient } from '../integrations/pantrytrak.client';
     JwtModule.register({}),
   ],
   controllers: [UsersController],
-  providers: [UsersService, PantryTrakClient],
+  providers: [UsersService, PantryTrakClient, CognitoService],
   exports: [UsersService],
 })
 export class UsersModule {}

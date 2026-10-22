@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DeepPartial, Repository } from 'typeorm';
 import { Event } from '../../entities/event.entity';
 import { EventTimeslot } from '../../entities/event-timeslot.entity';
 import { CreateEventDto } from './dto/create-event.dto';
@@ -50,7 +50,7 @@ export class EventsService {
       end_at: dto.end_at ? new Date(dto.end_at) : null,
       capacity: dto.capacity ?? null,
       is_active: dto.is_active ?? true,
-    } as any);
+    } as DeepPartial<Event>);
     return this.eventsRepo.save(entity);
   }
 
@@ -85,7 +85,7 @@ export class EventsService {
       end_at: new Date(dto.end_at),
       capacity: dto.capacity,
       is_active: dto.is_active,
-    } as any);
+    } as DeepPartial<EventTimeslot>);
     return this.timeslotsRepo.save(entity);
   }
 

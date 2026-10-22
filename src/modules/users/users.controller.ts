@@ -1,4 +1,5 @@
-// ...existing code...
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
 import {
   Controller,
   Get,
@@ -69,9 +70,18 @@ export class UsersController {
     const cognitoUuid = user?.userId ?? user?.id ?? '';
     const dbUserId = await this.usersService.findDbUserIdByCognitoUuid(cognitoUuid);
     if (!dbUserId) throw new NotFoundException('User not found');
-    // Get the full household template for PATCH
+
+    // Self-heal @auto.local emails using the email claim already present in the JWT
+    const jwtEmail = (req.user as { email?: string } | undefined)?.email;
+    if (jwtEmail) {
+      try {
+        await this.usersService.healAutoLocalEmail(dbUserId, jwtEmail);
+      } catch {
+        // non-critical
+      }
+    }
+
     const household = await this.usersService.getHouseholdTemplateForUser(dbUserId);
-    // Ensure language_id is always present in response
     try {
       const u = await this.usersService.findById(dbUserId);
       return { ...household, language_id: u.language_id ?? null };
