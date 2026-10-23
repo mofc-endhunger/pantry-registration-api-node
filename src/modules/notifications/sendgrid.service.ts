@@ -36,18 +36,6 @@ export class SendgridService {
     }
   }
 
-  async sendEmail(from: string, to: string, subject: string, html: string): Promise<EmailResult> {
-    const skipped = this.skipReason();
-    if (skipped) return skipped;
-    try {
-      await sgMail.send({ from, to, subject, html });
-      return { success: true };
-    } catch (err: unknown) {
-      this.logger.warn(`SendGrid sendEmail error: ${SendgridService.describeError(err)}`);
-      return { success: false, error: err };
-    }
-  }
-
   /**
    * Send using a SendGrid dynamic template (`d-` id). The template owns the
    * subject and body, so no `subject`/`html` is sent — SendGrid would override

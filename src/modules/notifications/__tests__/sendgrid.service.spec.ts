@@ -21,22 +21,6 @@ describe('SendgridService', () => {
     process.env = OLD_ENV;
   });
 
-  it('sends email when configured', async () => {
-    process.env.SENDGRID_API_KEY = 'SG.TEST';
-    const svc = new SendgridService();
-    const res = await svc.sendEmail('from@test.com', 'to@test.com', 'subj', '<b>hi</b>');
-    expect(res.success).toBe(true);
-  });
-
-  it('handles send errors gracefully', async () => {
-    sendMock.mockRejectedValueOnce(new Error('smtp fail'));
-    process.env.SENDGRID_API_KEY = 'SG.TEST';
-    const svc = new SendgridService();
-    const res = await svc.sendEmail('from@test.com', 'to@test.com', 'subj', '<b>hi</b>');
-    expect(res.success).toBe(false);
-    expect(res.error).toBeDefined();
-  });
-
   describe('sendTemplate', () => {
     it('sends templateId and dynamicTemplateData without subject or html', async () => {
       process.env.SENDGRID_API_KEY = 'SG.TEST';

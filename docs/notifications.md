@@ -31,22 +31,9 @@ Security
 
 Endpoints
 
-- `POST /twilio/sms` — send SMS. Body:
+None. The module exposes no HTTP routes: `TwilioService` and `SendgridService` are injected and called server-side only.
 
-  {
-  "from_phone_number": "+1555...", // optional; defaults to TWILIO_PHONE_NUMBER
-  "to_phone_number": "+1...",
-  "message": "Text body"
-  }
-
-- `POST /twilio/email` — send email. **Warning:** this endpoint has no auth guard and accepts an arbitrary `from`/`to`/body, so it can be used to relay mail through the account. Prefer server-side sends. Body:
-
-  {
-  "from": "from@example.com",
-  "to": "to@example.com",
-  "subject": "Subject",
-  "content": "<p>HTML</p>"
-  }
+`POST /api/twilio/sms` and `POST /api/twilio/email` were removed. They had no auth guard and accepted an arbitrary sender, recipient and body, so anyone could relay SMS and email through our Twilio and SendGrid accounts. No live client called them. A unit test (`notifications.module.spec.ts`) fails if a controller is added back to this module; if a send endpoint is ever genuinely needed, it must be authenticated and must not take a free-form sender, recipient or body.
 
 Testing tips
 
