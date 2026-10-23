@@ -441,6 +441,17 @@ describe('RegistrationsService', () => {
 
   describe('reservation confirmation email', () => {
     const GUEST = { authType: 'guest', dbUserId: 10 } as any;
+    const TEMPLATE_ID = 'd-test-reservation-template';
+    let previousTemplateId: string | undefined;
+
+    beforeEach(() => {
+      previousTemplateId = process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
+      process.env.SENDGRID_RESERVATION_TEMPLATE_ID = TEMPLATE_ID;
+    });
+    afterEach(() => {
+      if (previousTemplateId === undefined) delete process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
+      else process.env.SENDGRID_RESERVATION_TEMPLATE_ID = previousTemplateId;
+    });
 
     /** A guest self-registration with no slot, so capacity is unbounded. */
     function arrangeGuestRegistration(
@@ -462,11 +473,9 @@ describe('RegistrationsService', () => {
       await service.registerForEvent(GUEST, { event_id: 1 } as any);
       await flushBackgroundWork();
 
-      expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
-        'guest@example.com',
-        'd-4cd439ae9d574a6ca65ec22c290cfce7',
-        { trans_num: '321' },
-      );
+      expect(sendgrid.sendTemplate).toHaveBeenCalledWith('guest@example.com', TEMPLATE_ID, {
+        trans_num: '321',
+      });
     });
 
     it('sends even when permission_to_email is false — the confirmation is transactional', async () => {
@@ -481,25 +490,24 @@ describe('RegistrationsService', () => {
       expect(sendgrid.sendTemplate).toHaveBeenCalledTimes(1);
     });
 
-    it('uses SENDGRID_RESERVATION_TEMPLATE_ID when set', async () => {
-      const previous = process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
-      process.env.SENDGRID_RESERVATION_TEMPLATE_ID = 'd-override';
-      try {
+    it.each([
+      ['unset', undefined],
+      ['blank', '   '],
+    ])(
+      'skips the send, but still returns the reservation, when the template ID is %s',
+      async (_label, value) => {
+        if (value === undefined) delete process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
+        else process.env.SENDGRID_RESERVATION_TEMPLATE_ID = value;
         arrangeGuestRegistration({ id: 323, status: 'confirmed' }, { email: 'guest@example.com' });
 
-        await service.registerForEvent(GUEST, { event_id: 1 } as any);
+        const result = await service.registerForEvent(GUEST, { event_id: 1 } as any);
         await flushBackgroundWork();
 
-        expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
-          'guest@example.com',
-          'd-override',
-          expect.any(Object),
-        );
-      } finally {
-        if (previous === undefined) delete process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
-        else process.env.SENDGRID_RESERVATION_TEMPLATE_ID = previous;
-      }
-    });
+        // No ID in code to fall back on — an unconfigured environment sends nothing.
+        expect(sendgrid.sendTemplate).not.toHaveBeenCalled();
+        expect(result).toEqual({ id: 323, status: 'confirmed' });
+      },
+    );
 
     it('does not send for a waitlisted registration', async () => {
       arrangeGuestRegistration({ id: 324, status: 'waitlisted' }, { email: 'guest@example.com' });
@@ -555,7 +563,7 @@ describe('RegistrationsService', () => {
       await flushBackgroundWork();
 
       expect(sendgrid.sendTemplate).toHaveBeenCalledTimes(1);
-      expect(sendgrid.sendTemplate).toHaveBeenCalledWith('rita@example.com', expect.any(String), {
+      expect(sendgrid.sendTemplate).toHaveBeenCalledWith('rita@example.com', TEMPLATE_ID, {
         trans_num: '700',
       });
     });

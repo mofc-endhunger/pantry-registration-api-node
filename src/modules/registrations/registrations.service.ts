@@ -38,10 +38,7 @@ import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { isSurveyActionable } from '../../common/utils/survey-actionable';
 import { FEEDBACK_SURVEY_TYPE_ID } from '../../common/constants/survey.constants';
-import {
-  DEFAULT_RESERVATION_TEMPLATE_ID,
-  PLACEHOLDER_EMAIL_SUFFIX,
-} from '../../common/constants/notification.constants';
+import { PLACEHOLDER_EMAIL_SUFFIX } from '../../common/constants/notification.constants';
 import { SendgridService } from '../notifications/sendgrid.service';
 
 @Injectable()
@@ -110,8 +107,17 @@ export class RegistrationsService {
     const to = email?.trim();
     if (!to || to.toLowerCase().endsWith(PLACEHOLDER_EMAIL_SUFFIX)) return;
 
-    const templateId =
-      process.env.SENDGRID_RESERVATION_TEMPLATE_ID || DEFAULT_RESERVATION_TEMPLATE_ID;
+    // Configuration only — no ID in code. Content edits are new template
+    // versions in SendGrid and keep the same ID, so this changes only when the
+    // environment points at a different template altogether.
+    const templateId = process.env.SENDGRID_RESERVATION_TEMPLATE_ID?.trim();
+    if (!templateId) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[Email] SENDGRID_RESERVATION_TEMPLATE_ID not set — reservation confirmation skipped for registration ${registration.id}`,
+      );
+      return;
+    }
     const result = await this.sendgrid.sendTemplate(to, templateId, {
       trans_num: String(registration.id),
     });

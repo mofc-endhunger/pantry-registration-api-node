@@ -11,7 +11,9 @@ Environment variables
 - `SENDGRID_API_KEY` — SendGrid API key
 - `SENDGRID_ENABLED` — Optional flag to disable email in non-prod. **Defaults to enabled**: only the exact lowercase string `false` disables it (`False`, `0` and `no` all leave it on)
 - `SENDGRID_FROM_EMAIL` — Optional sender for templated email; defaults to `no-reply@freshtrak.com`. Must be a verified sender in the SendGrid account, or SendGrid rejects the send with a 403
-- `SENDGRID_RESERVATION_TEMPLATE_ID` — Optional; defaults to `d-4cd439ae9d574a6ca65ec22c290cfce7`
+- `SENDGRID_RESERVATION_TEMPLATE_ID` — **Required** to send reservation confirmations. The ID of the SendGrid dynamic template (`d-…`). There is no default in code: if it is unset or blank, the confirmation is skipped and a warning is logged.
+
+Template IDs are configuration, not code. To change the email's content, edit the template in SendGrid and make the new version active — the template ID stays the same, so no config change or deploy is needed. Change `SENDGRID_RESERVATION_TEMPLATE_ID` only to point an environment at a different template altogether.
 
 `.env` is excluded by `.dockerignore`, so deployed environments (dev, beta, prod) read these from their own service configuration, not from a local `.env`.
 
