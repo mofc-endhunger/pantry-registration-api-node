@@ -96,10 +96,15 @@ export class RegistrationsService {
    * Sent to any deliverable address regardless of `permission_to_email`: that
    * flag is marketing consent (SUP-637), while a confirmation is transactional —
    * the disclosure under the email field says we send these.
+   *
+   * `confirmationCode` must be the same code the client's confirmation page
+   * shows (and encodes in its check-in QR); see resolveConfirmationCode. When it
+   * is missing the template falls back to the reservation number.
    */
   private async sendReservationConfirmation(
     registration: Registration,
     email: string | null | undefined,
+    confirmationCode: string | null | undefined,
   ): Promise<void> {
     if (!this.sendgrid) return;
     // Waitlisted households have no reservation to confirm yet.
@@ -118,12 +123,38 @@ export class RegistrationsService {
       );
       return;
     }
+    const code = confirmationCode?.trim().toUpperCase();
     const result = await this.sendgrid.sendTemplate(to, templateId, {
       trans_num: String(registration.id),
+      ...(code ? { confirmation_code: code } : {}),
     });
     if (!result.success && result.error !== 'disabled') {
       // eslint-disable-next-line no-console
       console.warn(`[Email] reservation confirmation not sent for registration ${registration.id}`);
+    }
+  }
+
+  /**
+   * The confirmation code freshtrak-public-client shows on its confirmation page.
+   * Users and households each carry their own, independently generated
+   * identification_code, and the client picks differently by session type:
+   *  - guests: the guest session's user code (users.identification_code)
+   *  - signed-in users: the household code from GET /users/me, which spreads
+   *    getHouseholdById() — households.identification_code
+   * Mirrors that exactly, using the same lookup /users/me does. Returns null
+   * rather than throwing; the email then shows the reservation number.
+   */
+  private async resolveConfirmationCode(
+    user: User,
+    householdId: number,
+    isGuest: boolean,
+  ): Promise<string | null> {
+    if (isGuest) return user.identification_code || null;
+    try {
+      const household = await this.householdsService.getHouseholdById(householdId, user.id);
+      return household?.identification_code || null;
+    } catch {
+      return null;
     }
   }
 
@@ -595,9 +626,14 @@ export class RegistrationsService {
     })();
 
     // Confirmation email — fire-and-forget; an email failure must not fail the reservation.
+    const isGuest = !!guestToken || user?.authType === 'guest';
+    const confirmedHouseholdId = household_id;
     void this.usersService
       .findById(dbUserId)
-      .then((u) => this.sendReservationConfirmation(saved, u.email))
+      .then(async (u) => {
+        const code = await this.resolveConfirmationCode(u, confirmedHouseholdId, isGuest);
+        await this.sendReservationConfirmation(saved, u.email, code);
+      })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
         // eslint-disable-next-line no-console
@@ -976,8 +1012,13 @@ export class RegistrationsService {
       );
     }
 
-    // Confirmation goes to the registrant, not the case manager.
-    void this.sendReservationConfirmation(saved, registrantUser.email);
+    // Confirmation goes to the registrant, not the case manager. The registrant
+    // is a guest user, so the code is theirs (as for any guest).
+    void this.sendReservationConfirmation(
+      saved,
+      registrantUser.email,
+      registrantUser.identification_code,
+    );
 
     // Auto-assign survey (best-effort)
     try {

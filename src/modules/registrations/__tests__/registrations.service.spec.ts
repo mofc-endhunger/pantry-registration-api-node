@@ -562,9 +562,73 @@ describe('RegistrationsService', () => {
       );
       await flushBackgroundWork();
 
+      // The registrant is a new guest user; their own generated code is the one shown.
+      const registrantCode = (userRepo.create.mock.calls[0][0] as any)
+        .identification_code as string;
       expect(sendgrid.sendTemplate).toHaveBeenCalledTimes(1);
       expect(sendgrid.sendTemplate).toHaveBeenCalledWith('rita@example.com', TEMPLATE_ID, {
         trans_num: '700',
+        confirmation_code: registrantCode.toUpperCase(),
+      });
+    });
+
+    describe('confirmation_code matches the code the client shows', () => {
+      // Users and households carry separate identification codes; the client
+      // shows the user's for guests and the household's for signed-in users.
+      const USER = { id: 10, email: 'person@example.com', identification_code: 'usrcod' };
+      const HOUSEHOLD = { id: 20, identification_code: 'hhcode' };
+
+      it("sends the guest's own user code, uppercased", async () => {
+        arrangeGuestRegistration({ id: 401, status: 'confirmed' }, USER);
+
+        await service.registerForEvent(GUEST, { event_id: 1 } as any);
+        await flushBackgroundWork();
+
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('person@example.com', TEMPLATE_ID, {
+          trans_num: '401',
+          confirmation_code: 'USRCOD',
+        });
+        expect(householdsService.getHouseholdById).not.toHaveBeenCalled();
+      });
+
+      it("sends the household code — not the user's — for a signed-in user", async () => {
+        arrangeGuestRegistration({ id: 402, status: 'confirmed' }, USER);
+        (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10);
+        householdsService.getHouseholdById.mockResolvedValue(HOUSEHOLD as any);
+
+        await service.registerForEvent(
+          { userId: 'sub-1', email: 'person@example.com' } as any,
+          {
+            event_id: 1,
+          } as any,
+        );
+        await flushBackgroundWork();
+
+        // Same lookup GET /users/me uses, so the email and the app agree.
+        expect(householdsService.getHouseholdById).toHaveBeenCalledWith(20, 10);
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('person@example.com', TEMPLATE_ID, {
+          trans_num: '402',
+          confirmation_code: 'HHCODE',
+        });
+      });
+
+      it('falls back to the reservation number when the household lookup fails', async () => {
+        arrangeGuestRegistration({ id: 403, status: 'confirmed' }, USER);
+        (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10);
+        householdsService.getHouseholdById.mockRejectedValue(new Error('Household not found'));
+
+        await service.registerForEvent(
+          { userId: 'sub-1', email: 'person@example.com' } as any,
+          {
+            event_id: 1,
+          } as any,
+        );
+        await flushBackgroundWork();
+
+        // Still sent — the template shows "Reservation number #403" instead.
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('person@example.com', TEMPLATE_ID, {
+          trans_num: '403',
+        });
       });
     });
   });
@@ -598,6 +662,7 @@ function createHouseholdsServiceMock(): jest.Mocked<HouseholdsService> {
   return {
     findHouseholdIdByUserId: jest.fn(),
     createHousehold: jest.fn(),
+    getHouseholdById: jest.fn(),
   } as any;
 }
 
