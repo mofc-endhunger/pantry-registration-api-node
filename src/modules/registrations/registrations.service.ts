@@ -38,6 +38,26 @@ import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { isSurveyActionable } from '../../common/utils/survey-actionable';
 import { FEEDBACK_SURVEY_TYPE_ID } from '../../common/constants/survey.constants';
+import { PLACEHOLDER_EMAIL_SUFFIX } from '../../common/constants/notification.constants';
+import { SendgridService } from '../notifications/sendgrid.service';
+import {
+  compactTemplateData,
+  formatAddress,
+  formatEventDate,
+  formatPhone,
+  formatTimeRange,
+  richTextToPlain,
+} from '../../common/utils/reservation-email';
+
+/** Who the reservation confirmation goes to, and what the client showed them. */
+interface ConfirmationRecipient {
+  email: string | null | undefined;
+  firstName: string | null | undefined;
+  /** Same code the client's confirmation page shows; see resolveConfirmationCode. */
+  confirmationCode: string | null | undefined;
+  /** Only signed-in users have a My Reservations page to link to. */
+  signedIn: boolean;
+}
 
 @Injectable()
 export class RegistrationsService {
@@ -58,6 +78,7 @@ export class RegistrationsService {
     private readonly publicSchedule: PublicScheduleService,
     @Optional() @InjectRepository(Event) private readonly eventsRepo?: Repository<Event>,
     @Optional() private readonly pantryTrakClient?: PantryTrakClient,
+    @Optional() private readonly sendgrid?: SendgridService,
   ) {}
 
   /**
@@ -69,7 +90,7 @@ export class RegistrationsService {
    */
   private resolveEmail(jwtEmail: string | undefined, sub: string): string {
     if (jwtEmail) return jwtEmail;
-    return `${sub}@auto.local`;
+    return `${sub}${PLACEHOLDER_EMAIL_SUFFIX}`;
   }
 
   /**
@@ -83,6 +104,138 @@ export class RegistrationsService {
       await this.usersService.healAutoLocalEmail(dbUserId, jwtEmail);
     } catch {
       // non-critical — don't block the request
+    }
+  }
+
+  /**
+   * Email the reservation confirmation. The reservation is already saved when
+   * this runs, so it never throws and callers fire it without awaiting.
+   *
+   * Sent to any deliverable address regardless of `permission_to_email`: that
+   * flag is marketing consent (SUP-637), while a confirmation is transactional —
+   * the disclosure under the email field says we send these.
+   *
+   * The cheap checks run first, so the event lookups below only happen for an
+   * email that will actually be sent.
+   */
+  private async sendReservationConfirmation(
+    registration: Registration,
+    recipient: ConfirmationRecipient,
+  ): Promise<void> {
+    if (!this.sendgrid) return;
+    // Waitlisted households have no reservation to confirm yet.
+    if (registration.status !== 'confirmed') return;
+    const to = recipient.email?.trim();
+    if (!to || to.toLowerCase().endsWith(PLACEHOLDER_EMAIL_SUFFIX)) return;
+
+    // Configuration only — no ID in code. Content edits are new template
+    // versions in SendGrid and keep the same ID, so this changes only when the
+    // environment points at a different template altogether.
+    const templateId = process.env.SENDGRID_RESERVATION_TEMPLATE_ID?.trim();
+    if (!templateId) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[Email] SENDGRID_RESERVATION_TEMPLATE_ID not set — reservation confirmation skipped for registration ${registration.id}`,
+      );
+      return;
+    }
+    const data = await this.buildReservationEmailData(registration, recipient);
+    const result = await this.sendgrid.sendTemplate(to, templateId, data);
+    if (!result.success && result.error !== 'disabled') {
+      // eslint-disable-next-line no-console
+      console.warn(`[Email] reservation confirmation not sent for registration ${registration.id}`);
+    }
+  }
+
+  /**
+   * Dynamic template data — the contract documented in
+   * docs/email-templates/reservation-confirmation.html. Every lookup is
+   * best-effort: a failed one drops its fields (the template hides empty
+   * rows) and never stops the email.
+   */
+  private async buildReservationEmailData(
+    registration: Registration,
+    recipient: ConfirmationRecipient,
+  ): Promise<Record<string, string>> {
+    const slotId = registration.public_event_slot_id ?? null;
+    const dateId = registration.public_event_date_id ?? null;
+    const attempt = async <T>(lookup: () => Promise<T>): Promise<T | null> => {
+      try {
+        return await lookup();
+      } catch {
+        return null;
+      }
+    };
+
+    const [event, dateIso, times] = await Promise.all([
+      attempt(() => this.publicSchedule.getEventContactDetails(registration.event_id)),
+      // A booked slot carries its own date and window; otherwise use the event date's.
+      attempt(() =>
+        slotId
+          ? this.publicSchedule.getDateIsoForSlotId(slotId)
+          : dateId
+            ? this.publicSchedule.getDateIsoForDateId(dateId)
+            : Promise.resolve(null),
+      ),
+      attempt(() =>
+        slotId
+          ? this.publicSchedule.getTimesForSlotId(slotId)
+          : dateId
+            ? this.publicSchedule.getTimesForDateId(dateId)
+            : Promise.resolve(null),
+      ),
+    ]);
+
+    const address = formatAddress({
+      address1: event?.address1,
+      address2: event?.address2,
+      city: event?.city,
+      state: event?.state,
+      zip: event?.zip,
+    });
+    const phone = formatPhone(event?.agencyPhone);
+    const clientUrl = process.env.FRESHTRAK_CLIENT_URL?.trim().replace(/\/+$/, '');
+
+    return compactTemplateData({
+      trans_num: String(registration.id),
+      confirmation_code: recipient.confirmationCode?.trim().toUpperCase(),
+      first_name: recipient.firstName,
+      event_name: event?.eventName,
+      agency_name: event?.agencyName,
+      event_date: formatEventDate(dateIso),
+      event_time: formatTimeRange(times?.start_time, times?.end_time),
+      address_line_1: address.line1,
+      address_line_2: address.line2,
+      maps_url: address.mapsUrl,
+      agency_phone: phone.display,
+      agency_phone_tel: phone.tel,
+      event_details: richTextToPlain(event?.instructions),
+      reservations_url:
+        recipient.signedIn && clientUrl ? `${clientUrl}/account/reservations` : null,
+    });
+  }
+
+  /**
+   * The confirmation code freshtrak-public-client shows on its confirmation page.
+   * Users and households each carry their own, independently generated
+   * identification_code, and the client picks differently by session type:
+   *  - guests: the guest session's user code (users.identification_code)
+   *  - signed-in users: the household code from GET /users/me, which spreads
+   *    getHouseholdById() — households.identification_code
+   * Mirrors that exactly, using the same lookup /users/me does. Returns null
+   * rather than throwing; the email then shows the reservation number.
+   */
+  private async resolveConfirmationCode(
+    user: User,
+    householdId: number,
+    isGuest: boolean,
+  ): Promise<string | null> {
+    if (isGuest) return user.identification_code || null;
+    try {
+      const household = await this.householdsService.getHouseholdById(householdId, user.id);
+      return household?.identification_code || null;
+    } catch {
+      return null;
     }
   }
 
@@ -553,6 +706,26 @@ export class RegistrationsService {
       }
     })();
 
+    // Confirmation email — fire-and-forget; an email failure must not fail the reservation.
+    const isGuest = !!guestToken || user?.authType === 'guest';
+    const confirmedHouseholdId = household_id;
+    void this.usersService
+      .findById(dbUserId)
+      .then(async (u) => {
+        const code = await this.resolveConfirmationCode(u, confirmedHouseholdId, isGuest);
+        await this.sendReservationConfirmation(saved, {
+          email: u.email,
+          firstName: u.first_name,
+          confirmationCode: code,
+          signedIn: !isGuest,
+        });
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        // eslint-disable-next-line no-console
+        console.warn('[Email] reservation confirmation lookup failed', msg);
+      });
+
     // Auto-assign survey family (best-effort; non-blocking)
     try {
       await this.autoAssignSurveyForRegistration(saved);
@@ -924,6 +1097,16 @@ export class RegistrationsService {
         '[PantryTrak] skipping createReservation (on-behalf-of) — createUser did not succeed',
       );
     }
+
+    // Confirmation goes to the registrant, not the case manager. The registrant
+    // is a guest user with no account, so the code is theirs (as for any guest)
+    // and there is no My Reservations page to link to.
+    void this.sendReservationConfirmation(saved, {
+      email: registrantUser.email,
+      firstName: registrantUser.first_name,
+      confirmationCode: registrantUser.identification_code,
+      signedIn: false,
+    });
 
     // Auto-assign survey (best-effort)
     try {
