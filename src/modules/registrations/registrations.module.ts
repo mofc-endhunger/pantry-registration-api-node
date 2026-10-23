@@ -20,6 +20,7 @@ import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
 import { CognitoService } from '../auth/cognito.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { CognitoService } from '../auth/cognito.service';
     forwardRef(() => UsersModule),
     forwardRef(() => HouseholdsModule),
     PublicScheduleModule,
+    NotificationsModule,
     JwtModule.register({}),
   ],
   controllers: [RegistrationsController],

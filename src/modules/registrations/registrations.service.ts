@@ -38,6 +38,11 @@ import { PublicSurvey } from '../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-map.public.entity';
 import { isSurveyActionable } from '../../common/utils/survey-actionable';
 import { FEEDBACK_SURVEY_TYPE_ID } from '../../common/constants/survey.constants';
+import {
+  DEFAULT_RESERVATION_TEMPLATE_ID,
+  PLACEHOLDER_EMAIL_SUFFIX,
+} from '../../common/constants/notification.constants';
+import { SendgridService } from '../notifications/sendgrid.service';
 
 @Injectable()
 export class RegistrationsService {
@@ -58,6 +63,7 @@ export class RegistrationsService {
     private readonly publicSchedule: PublicScheduleService,
     @Optional() @InjectRepository(Event) private readonly eventsRepo?: Repository<Event>,
     @Optional() private readonly pantryTrakClient?: PantryTrakClient,
+    @Optional() private readonly sendgrid?: SendgridService,
   ) {}
 
   /**
@@ -69,7 +75,7 @@ export class RegistrationsService {
    */
   private resolveEmail(jwtEmail: string | undefined, sub: string): string {
     if (jwtEmail) return jwtEmail;
-    return `${sub}@auto.local`;
+    return `${sub}${PLACEHOLDER_EMAIL_SUFFIX}`;
   }
 
   /**
@@ -83,6 +89,35 @@ export class RegistrationsService {
       await this.usersService.healAutoLocalEmail(dbUserId, jwtEmail);
     } catch {
       // non-critical — don't block the request
+    }
+  }
+
+  /**
+   * Email the reservation confirmation. The reservation is already saved when
+   * this runs, so it never throws and callers fire it without awaiting.
+   *
+   * Sent to any deliverable address regardless of `permission_to_email`: that
+   * flag is marketing consent (SUP-637), while a confirmation is transactional —
+   * the disclosure under the email field says we send these.
+   */
+  private async sendReservationConfirmation(
+    registration: Registration,
+    email: string | null | undefined,
+  ): Promise<void> {
+    if (!this.sendgrid) return;
+    // Waitlisted households have no reservation to confirm yet.
+    if (registration.status !== 'confirmed') return;
+    const to = email?.trim();
+    if (!to || to.toLowerCase().endsWith(PLACEHOLDER_EMAIL_SUFFIX)) return;
+
+    const templateId =
+      process.env.SENDGRID_RESERVATION_TEMPLATE_ID || DEFAULT_RESERVATION_TEMPLATE_ID;
+    const result = await this.sendgrid.sendTemplate(to, templateId, {
+      trans_num: String(registration.id),
+    });
+    if (!result.success && result.error !== 'disabled') {
+      // eslint-disable-next-line no-console
+      console.warn(`[Email] reservation confirmation not sent for registration ${registration.id}`);
     }
   }
 
@@ -553,6 +588,16 @@ export class RegistrationsService {
       }
     })();
 
+    // Confirmation email — fire-and-forget; an email failure must not fail the reservation.
+    void this.usersService
+      .findById(dbUserId)
+      .then((u) => this.sendReservationConfirmation(saved, u.email))
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        // eslint-disable-next-line no-console
+        console.warn('[Email] reservation confirmation lookup failed', msg);
+      });
+
     // Auto-assign survey family (best-effort; non-blocking)
     try {
       await this.autoAssignSurveyForRegistration(saved);
@@ -924,6 +969,9 @@ export class RegistrationsService {
         '[PantryTrak] skipping createReservation (on-behalf-of) — createUser did not succeed',
       );
     }
+
+    // Confirmation goes to the registrant, not the case manager.
+    void this.sendReservationConfirmation(saved, registrantUser.email);
 
     // Auto-assign survey (best-effort)
     try {
