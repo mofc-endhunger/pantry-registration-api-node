@@ -231,6 +231,57 @@ export class PublicScheduleService {
     return this.getEventNameForEventId(eventId);
   }
 
+  /**
+   * Event name, address, instructions and hosting agency for the confirmation
+   * email. Same source and join as pantry-finder's event_details:
+   * events.loc_id → locations (loc_name, phone). Returns null instead of
+   * throwing, so a schema difference only drops the details from the email.
+   */
+  async getEventContactDetails(eventId: number): Promise<{
+    eventName: string | null;
+    address1: string | null;
+    address2: string | null;
+    city: string | null;
+    state: string | null;
+    zip: string | null;
+    instructions: string | null;
+    agencyName: string | null;
+    agencyPhone: string | null;
+  } | null> {
+    try {
+      const row = (
+        await this.eventsRepo.query(
+          `SELECT e.event_name, e.address1, e.address2, e.city, e.state, e.zip, e.pub_desc_long,
+                  l.loc_name, l.phone
+             FROM events e
+             LEFT JOIN locations l ON l.loc_id = e.loc_id
+            WHERE e.event_id = ?
+            LIMIT 1`,
+          [eventId],
+        )
+      )?.[0] as Record<string, unknown> | undefined;
+      if (!row) return null;
+      const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
+      return {
+        eventName: str(row.event_name),
+        address1: str(row.address1),
+        address2: str(row.address2),
+        city: str(row.city),
+        state: str(row.state),
+        zip: str(row.zip),
+        instructions: str(row.pub_desc_long),
+        agencyName: str(row.loc_name),
+        agencyPhone: str(row.phone),
+      };
+    } catch (err) {
+      console.warn(
+        '[PublicSchedule] getEventContactDetails failed',
+        err instanceof Error ? err.message : String(err),
+      );
+      return null;
+    }
+  }
+
   async eventExists(eventId: number): Promise<boolean> {
     const row = await this.queryEventFlexible(eventId);
     return !!row;

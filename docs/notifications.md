@@ -13,6 +13,8 @@ Environment variables
 - `SENDGRID_FROM_EMAIL` — Optional sender for templated email; defaults to `no-reply@freshtrak.com`. Must be a verified sender in the SendGrid account, or SendGrid rejects the send with a 403
 - `SENDGRID_RESERVATION_TEMPLATE_ID` — **Required** to send reservation confirmations. The ID of the SendGrid dynamic template (`d-…`). There is no default in code: if it is unset or blank, the confirmation is skipped and a warning is logged.
 
+- `FRESHTRAK_CLIENT_URL` — Optional base URL of freshtrak-public-client for this environment (e.g. `https://www.freshtrak.com`). Used for the "View my reservations" link, shown to signed-in users only. Unset = no link.
+
 Template IDs are configuration, not code. To change the email's content, edit the template in SendGrid and make the new version active — the template ID stays the same, so no config change or deploy is needed. Change `SENDGRID_RESERVATION_TEMPLATE_ID` only to point an environment at a different template altogether.
 
 `.env` is excluded by `.dockerignore`, so deployed environments (dev, beta, prod) read these from their own service configuration, not from a local `.env`.
@@ -24,7 +26,23 @@ Reservation confirmation email
 - Sent only for `confirmed` registrations; waitlisted ones get nothing yet.
 - Sent to any deliverable address. It is **not** gated on `permission_to_email`: that flag is marketing consent (SUP-637), while a confirmation is transactional, as the disclosure under the email field tells the user.
 - Skipped when the user has no email (the "No Email Available" option) or still has the `@auto.local` placeholder.
-- Dynamic template data: `{ trans_num: "<registration id>" }`.
+- Template: `docs/email-templates/reservation-confirmation.html`, with Test Data samples alongside. Every block is guarded with `{{#if}}`, so missing fields just drop their row.
+
+Dynamic template data. Every field except `trans_num` is optional and omitted when unknown; event lookups are best-effort and never stop the email.
+
+| Field                                                        | Source                                                                                                                                                                                                                     |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trans_num`                                                  | Registration id. Shown only as a fallback when there is no confirmation code                                                                                                                                               |
+| `confirmation_code`                                          | Uppercased. Guests: `users.identification_code`; signed-in users: `households.identification_code` (same lookup as `GET /users/me`); case-manager registrants: their own user code. Matches the client's confirmation page |
+| `first_name`                                                 | `users.first_name`                                                                                                                                                                                                         |
+| `event_name`, `address_line_1`, `address_line_2`, `maps_url` | Public DB `events` (`event_name`, `address1/2`, `city`/`state`/`zip`)                                                                                                                                                      |
+| `event_details`                                              | `events.pub_desc_long` — rich-text HTML converted to plain text (the template escapes values)                                                                                                                              |
+| `agency_name`, `agency_phone`, `agency_phone_tel`            | Public DB `locations` (`loc_name`, `phone`) via `events.loc_id`                                                                                                                                                            |
+| `event_date`                                                 | Booked slot's date, else the event date — e.g. `Wed, Oct 28, 2026`                                                                                                                                                         |
+| `event_time`                                                 | Booked slot's window, else the event date's hours — e.g. `5 PM – 5:29 PM`                                                                                                                                                  |
+| `reservations_url`                                           | `${FRESHTRAK_CLIENT_URL}/account/reservations`, signed-in users only                                                                                                                                                       |
+
+Dates and times use the same format as the client's confirmation page.
 
 Security
 

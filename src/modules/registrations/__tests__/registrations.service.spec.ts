@@ -569,6 +569,7 @@ describe('RegistrationsService', () => {
       expect(sendgrid.sendTemplate).toHaveBeenCalledWith('rita@example.com', TEMPLATE_ID, {
         trans_num: '700',
         confirmation_code: registrantCode.toUpperCase(),
+        first_name: 'Rita',
       });
     });
 
@@ -631,6 +632,157 @@ describe('RegistrationsService', () => {
         });
       });
     });
+
+    describe('event details', () => {
+      const SIGNED_IN = { userId: 'sub-1', email: 'maria@example.com' } as any;
+      let previousClientUrl: string | undefined;
+
+      beforeEach(() => {
+        previousClientUrl = process.env.FRESHTRAK_CLIENT_URL;
+        process.env.FRESHTRAK_CLIENT_URL = 'https://dev.freshtrak.com/';
+      });
+      afterEach(() => {
+        if (previousClientUrl === undefined) delete process.env.FRESHTRAK_CLIENT_URL;
+        else process.env.FRESHTRAK_CLIENT_URL = previousClientUrl;
+      });
+
+      function arrangeEvent() {
+        publicSchedule.getEventContactDetails.mockResolvedValue({
+          eventName: 'Food Pantry',
+          address1: '1234 Broad St',
+          address2: null,
+          city: 'Columbus',
+          state: 'OH',
+          zip: '43215',
+          instructions: '<p>Use the <b>side door</b>.</p><p>Bring bags.</p>',
+          agencyName: 'Bread of Life Choice Pantry',
+          agencyPhone: '614-555-0142',
+        });
+        publicSchedule.getDateIsoForSlotId.mockResolvedValue('2026-10-28');
+        publicSchedule.getTimesForSlotId.mockResolvedValue({
+          start_time: '17:00:00',
+          end_time: '17:29:00',
+        });
+      }
+
+      it('sends the full event block, formatted the way the app shows it', async () => {
+        arrangeGuestRegistration(
+          { id: 501, status: 'confirmed', event_id: 77, public_event_slot_id: 9 } as any,
+          { id: 10, email: 'maria@example.com', first_name: 'Maria', identification_code: 'u1' },
+        );
+        (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10);
+        householdsService.getHouseholdById.mockResolvedValue({
+          identification_code: 'qtbfnp',
+        } as any);
+        arrangeEvent();
+
+        await service.registerForEvent(SIGNED_IN, { event_id: 77, event_slot_id: 9 } as any);
+        await flushBackgroundWork();
+
+        expect(publicSchedule.getEventContactDetails).toHaveBeenCalledWith(77);
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('maria@example.com', TEMPLATE_ID, {
+          trans_num: '501',
+          confirmation_code: 'QTBFNP',
+          first_name: 'Maria',
+          event_name: 'Food Pantry',
+          agency_name: 'Bread of Life Choice Pantry',
+          event_date: 'Wed, Oct 28, 2026',
+          event_time: '5 PM – 5:29 PM',
+          address_line_1: '1234 Broad St',
+          address_line_2: 'Columbus, OH 43215',
+          maps_url:
+            'https://www.google.com/maps/search/?api=1&query=1234%20Broad%20St%2C%20Columbus%2C%20OH%2043215',
+          agency_phone: '(614) 555-0142',
+          agency_phone_tel: '+16145550142',
+          event_details: 'Use the side door.\nBring bags.',
+          reservations_url: 'https://dev.freshtrak.com/account/reservations',
+        });
+      });
+
+      it('uses the event date and its hours when no slot was booked', async () => {
+        arrangeGuestRegistration(
+          { id: 502, status: 'confirmed', event_id: 77, public_event_date_id: 4 } as any,
+          { email: 'guest@example.com' },
+        );
+        publicSchedule.getDateIsoForDateId.mockResolvedValue('2026-11-03');
+        publicSchedule.getTimesForDateId.mockResolvedValue({
+          start_time: '09:00:00',
+          end_time: '11:30:00',
+        });
+
+        await service.registerForEvent(GUEST, { event_id: 77, event_date_id: 4 } as any);
+        await flushBackgroundWork();
+
+        expect(publicSchedule.getDateIsoForSlotId).not.toHaveBeenCalled();
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+          'guest@example.com',
+          TEMPLATE_ID,
+          expect.objectContaining({
+            event_date: 'Tue, Nov 3, 2026',
+            event_time: '9 AM – 11:30 AM',
+          }),
+        );
+      });
+
+      it('never links guests to My Reservations — they have no account', async () => {
+        arrangeGuestRegistration(
+          { id: 503, status: 'confirmed', event_id: 77, public_event_slot_id: 9 } as any,
+          { email: 'guest@example.com' },
+        );
+        arrangeEvent();
+
+        await service.registerForEvent(GUEST, { event_id: 77, event_slot_id: 9 } as any);
+        await flushBackgroundWork();
+
+        const data = sendgrid.sendTemplate.mock.calls[0][2] as Record<string, string>;
+        expect(data.event_name).toBe('Food Pantry');
+        expect(data).not.toHaveProperty('reservations_url');
+      });
+
+      it('omits the link when FRESHTRAK_CLIENT_URL is not configured', async () => {
+        delete process.env.FRESHTRAK_CLIENT_URL;
+        arrangeGuestRegistration({ id: 504, status: 'confirmed', event_id: 77 } as any, {
+          id: 10,
+          email: 'maria@example.com',
+        });
+        (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10);
+
+        await service.registerForEvent(SIGNED_IN, { event_id: 77 } as any);
+        await flushBackgroundWork();
+
+        expect(sendgrid.sendTemplate.mock.calls[0][2]).not.toHaveProperty('reservations_url');
+      });
+
+      it('still sends the core email when every event lookup fails', async () => {
+        arrangeGuestRegistration(
+          { id: 505, status: 'confirmed', event_id: 77, public_event_slot_id: 9 } as any,
+          { email: 'guest@example.com' },
+        );
+        publicSchedule.getEventContactDetails.mockRejectedValue(new Error('db down'));
+        publicSchedule.getDateIsoForSlotId.mockRejectedValue(new Error('db down'));
+        publicSchedule.getTimesForSlotId.mockRejectedValue(new Error('db down'));
+
+        await service.registerForEvent(GUEST, { event_id: 77, event_slot_id: 9 } as any);
+        await flushBackgroundWork();
+
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('guest@example.com', TEMPLATE_ID, {
+          trans_num: '505',
+        });
+      });
+
+      it('does no event lookups for a registration that will not be emailed', async () => {
+        arrangeGuestRegistration(
+          { id: 506, status: 'waitlisted', event_id: 77, public_event_slot_id: 9 } as any,
+          { email: 'guest@example.com' },
+        );
+
+        await service.registerForEvent(GUEST, { event_id: 77, event_slot_id: 9 } as any);
+        await flushBackgroundWork();
+
+        expect(publicSchedule.getEventContactDetails).not.toHaveBeenCalled();
+        expect(sendgrid.sendTemplate).not.toHaveBeenCalled();
+      });
+    });
   });
 });
 
@@ -678,5 +830,10 @@ function createPublicScheduleMock(): jest.Mocked<PublicScheduleService> {
     getEventDateIdForToday: jest.fn(),
     getEventDateIdDefault: jest.fn(),
     buildEventDateStructure: jest.fn(),
+    getEventContactDetails: jest.fn(),
+    getDateIsoForSlotId: jest.fn(),
+    getDateIsoForDateId: jest.fn(),
+    getTimesForSlotId: jest.fn(),
+    getTimesForDateId: jest.fn(),
   } as any;
 }
