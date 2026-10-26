@@ -15,6 +15,10 @@ import { User } from '../../../entities/user.entity';
 import { SurveyFamily } from '../../../entities/survey-families.entity';
 import { PublicSurvey } from '../../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../../entities-public/survey-question-map.public.entity';
+import { SendgridService } from '../../notifications/sendgrid.service';
+
+/** Let fire-and-forget work (the confirmation email) settle before asserting. */
+const flushBackgroundWork = () => new Promise((resolve) => setImmediate(resolve));
 
 describe('RegistrationsService', () => {
   let service: RegistrationsService;
@@ -27,8 +31,11 @@ describe('RegistrationsService', () => {
   let usersService: jest.Mocked<UsersService>;
   let householdsService: jest.Mocked<HouseholdsService>;
   let publicSchedule: jest.Mocked<PublicScheduleService>;
+  let userRepo: jest.Mocked<Repository<User>>;
+  let sendgrid: { sendTemplate: jest.Mock };
 
   beforeEach(async () => {
+    sendgrid = { sendTemplate: jest.fn().mockResolvedValue({ success: true }) };
     const moduleRef = await Test.createTestingModule({
       providers: [
         RegistrationsService,
@@ -52,6 +59,7 @@ describe('RegistrationsService', () => {
         { provide: UsersService, useValue: createUsersServiceMock() },
         { provide: HouseholdsService, useValue: createHouseholdsServiceMock() },
         { provide: PublicScheduleService, useValue: createPublicScheduleMock() },
+        { provide: SendgridService, useValue: sendgrid },
       ],
     }).compile();
 
@@ -65,6 +73,7 @@ describe('RegistrationsService', () => {
     usersService = moduleRef.get(UsersService);
     householdsService = moduleRef.get(HouseholdsService);
     publicSchedule = moduleRef.get(PublicScheduleService);
+    userRepo = moduleRef.get(getRepositoryToken(User));
   });
 
   it('throws NotFound when event does not exist', async () => {
@@ -429,6 +438,352 @@ describe('RegistrationsService', () => {
       'Household not resolved',
     );
   });
+
+  describe('reservation confirmation email', () => {
+    const GUEST = { authType: 'guest', dbUserId: 10 } as any;
+    const TEMPLATE_ID = 'd-test-reservation-template';
+    let previousTemplateId: string | undefined;
+
+    beforeEach(() => {
+      previousTemplateId = process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
+      process.env.SENDGRID_RESERVATION_TEMPLATE_ID = TEMPLATE_ID;
+    });
+    afterEach(() => {
+      if (previousTemplateId === undefined) delete process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
+      else process.env.SENDGRID_RESERVATION_TEMPLATE_ID = previousTemplateId;
+    });
+
+    /** A guest self-registration with no slot, so capacity is unbounded. */
+    function arrangeGuestRegistration(
+      saved: { id: number; status: string },
+      user: Record<string, unknown>,
+    ) {
+      eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
+      householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
+      regsRepo.findOne.mockResolvedValue(null as any);
+      regsRepo.count.mockResolvedValue(0 as any);
+      regsRepo.create.mockImplementation((x: any) => x);
+      regsRepo.save.mockResolvedValue(saved as any);
+      (usersService.findById as jest.Mock).mockResolvedValue(user);
+    }
+
+    it('sends the template with trans_num to the user on a confirmed registration', async () => {
+      arrangeGuestRegistration({ id: 321, status: 'confirmed' }, { email: 'guest@example.com' });
+
+      await service.registerForEvent(GUEST, { event_id: 1 } as any);
+      await flushBackgroundWork();
+
+      expect(sendgrid.sendTemplate).toHaveBeenCalledWith('guest@example.com', TEMPLATE_ID, {
+        trans_num: '321',
+      });
+    });
+
+    it('sends even when permission_to_email is false — the confirmation is transactional', async () => {
+      arrangeGuestRegistration(
+        { id: 322, status: 'confirmed' },
+        { email: 'guest@example.com', permission_to_email: false },
+      );
+
+      await service.registerForEvent(GUEST, { event_id: 1 } as any);
+      await flushBackgroundWork();
+
+      expect(sendgrid.sendTemplate).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['unset', undefined],
+      ['blank', '   '],
+    ])(
+      'skips the send, but still returns the reservation, when the template ID is %s',
+      async (_label, value) => {
+        if (value === undefined) delete process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
+        else process.env.SENDGRID_RESERVATION_TEMPLATE_ID = value;
+        arrangeGuestRegistration({ id: 323, status: 'confirmed' }, { email: 'guest@example.com' });
+
+        const result = await service.registerForEvent(GUEST, { event_id: 1 } as any);
+        await flushBackgroundWork();
+
+        // No ID in code to fall back on — an unconfigured environment sends nothing.
+        expect(sendgrid.sendTemplate).not.toHaveBeenCalled();
+        expect(result).toEqual({ id: 323, status: 'confirmed' });
+      },
+    );
+
+    it('does not send for a waitlisted registration', async () => {
+      arrangeGuestRegistration({ id: 324, status: 'waitlisted' }, { email: 'guest@example.com' });
+
+      await service.registerForEvent(GUEST, { event_id: 1 } as any);
+      await flushBackgroundWork();
+
+      expect(sendgrid.sendTemplate).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['no email (user chose "No Email Available")', { email: null }],
+      ['a blank email', { email: '   ' }],
+      ['the @auto.local placeholder', { email: 'sub-abc@auto.local' }],
+    ])('does not send when the user has %s', async (_label, user) => {
+      arrangeGuestRegistration({ id: 325, status: 'confirmed' }, user);
+
+      await service.registerForEvent(GUEST, { event_id: 1 } as any);
+      await flushBackgroundWork();
+
+      expect(sendgrid.sendTemplate).not.toHaveBeenCalled();
+    });
+
+    it('still returns the reservation when the email lookup or send fails', async () => {
+      arrangeGuestRegistration({ id: 326, status: 'confirmed' }, { email: 'guest@example.com' });
+      sendgrid.sendTemplate.mockRejectedValueOnce(new Error('sendgrid down'));
+
+      const result = await service.registerForEvent(GUEST, { event_id: 1 } as any);
+      await flushBackgroundWork();
+
+      expect(result).toEqual({ id: 326, status: 'confirmed' });
+    });
+
+    it('emails the registrant, not the case manager, on a register-on-behalf-of', async () => {
+      eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
+      (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(5);
+      userRepo.findOne.mockResolvedValue(null as any); // identification code is unique
+      userRepo.create.mockImplementation((x: any) => ({ ...x, id: 900 }));
+      userRepo.save.mockImplementation(async (x: any) => x);
+      householdsService.findHouseholdIdByUserId.mockResolvedValue(30 as any);
+      regsRepo.findOne.mockResolvedValue(null as any);
+      regsRepo.count.mockResolvedValue(0 as any);
+      regsRepo.create.mockImplementation((x: any) => x);
+      regsRepo.save.mockResolvedValue({ id: 700, status: 'confirmed' } as any);
+
+      await service.registerForEvent(
+        { userId: 'cm-sub', email: 'case.manager@example.com', roles: ['case_managers'] } as any,
+        {
+          event_id: 1,
+          registrant: { first_name: 'Rita', last_name: 'Registrant', email: 'rita@example.com' },
+        } as any,
+      );
+      await flushBackgroundWork();
+
+      // The registrant is a new guest user; their own generated code is the one shown.
+      const registrantCode = (userRepo.create.mock.calls[0][0] as any)
+        .identification_code as string;
+      expect(sendgrid.sendTemplate).toHaveBeenCalledTimes(1);
+      expect(sendgrid.sendTemplate).toHaveBeenCalledWith('rita@example.com', TEMPLATE_ID, {
+        trans_num: '700',
+        confirmation_code: registrantCode.toUpperCase(),
+        first_name: 'Rita',
+      });
+    });
+
+    describe('confirmation_code matches the code the client shows', () => {
+      // Users and households carry separate identification codes; the client
+      // shows the user's for guests and the household's for signed-in users.
+      const USER = { id: 10, email: 'person@example.com', identification_code: 'usrcod' };
+      const HOUSEHOLD = { id: 20, identification_code: 'hhcode' };
+
+      it("sends the guest's own user code, uppercased", async () => {
+        arrangeGuestRegistration({ id: 401, status: 'confirmed' }, USER);
+
+        await service.registerForEvent(GUEST, { event_id: 1 } as any);
+        await flushBackgroundWork();
+
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('person@example.com', TEMPLATE_ID, {
+          trans_num: '401',
+          confirmation_code: 'USRCOD',
+        });
+        expect(householdsService.getHouseholdById).not.toHaveBeenCalled();
+      });
+
+      it("sends the household code — not the user's — for a signed-in user", async () => {
+        arrangeGuestRegistration({ id: 402, status: 'confirmed' }, USER);
+        (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10);
+        householdsService.getHouseholdById.mockResolvedValue(HOUSEHOLD as any);
+
+        await service.registerForEvent(
+          { userId: 'sub-1', email: 'person@example.com' } as any,
+          {
+            event_id: 1,
+          } as any,
+        );
+        await flushBackgroundWork();
+
+        // Same lookup GET /users/me uses, so the email and the app agree.
+        expect(householdsService.getHouseholdById).toHaveBeenCalledWith(20, 10);
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('person@example.com', TEMPLATE_ID, {
+          trans_num: '402',
+          confirmation_code: 'HHCODE',
+        });
+      });
+
+      it('falls back to the reservation number when the household lookup fails', async () => {
+        arrangeGuestRegistration({ id: 403, status: 'confirmed' }, USER);
+        (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10);
+        householdsService.getHouseholdById.mockRejectedValue(new Error('Household not found'));
+
+        await service.registerForEvent(
+          { userId: 'sub-1', email: 'person@example.com' } as any,
+          {
+            event_id: 1,
+          } as any,
+        );
+        await flushBackgroundWork();
+
+        // Still sent — the template shows "Reservation number #403" instead.
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('person@example.com', TEMPLATE_ID, {
+          trans_num: '403',
+        });
+      });
+    });
+
+    describe('event details', () => {
+      const SIGNED_IN = { userId: 'sub-1', email: 'maria@example.com' } as any;
+      let previousClientUrl: string | undefined;
+
+      beforeEach(() => {
+        previousClientUrl = process.env.FRESHTRAK_CLIENT_URL;
+        process.env.FRESHTRAK_CLIENT_URL = 'https://dev.freshtrak.com/';
+      });
+      afterEach(() => {
+        if (previousClientUrl === undefined) delete process.env.FRESHTRAK_CLIENT_URL;
+        else process.env.FRESHTRAK_CLIENT_URL = previousClientUrl;
+      });
+
+      function arrangeEvent() {
+        publicSchedule.getEventContactDetails.mockResolvedValue({
+          eventName: 'Food Pantry',
+          address1: '1234 Broad St',
+          address2: null,
+          city: 'Columbus',
+          state: 'OH',
+          zip: '43215',
+          instructions: '<p>Use the <b>side door</b>.</p><p>Bring bags.</p>',
+          agencyName: 'Bread of Life Choice Pantry',
+          agencyPhone: '614-555-0142',
+        });
+        publicSchedule.getDateIsoForSlotId.mockResolvedValue('2026-10-28');
+        publicSchedule.getTimesForSlotId.mockResolvedValue({
+          start_time: '17:00:00',
+          end_time: '17:29:00',
+        });
+      }
+
+      it('sends the full event block, formatted the way the app shows it', async () => {
+        arrangeGuestRegistration(
+          { id: 501, status: 'confirmed', event_id: 77, public_event_slot_id: 9 } as any,
+          { id: 10, email: 'maria@example.com', first_name: 'Maria', identification_code: 'u1' },
+        );
+        (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10);
+        householdsService.getHouseholdById.mockResolvedValue({
+          identification_code: 'qtbfnp',
+        } as any);
+        arrangeEvent();
+
+        await service.registerForEvent(SIGNED_IN, { event_id: 77, event_slot_id: 9 } as any);
+        await flushBackgroundWork();
+
+        expect(publicSchedule.getEventContactDetails).toHaveBeenCalledWith(77);
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('maria@example.com', TEMPLATE_ID, {
+          trans_num: '501',
+          confirmation_code: 'QTBFNP',
+          first_name: 'Maria',
+          event_name: 'Food Pantry',
+          agency_name: 'Bread of Life Choice Pantry',
+          event_date: 'Wed, Oct 28, 2026',
+          event_time: '5 PM – 5:29 PM',
+          address_line_1: '1234 Broad St',
+          address_line_2: 'Columbus, OH 43215',
+          maps_url:
+            'https://www.google.com/maps/search/?api=1&query=1234%20Broad%20St%2C%20Columbus%2C%20OH%2043215',
+          agency_phone: '(614) 555-0142',
+          agency_phone_tel: '+16145550142',
+          event_details: 'Use the side door.\nBring bags.',
+          reservations_url: 'https://dev.freshtrak.com/account/reservations',
+        });
+      });
+
+      it('uses the event date and its hours when no slot was booked', async () => {
+        arrangeGuestRegistration(
+          { id: 502, status: 'confirmed', event_id: 77, public_event_date_id: 4 } as any,
+          { email: 'guest@example.com' },
+        );
+        publicSchedule.getDateIsoForDateId.mockResolvedValue('2026-11-03');
+        publicSchedule.getTimesForDateId.mockResolvedValue({
+          start_time: '09:00:00',
+          end_time: '11:30:00',
+        });
+
+        await service.registerForEvent(GUEST, { event_id: 77, event_date_id: 4 } as any);
+        await flushBackgroundWork();
+
+        expect(publicSchedule.getDateIsoForSlotId).not.toHaveBeenCalled();
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+          'guest@example.com',
+          TEMPLATE_ID,
+          expect.objectContaining({
+            event_date: 'Tue, Nov 3, 2026',
+            event_time: '9 AM – 11:30 AM',
+          }),
+        );
+      });
+
+      it('never links guests to My Reservations — they have no account', async () => {
+        arrangeGuestRegistration(
+          { id: 503, status: 'confirmed', event_id: 77, public_event_slot_id: 9 } as any,
+          { email: 'guest@example.com' },
+        );
+        arrangeEvent();
+
+        await service.registerForEvent(GUEST, { event_id: 77, event_slot_id: 9 } as any);
+        await flushBackgroundWork();
+
+        const data = sendgrid.sendTemplate.mock.calls[0][2] as Record<string, string>;
+        expect(data.event_name).toBe('Food Pantry');
+        expect(data).not.toHaveProperty('reservations_url');
+      });
+
+      it('omits the link when FRESHTRAK_CLIENT_URL is not configured', async () => {
+        delete process.env.FRESHTRAK_CLIENT_URL;
+        arrangeGuestRegistration({ id: 504, status: 'confirmed', event_id: 77 } as any, {
+          id: 10,
+          email: 'maria@example.com',
+        });
+        (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10);
+
+        await service.registerForEvent(SIGNED_IN, { event_id: 77 } as any);
+        await flushBackgroundWork();
+
+        expect(sendgrid.sendTemplate.mock.calls[0][2]).not.toHaveProperty('reservations_url');
+      });
+
+      it('still sends the core email when every event lookup fails', async () => {
+        arrangeGuestRegistration(
+          { id: 505, status: 'confirmed', event_id: 77, public_event_slot_id: 9 } as any,
+          { email: 'guest@example.com' },
+        );
+        publicSchedule.getEventContactDetails.mockRejectedValue(new Error('db down'));
+        publicSchedule.getDateIsoForSlotId.mockRejectedValue(new Error('db down'));
+        publicSchedule.getTimesForSlotId.mockRejectedValue(new Error('db down'));
+
+        await service.registerForEvent(GUEST, { event_id: 77, event_slot_id: 9 } as any);
+        await flushBackgroundWork();
+
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('guest@example.com', TEMPLATE_ID, {
+          trans_num: '505',
+        });
+      });
+
+      it('does no event lookups for a registration that will not be emailed', async () => {
+        arrangeGuestRegistration(
+          { id: 506, status: 'waitlisted', event_id: 77, public_event_slot_id: 9 } as any,
+          { email: 'guest@example.com' },
+        );
+
+        await service.registerForEvent(GUEST, { event_id: 77, event_slot_id: 9 } as any);
+        await flushBackgroundWork();
+
+        expect(publicSchedule.getEventContactDetails).not.toHaveBeenCalled();
+        expect(sendgrid.sendTemplate).not.toHaveBeenCalled();
+      });
+    });
+  });
 });
 
 function createRepoMock<T extends ObjectLiteral>(): jest.Mocked<Repository<T>> {
@@ -459,6 +814,7 @@ function createHouseholdsServiceMock(): jest.Mocked<HouseholdsService> {
   return {
     findHouseholdIdByUserId: jest.fn(),
     createHousehold: jest.fn(),
+    getHouseholdById: jest.fn(),
   } as any;
 }
 
@@ -474,5 +830,10 @@ function createPublicScheduleMock(): jest.Mocked<PublicScheduleService> {
     getEventDateIdForToday: jest.fn(),
     getEventDateIdDefault: jest.fn(),
     buildEventDateStructure: jest.fn(),
+    getEventContactDetails: jest.fn(),
+    getDateIsoForSlotId: jest.fn(),
+    getDateIsoForDateId: jest.fn(),
+    getTimesForSlotId: jest.fn(),
+    getTimesForDateId: jest.fn(),
   } as any;
 }

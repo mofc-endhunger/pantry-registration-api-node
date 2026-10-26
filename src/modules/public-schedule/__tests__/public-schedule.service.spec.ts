@@ -168,4 +168,49 @@ describe('PublicScheduleService', () => {
     expect(ed.event_hours[0].event_slots.length).toBe(2);
     expect(ed.open_slots).toBe(10); // (5-2)+(10-3)=10
   });
+
+  describe('getEventContactDetails', () => {
+    it('joins events to locations and maps the row', async () => {
+      _eventsRepo.query.mockResolvedValue([
+        {
+          event_name: 'Food Pantry',
+          address1: '1234 Broad St',
+          address2: '',
+          city: 'Columbus',
+          state: 'OH',
+          zip: '43215',
+          pub_desc_long: '<p>Side door</p>',
+          loc_name: 'Bread of Life Choice Pantry',
+          phone: '6145550142',
+        },
+      ] as any);
+
+      const details = await service.getEventContactDetails(42);
+
+      const [sql, params] = _eventsRepo.query.mock.calls[0];
+      expect(sql).toMatch(/FROM events e\s+LEFT JOIN locations l ON l\.loc_id = e\.loc_id/);
+      expect(params).toEqual([42]);
+      expect(details).toEqual({
+        eventName: 'Food Pantry',
+        address1: '1234 Broad St',
+        address2: null, // blank columns come back as null
+        city: 'Columbus',
+        state: 'OH',
+        zip: '43215',
+        instructions: '<p>Side door</p>',
+        agencyName: 'Bread of Life Choice Pantry',
+        agencyPhone: '6145550142',
+      });
+    });
+
+    it('returns null when the event does not exist', async () => {
+      _eventsRepo.query.mockResolvedValue([] as any);
+      await expect(service.getEventContactDetails(42)).resolves.toBeNull();
+    });
+
+    it('returns null instead of throwing when the query fails', async () => {
+      _eventsRepo.query.mockRejectedValue(new Error("Unknown column 'e.address1'"));
+      await expect(service.getEventContactDetails(42)).resolves.toBeNull();
+    });
+  });
 });

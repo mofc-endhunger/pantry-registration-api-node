@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>Your FreshTrak reservation is confirmed</title>
+  <!--[if mso]>
+  <style>table, td, h1, p, a { font-family: Arial, Helvetica, sans-serif !important; }</style>
+  <![endif]-->
+  <style>
+    @media only screen and (max-width: 620px) {
+      .ft-container { width: 100% !important; }
+      .ft-pad { padding-left: 20px !important; padding-right: 20px !important; }
+      .ft-code { font-size: 28px !important; letter-spacing: 4px !important; }
+      .ft-label { display: block !important; width: auto !important; padding-bottom: 2px !important; }
+      .ft-value { display: block !important; width: auto !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#f3f4f6;">
+
+  <!-- Inbox preview text (hidden). -->
+  <div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#f3f4f6;">
+    {{#if confirmation_code}}Your confirmation code is {{confirmation_code}}. Show it at check-in.{{else}}Your reservation is confirmed. Here are the details for your visit.{{/if}}
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f4f6;">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+
+        <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+        <table role="presentation" class="ft-container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px; background-color:#ffffff; border-radius:12px;">
+
+          <!-- Wordmark: text, not an image, so it survives image blocking. -->
+          <tr>
+            <td class="ft-pad" style="padding:28px 40px 8px 40px; font-family:Nunito, Arial, Helvetica, sans-serif; font-size:24px; line-height:28px; font-weight:800; color:#1d6745;">
+              FreshTrak
+            </td>
+          </tr>
+
+          <!-- Headline -->
+          <tr>
+            <td class="ft-pad" style="padding:16px 40px 0 40px; font-family:Nunito, Arial, Helvetica, sans-serif;">
+              <h1 style="margin:0; font-size:26px; line-height:32px; font-weight:800; color:#111827;">
+                {{#if first_name}}You&rsquo;re all set, {{first_name}}!{{else}}You&rsquo;re all set!{{/if}}
+              </h1>
+              <p style="margin:12px 0 0 0; font-size:16px; line-height:24px; color:#4b5563;">
+                Your reservation is confirmed. Here are the details for your visit.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Confirmation code: the thing they show at the counter. One number
+               only, matching the app's confirmation page — the reservation
+               number appears solely as the fallback when there is no code. -->
+          <tr>
+            <td class="ft-pad" style="padding:24px 40px 0 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eaf0ea; border-radius:10px;">
+                <tr>
+                  <td align="center" style="padding:20px 16px; font-family:Nunito, Arial, Helvetica, sans-serif;">
+                    {{#if confirmation_code}}
+                    <p style="margin:0; font-size:13px; line-height:18px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#1d6745;">Your confirmation code</p>
+                    <p class="ft-code" style="margin:6px 0 0 0; font-family:'Courier New', Courier, monospace; font-size:34px; line-height:40px; font-weight:700; letter-spacing:6px; color:#111827;">{{confirmation_code}}</p>
+                    <p style="margin:8px 0 0 0; font-size:14px; line-height:20px; color:#374151;">Show this code when you check in.</p>
+                    {{else}}
+                    <p style="margin:0; font-size:13px; line-height:18px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#1d6745;">Reservation number</p>
+                    <p class="ft-code" style="margin:6px 0 0 0; font-family:'Courier New', Courier, monospace; font-size:34px; line-height:40px; font-weight:700; letter-spacing:2px; color:#111827;">#{{trans_num}}</p>
+                    {{/if}}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Event details. Each row only renders when its value is present. -->
+          <tr>
+            <td class="ft-pad" style="padding:28px 40px 0 40px; font-family:Nunito, Arial, Helvetica, sans-serif;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                {{#if event_name}}
+                <tr>
+                  <td class="ft-label" width="110" valign="top" style="width:110px; padding:0 12px 14px 0; font-size:14px; line-height:22px; font-weight:700; color:#6b7280;">Event</td>
+                  <td class="ft-value" valign="top" style="padding:0 0 14px 0; font-size:16px; line-height:22px; font-weight:700; color:#111827;">{{event_name}}</td>
+                </tr>
+                {{/if}}
+                {{#if agency_name}}
+                <tr>
+                  <td class="ft-label" width="110" valign="top" style="width:110px; padding:0 12px 14px 0; font-size:14px; line-height:22px; font-weight:700; color:#6b7280;">Hosted by</td>
+                  <td class="ft-value" valign="top" style="padding:0 0 14px 0; font-size:16px; line-height:22px; color:#111827;">{{agency_name}}</td>
+                </tr>
+                {{/if}}
+                {{#if event_date}}
+                <tr>
+                  <td class="ft-label" width="110" valign="top" style="width:110px; padding:0 12px 14px 0; font-size:14px; line-height:22px; font-weight:700; color:#6b7280;">Date</td>
+                  <td class="ft-value" valign="top" style="padding:0 0 14px 0; font-size:16px; line-height:22px; color:#111827;">{{event_date}}</td>
+                </tr>
+                {{/if}}
+                {{#if event_time}}
+                <tr>
+                  <td class="ft-label" width="110" valign="top" style="width:110px; padding:0 12px 14px 0; font-size:14px; line-height:22px; font-weight:700; color:#6b7280;">Time</td>
+                  <td class="ft-value" valign="top" style="padding:0 0 14px 0; font-size:16px; line-height:22px; color:#111827;">{{event_time}}</td>
+                </tr>
+                {{/if}}
+                {{#if address_line_1}}
+                <tr>
+                  <td class="ft-label" width="110" valign="top" style="width:110px; padding:0 12px 14px 0; font-size:14px; line-height:22px; font-weight:700; color:#6b7280;">Location</td>
+                  <td class="ft-value" valign="top" style="padding:0 0 14px 0; font-size:16px; line-height:22px; color:#111827;">
+                    {{address_line_1}}{{#if address_line_2}}<br>{{address_line_2}}{{/if}}
+                    {{#if maps_url}}<br><a href="{{maps_url}}" style="color:#1d6745; font-weight:700; text-decoration:underline;">Get directions</a>{{/if}}
+                  </td>
+                </tr>
+                {{/if}}
+                {{#if agency_phone}}
+                <tr>
+                  <td class="ft-label" width="110" valign="top" style="width:110px; padding:0 12px 14px 0; font-size:14px; line-height:22px; font-weight:700; color:#6b7280;">Phone</td>
+                  <td class="ft-value" valign="top" style="padding:0 0 14px 0; font-size:16px; line-height:22px; color:#111827;">
+                    {{#if agency_phone_tel}}<a href="tel:{{agency_phone_tel}}" style="color:#1d6745; text-decoration:underline;">{{agency_phone}}</a>{{else}}{{agency_phone}}{{/if}}
+                  </td>
+                </tr>
+                {{/if}}
+              </table>
+            </td>
+          </tr>
+
+          <!-- Pantry's own instructions (events.pub_desc_long). Plain text;
+               pre-line keeps its line breaks without un-escaping it. -->
+          {{#if event_details}}
+          <tr>
+            <td class="ft-pad" style="padding:8px 40px 0 40px; font-family:Nunito, Arial, Helvetica, sans-serif;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-left:4px solid #1d6745; background-color:#f9fafc;">
+                <tr>
+                  <td style="padding:14px 16px;">
+                    <p style="margin:0; font-size:14px; line-height:20px; font-weight:700; color:#111827;">Before you go</p>
+                    <p style="margin:6px 0 0 0; font-size:15px; line-height:22px; color:#374151; white-space:pre-line;">{{event_details}}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          {{/if}}
+
+          <!-- Manage / cancel. Only signed-in users have a reservations page;
+               guests are pointed at the pantry instead. -->
+          <tr>
+            <td class="ft-pad" style="padding:28px 40px 0 40px; font-family:Nunito, Arial, Helvetica, sans-serif;">
+              {{#if reservations_url}}
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" bgcolor="#1d6745" style="border-radius:8px;">
+                    <a href="{{reservations_url}}" style="display:inline-block; padding:13px 26px; font-family:Nunito, Arial, Helvetica, sans-serif; font-size:16px; line-height:20px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:8px;">View my reservations</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:16px 0 0 0; font-size:14px; line-height:21px; color:#4b5563;">
+                Can&rsquo;t make it? Please cancel from <strong>My Reservations</strong> so another family can have your spot.
+              </p>
+              {{else}}
+              <p style="margin:0; font-size:14px; line-height:21px; color:#4b5563;">
+                Can&rsquo;t make it? Please let {{#if agency_name}}{{agency_name}}{{else}}the pantry{{/if}} know{{#if agency_phone}} at {{agency_phone}}{{/if}} so another family can have your spot.
+              </p>
+              {{/if}}
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td class="ft-pad" style="padding:32px 40px 32px 40px; font-family:Nunito, Arial, Helvetica, sans-serif;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #e5e7eb;">
+                <tr>
+                  <td style="padding-top:20px; font-size:12px; line-height:18px; color:#6b7280;">
+                    You&rsquo;re receiving this email because you reserved a visit on FreshTrak.
+                    This mailbox isn&rsquo;t monitored &mdash; for questions, email
+                    <a href="mailto:freshtrak@mofc.org" style="color:#1d6745; text-decoration:underline;">freshtrak@mofc.org</a>.
+                    <br><br>
+                    FreshTrak &middot; Mid-Ohio Food Collective
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+        <!--[if mso]></td></tr></table><![endif]-->
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "first_name": "Maria",
+  "confirmation_code": "K7P2QX",
+  "trans_num": "48213",
+  "event_name": "Saturday Produce Market",
+  "agency_name": "Westside Community Pantry",
+  "event_date": "Sat, Nov 7, 2026",
+  "event_time": "10 AM – 12 PM",
+  "address_line_1": "1234 Broad St, Suite B",
+  "address_line_2": "Columbus, OH 43215",
+  "maps_url": "https://www.google.com/maps/search/?api=1&query=1234%20Broad%20St%2C%20Suite%20B%2C%20Columbus%2C%20OH%2043215",
+  "agency_phone": "(614) 555-0142",
+  "agency_phone_tel": "+16145550142",
+  "event_details": "Enter through the side door by the parking lot.\nPlease bring your own bags if you can.",
+  "reservations_url": "https://www.freshtrak.com/account/reservations"
+}
