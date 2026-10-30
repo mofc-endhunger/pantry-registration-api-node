@@ -6,6 +6,25 @@ interface EmailResult {
   error?: unknown;
 }
 
+/**
+ * A file sent with the email. `disposition: 'inline'` with a `content_id`
+ * is an image the template shows as `<img src="cid:…">`.
+ */
+export interface EmailAttachment {
+  /** Base64. */
+  content: string;
+  filename: string;
+  type: string;
+  disposition: 'inline' | 'attachment';
+  content_id?: string;
+}
+
+export interface SendTemplateOptions {
+  /** Defaults to SENDGRID_FROM_EMAIL, then DEFAULT_FROM_EMAIL. */
+  from?: string;
+  attachments?: EmailAttachment[];
+}
+
 /** Sender used when a caller does not supply one. Must be a SendGrid-verified sender. */
 export const DEFAULT_FROM_EMAIL = 'no-reply@freshtrak.com';
 
@@ -39,18 +58,20 @@ export class SendgridService {
   /**
    * Send using a SendGrid dynamic template (`d-` id). The template owns the
    * subject and body, so no `subject`/`html` is sent — SendGrid would override
-   * them anyway.
+   * them anyway. Attachments are sent only when there are some.
    */
   async sendTemplate(
     to: string,
     templateId: string,
     dynamicTemplateData: Record<string, unknown>,
-    from: string = process.env.SENDGRID_FROM_EMAIL || DEFAULT_FROM_EMAIL,
+    options: SendTemplateOptions = {},
   ): Promise<EmailResult> {
     const skipped = this.skipReason();
     if (skipped) return skipped;
+    const from = options.from || process.env.SENDGRID_FROM_EMAIL || DEFAULT_FROM_EMAIL;
+    const attachments = options.attachments?.length ? { attachments: options.attachments } : {};
     try {
-      await sgMail.send({ from, to, templateId, dynamicTemplateData });
+      await sgMail.send({ from, to, templateId, dynamicTemplateData, ...attachments });
       return { success: true };
     } catch (err: unknown) {
       this.logger.warn(

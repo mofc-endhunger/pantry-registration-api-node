@@ -16,6 +16,7 @@ import { SurveyFamily } from '../../../entities/survey-families.entity';
 import { PublicSurvey } from '../../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../../entities-public/survey-question-map.public.entity';
 import { SendgridService } from '../../notifications/sendgrid.service';
+import * as reservationQr from '../../../common/utils/reservation-qr';
 
 /** Let fire-and-forget work (the confirmation email) settle before asserting. */
 const flushBackgroundWork = () => new Promise((resolve) => setImmediate(resolve));
@@ -442,15 +443,35 @@ describe('RegistrationsService', () => {
   describe('reservation confirmation email', () => {
     const GUEST = { authType: 'guest', dbUserId: 10 } as any;
     const TEMPLATE_ID = 'd-test-reservation-template';
+    /** What an email with a confirmation code carries besides its data: the check-in QR (SUP-1092). */
+    const WITH_QR = {
+      attachments: [
+        expect.objectContaining({
+          filename: 'reservation-qr.png',
+          type: 'image/png',
+          disposition: 'inline',
+          content_id: 'reservation-qr',
+        }),
+      ],
+    };
     let previousTemplateId: string | undefined;
+    /**
+     * The QR drawing, stubbed: a real PNG settles after flushBackgroundWork,
+     * and reservation-qr.spec.ts draws real ones.
+     */
+    let drawQr: jest.SpyInstance;
 
     beforeEach(() => {
       previousTemplateId = process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
       process.env.SENDGRID_RESERVATION_TEMPLATE_ID = TEMPLATE_ID;
+      drawQr = jest
+        .spyOn(reservationQr, 'reservationQrPng')
+        .mockResolvedValue(Buffer.from('png-bytes'));
     });
     afterEach(() => {
       if (previousTemplateId === undefined) delete process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
       else process.env.SENDGRID_RESERVATION_TEMPLATE_ID = previousTemplateId;
+      drawQr.mockRestore();
     });
 
     /** A guest self-registration with no slot, so capacity is unbounded. */
@@ -566,10 +587,86 @@ describe('RegistrationsService', () => {
       const registrantCode = (userRepo.create.mock.calls[0][0] as any)
         .identification_code as string;
       expect(sendgrid.sendTemplate).toHaveBeenCalledTimes(1);
-      expect(sendgrid.sendTemplate).toHaveBeenCalledWith('rita@example.com', TEMPLATE_ID, {
-        trans_num: '700',
-        confirmation_code: registrantCode.toUpperCase(),
-        first_name: 'Rita',
+      expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+        'rita@example.com',
+        TEMPLATE_ID,
+        {
+          trans_num: '700',
+          confirmation_code: registrantCode.toUpperCase(),
+          first_name: 'Rita',
+          qr_cid: 'reservation-qr',
+        },
+        WITH_QR,
+      );
+    });
+
+    describe('check-in QR (SUP-1092)', () => {
+      it("encodes the client's link — code, event date and slot — and attaches it inline", async () => {
+        arrangeGuestRegistration(
+          { id: 410, status: 'confirmed', public_event_date_id: 4, public_event_slot_id: 9 } as any,
+          { email: 'guest@example.com', identification_code: 'abc123' },
+        );
+
+        await service.registerForEvent(GUEST, {
+          event_id: 1,
+          event_date_id: 4,
+          event_slot_id: 9,
+        } as any);
+        await flushBackgroundWork();
+
+        expect(drawQr).toHaveBeenCalledWith(
+          'https://secure.pantrytrak.com/mobile/qr_code_processing.php?code=ABC123&event_date_id=4&event_slot_id=9',
+        );
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+          'guest@example.com',
+          TEMPLATE_ID,
+          expect.objectContaining({ confirmation_code: 'ABC123', qr_cid: 'reservation-qr' }),
+          {
+            attachments: [
+              {
+                content: Buffer.from('png-bytes').toString('base64'),
+                filename: 'reservation-qr.png',
+                type: 'image/png',
+                disposition: 'inline',
+                content_id: 'reservation-qr',
+              },
+            ],
+          },
+        );
+      });
+
+      it('draws no QR without a confirmation code — the reservation number is not scannable', async () => {
+        arrangeGuestRegistration({ id: 411, status: 'confirmed' }, { email: 'guest@example.com' });
+
+        await service.registerForEvent(GUEST, { event_id: 1 } as any);
+        await flushBackgroundWork();
+
+        expect(drawQr).not.toHaveBeenCalled();
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('guest@example.com', TEMPLATE_ID, {
+          trans_num: '411',
+        });
+      });
+
+      it('still sends the email, without the QR, when drawing it fails', async () => {
+        drawQr.mockRejectedValue(new Error('qr failed'));
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        arrangeGuestRegistration(
+          { id: 412, status: 'confirmed' },
+          { email: 'guest@example.com', identification_code: 'abc123' },
+        );
+
+        await service.registerForEvent(GUEST, { event_id: 1 } as any);
+        await flushBackgroundWork();
+
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('guest@example.com', TEMPLATE_ID, {
+          trans_num: '412',
+          confirmation_code: 'ABC123',
+        });
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('reservation QR not drawn for registration 412'),
+          'qr failed',
+        );
+        warn.mockRestore();
       });
     });
 
@@ -585,10 +682,12 @@ describe('RegistrationsService', () => {
         await service.registerForEvent(GUEST, { event_id: 1 } as any);
         await flushBackgroundWork();
 
-        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('person@example.com', TEMPLATE_ID, {
-          trans_num: '401',
-          confirmation_code: 'USRCOD',
-        });
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+          'person@example.com',
+          TEMPLATE_ID,
+          { trans_num: '401', confirmation_code: 'USRCOD', qr_cid: 'reservation-qr' },
+          WITH_QR,
+        );
         expect(householdsService.getHouseholdById).not.toHaveBeenCalled();
       });
 
@@ -607,10 +706,12 @@ describe('RegistrationsService', () => {
 
         // Same lookup GET /users/me uses, so the email and the app agree.
         expect(householdsService.getHouseholdById).toHaveBeenCalledWith(20, 10);
-        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('person@example.com', TEMPLATE_ID, {
-          trans_num: '402',
-          confirmation_code: 'HHCODE',
-        });
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+          'person@example.com',
+          TEMPLATE_ID,
+          { trans_num: '402', confirmation_code: 'HHCODE', qr_cid: 'reservation-qr' },
+          WITH_QR,
+        );
       });
 
       it('falls back to the reservation number when the household lookup fails', async () => {
@@ -680,23 +781,29 @@ describe('RegistrationsService', () => {
         await flushBackgroundWork();
 
         expect(publicSchedule.getEventContactDetails).toHaveBeenCalledWith(77);
-        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('maria@example.com', TEMPLATE_ID, {
-          trans_num: '501',
-          confirmation_code: 'QTBFNP',
-          first_name: 'Maria',
-          event_name: 'Food Pantry',
-          agency_name: 'Bread of Life Choice Pantry',
-          event_date: 'Wed, Oct 28, 2026',
-          event_time: '5 PM – 5:29 PM',
-          address_line_1: '1234 Broad St',
-          address_line_2: 'Columbus, OH 43215',
-          maps_url:
-            'https://www.google.com/maps/search/?api=1&query=1234%20Broad%20St%2C%20Columbus%2C%20OH%2043215',
-          agency_phone: '(614) 555-0142',
-          agency_phone_tel: '+16145550142',
-          event_details: 'Use the side door.\nBring bags.',
-          reservations_url: 'https://dev.freshtrak.com/account/reservations',
-        });
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+          'maria@example.com',
+          TEMPLATE_ID,
+          {
+            trans_num: '501',
+            confirmation_code: 'QTBFNP',
+            first_name: 'Maria',
+            event_name: 'Food Pantry',
+            agency_name: 'Bread of Life Choice Pantry',
+            event_date: 'Wed, Oct 28, 2026',
+            event_time: '5 PM – 5:29 PM',
+            address_line_1: '1234 Broad St',
+            address_line_2: 'Columbus, OH 43215',
+            maps_url:
+              'https://www.google.com/maps/search/?api=1&query=1234%20Broad%20St%2C%20Columbus%2C%20OH%2043215',
+            agency_phone: '(614) 555-0142',
+            agency_phone_tel: '+16145550142',
+            event_details: 'Use the side door.\nBring bags.',
+            reservations_url: 'https://dev.freshtrak.com/account/reservations',
+            qr_cid: 'reservation-qr',
+          },
+          WITH_QR,
+        );
       });
 
       it('uses the event date and its hours when no slot was booked', async () => {

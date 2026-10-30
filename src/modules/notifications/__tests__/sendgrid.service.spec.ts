@@ -50,6 +50,52 @@ describe('SendgridService', () => {
       );
     });
 
+    it('prefers a sender passed in the options', async () => {
+      process.env.SENDGRID_API_KEY = 'SG.TEST';
+      process.env.SENDGRID_FROM_EMAIL = 'confirm@example.org';
+      const svc = new SendgridService();
+
+      await svc.sendTemplate('to@test.com', 'd-abc', {}, { from: 'other@example.org' });
+
+      expect(sendMock).toHaveBeenCalledWith(expect.objectContaining({ from: 'other@example.org' }));
+    });
+
+    it('sends inline attachments for the template to show by Content-ID', async () => {
+      process.env.SENDGRID_API_KEY = 'SG.TEST';
+      const svc = new SendgridService();
+      const qr = {
+        content: 'cG5n',
+        filename: 'reservation-qr.png',
+        type: 'image/png',
+        disposition: 'inline' as const,
+        content_id: 'reservation-qr',
+      };
+
+      await svc.sendTemplate(
+        'to@test.com',
+        'd-abc',
+        { qr_cid: 'reservation-qr' },
+        { attachments: [qr] },
+      );
+
+      expect(sendMock).toHaveBeenCalledWith({
+        from: 'no-reply@freshtrak.com',
+        to: 'to@test.com',
+        templateId: 'd-abc',
+        dynamicTemplateData: { qr_cid: 'reservation-qr' },
+        attachments: [qr],
+      });
+    });
+
+    it('sends no attachments key when there are none', async () => {
+      process.env.SENDGRID_API_KEY = 'SG.TEST';
+      const svc = new SendgridService();
+
+      await svc.sendTemplate('to@test.com', 'd-abc', {}, { attachments: [] });
+
+      expect(sendMock.mock.calls[0][0]).not.toHaveProperty('attachments');
+    });
+
     it('skips without calling SendGrid when SENDGRID_ENABLED is false', async () => {
       process.env.SENDGRID_API_KEY = 'SG.TEST';
       process.env.SENDGRID_ENABLED = 'false';
