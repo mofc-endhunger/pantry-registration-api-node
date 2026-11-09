@@ -12,5 +12,6 @@
   "agency_phone": "(614) 555-0142",
   "agency_phone_tel": "+16145550142",
   "event_details": "Enter through the side door by the parking lot.\nPlease bring your own bags if you can.",
-  "reservations_url": "https://www.freshtrak.com/account/reservations"
+  "reservations_url": "https://www.freshtrak.com/account/reservations",
+  "qr_cid": "reservation-qr"
 }

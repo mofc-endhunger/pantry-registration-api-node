@@ -41,8 +41,18 @@ Dynamic template data. Every field except `trans_num` is optional and omitted wh
 | `event_date`                                                 | Booked slot's date, else the event date — e.g. `Wed, Oct 28, 2026`                                                                                                                                                         |
 | `event_time`                                                 | Booked slot's window, else the event date's hours — e.g. `5 PM – 5:29 PM`                                                                                                                                                  |
 | `reservations_url`                                           | `${FRESHTRAK_CLIENT_URL}/account/reservations`, signed-in users only                                                                                                                                                       |
+| `qr_cid`                                                     | `reservation-qr`, the Content-ID of the check-in QR attachment. Sent only when the QR was drawn (see below)                                                                                                                |
 
 Dates and times use the same format as the client's confirmation page.
+
+Check-in QR (SUP-1092)
+
+- Every email with a `confirmation_code` carries the check-in QR as an inline PNG attachment (`disposition: inline`, Content-ID `reservation-qr`), and its data carries `qr_cid`. The template shows it with `<img src="cid:{{qr_cid}}">` inside `{{#if qr_cid}}`.
+- The QR encodes the link freshtrak-public-client's confirmation page encodes: `https://secure.pantrytrak.com/mobile/qr_code_processing.php?code=<CODE>&event_date_id=<id>[&event_slot_id=<id>]`. Built by `src/common/utils/reservation-qr.ts`, whose spec uses the client's own test vectors; keep the two in step.
+- Inline rather than a hosted image link: it shows where remote images are blocked and without a signal at the pantry, and Gmail keeps it, where it strips `data:` images.
+- No code, no QR: the reservation-number fallback is not scannable. If drawing fails, the email goes without the QR.
+- SendGrid's own preview and test sends show a broken image, because the attachment only exists when the API sends. Test the QR through a real reservation.
+- Outlook may show an empty box in its place until the reader trusts the sender (Safe senders, or "Show blocked content"); clicking the box still opens the QR. The printed code below it works either way. Checked 30 Oct 2026: Gmail shows the QR directly; Outlook showed it once the sender was trusted.
 
 Security
 
