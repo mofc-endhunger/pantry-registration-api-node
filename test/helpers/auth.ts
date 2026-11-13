@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
 
 export async function getGuestToken(app: INestApplication, phone = '5550000000'): Promise<string> {
   const res = await request(app.getHttpServer())
@@ -19,7 +20,7 @@ export async function getJwt(
   if (process.env.USE_LOCAL_JWT === '1') {
     const secret = process.env.JWT_SECRET || 'test-secret';
     const payload = {
-      sub: `test-sub-${Date.now()}`,
+      sub: randomUUID(),
       email,
       username: email.split('@')[0],
     };

@@ -21,10 +21,14 @@ describe('Registrations negative flows (E2E)', () => {
     if (app) await app.close();
   });
 
-  it('returns 404 when registering for inactive event', async () => {
-    const event = await eventsRepo.save(
-      eventsRepo.create({ name: 'Inactive Event', is_active: false } as any),
+  // Inactive events are accepted on purpose since f3d2ed81 (registration only checks that the
+  // event exists; the public DB is the source of truth for scheduling), so the negative case
+  // is an event that does not exist at all.
+  it('returns 404 when registering for an event that does not exist', async () => {
+    const missing = await eventsRepo.save(
+      eventsRepo.create({ name: 'Deleted Event', is_active: true } as any),
     );
+    await eventsRepo.delete((missing as any).id);
     const guest = await request(app.getHttpServer())
       .post('/guest-authentications')
       .send({ phone: '5551112222' })
@@ -34,7 +38,7 @@ describe('Registrations negative flows (E2E)', () => {
     await request(app.getHttpServer())
       .post('/registrations')
       .set('X-Guest-Token', token)
-      .send({ event_id: (event as any).id })
+      .send({ event_id: (missing as any).id })
       .expect(404);
   });
 
