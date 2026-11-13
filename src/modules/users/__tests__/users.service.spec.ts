@@ -91,6 +91,51 @@ describe('UsersService', () => {
     expect(householdsService.getHouseholdById).toHaveBeenCalledWith(88, 10);
   });
 
+  describe('updateUserWithHousehold with homeless (SUP-1141)', () => {
+    it('marks the users row and the household Homeless instead of saving the typed street', async () => {
+      usersRepo.findOneBy.mockResolvedValue({ id: 10 } as any);
+      const dto: any = {
+        household_id: 88,
+        homeless: true,
+        address_line_1: '123 Main St',
+        city: 'Columbus',
+        zip_code: '43215',
+        members: [],
+      };
+      await service.updateUserWithHousehold(10, dto);
+      expect(usersRepo.update).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({
+          address_line_1: null,
+          address_line_2: 'Homeless',
+          city: 'Columbus',
+          zip_code: '43215',
+        }),
+      );
+      const householdPatch = householdsService.updateHousehold.mock.calls[0][2];
+      expect(householdPatch).toEqual(
+        expect.objectContaining({ line_1: '', line_2: 'Homeless', address_line_2: 'Homeless' }),
+      );
+      /* Not a household column. */
+      expect(householdPatch).not.toHaveProperty('homeless');
+    });
+
+    it('clears a saved marker when the box is un-ticked', async () => {
+      usersRepo.findOneBy.mockResolvedValue({ id: 10, address_line_2: 'Homeless' } as any);
+      const dto: any = {
+        household_id: 88,
+        homeless: false,
+        address_line_1: '123 Main St',
+        members: [],
+      };
+      await service.updateUserWithHousehold(10, dto);
+      expect(usersRepo.update).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({ address_line_1: '123 Main St', address_line_2: null }),
+      );
+    });
+  });
+
   it('updateUserWithHousehold falls back to dto.id when household_id missing', async () => {
     usersRepo.findOneBy.mockResolvedValueOnce({ id: 10 } as any);
     const dto: any = { id: 99, city: 'Columbus', members: [] };

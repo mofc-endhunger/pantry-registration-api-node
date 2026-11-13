@@ -6,6 +6,7 @@ import { User } from '../../entities/user.entity';
 import { Authentication } from '../../entities/authentication.entity';
 import { randomBytes } from 'crypto';
 import { SafeRandom } from '../../common/utils/safe-random';
+import { applyHomelessFlag } from '../../common/utils/homeless-address';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
 
 @Injectable()
@@ -62,8 +63,13 @@ export class GuestAuthenticationsService {
     if (dto.date_of_birth !== undefined)
       user.date_of_birth = dto.date_of_birth as unknown as string;
     if (dto.gender !== undefined) user.gender = dto.gender;
-    if (dto.address_line_1 !== undefined) user.address_line_1 = dto.address_line_1;
-    if (dto.address_line_2 !== undefined) user.address_line_2 = dto.address_line_2;
+    const lines = applyHomelessFlag(
+      { address_line_1: dto.address_line_1, address_line_2: dto.address_line_2 },
+      dto.homeless,
+      user.address_line_2,
+    );
+    if (lines.address_line_1 !== undefined) user.address_line_1 = lines.address_line_1;
+    if (lines.address_line_2 !== undefined) user.address_line_2 = lines.address_line_2;
     if (dto.city !== undefined) user.city = dto.city;
     if (dto.state !== undefined) user.state = dto.state;
     if (dto.zip_code !== undefined) user.zip_code = dto.zip_code;

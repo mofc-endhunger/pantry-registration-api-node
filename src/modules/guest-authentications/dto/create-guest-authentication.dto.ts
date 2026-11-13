@@ -81,6 +81,11 @@ export class CreateGuestAuthenticationDto {
   @IsOptional()
   no_email?: boolean;
 
+  /** No fixed address (SUP-1141): the street is not used, and the user is marked Homeless. */
+  @IsBoolean()
+  @IsOptional()
+  homeless?: boolean;
+
   @IsString()
   @IsOptional()
   identification_code?: string;

@@ -79,4 +79,40 @@ describe('GuestAuthenticationsService', () => {
     expect(user.first_name).toBe('Jane');
     expect(userRepo.save).toHaveBeenCalledWith(user);
   });
+
+  describe('homeless (SUP-1141)', () => {
+    it('stores no street and the Homeless marker, keeping city, state and ZIP', async () => {
+      const user: any = { id: 9, address_line_1: '1 Old Rd', address_line_2: null };
+      authRepo.findOne.mockResolvedValueOnce({ user } as any);
+      await service.updateGuestByToken('tok', {
+        homeless: true,
+        address_line_1: '123 Main St',
+        city: 'Columbus',
+        state: 'OH',
+        zip_code: '43215',
+      } as any);
+      expect(user.address_line_1).toBeNull();
+      expect(user.address_line_2).toBe('Homeless');
+      expect(user.city).toBe('Columbus');
+      expect(user.zip_code).toBe('43215');
+    });
+
+    it('clears the marker when the box is un-ticked and an address is given', async () => {
+      const user: any = { id: 9, address_line_1: null, address_line_2: 'Homeless' };
+      authRepo.findOne.mockResolvedValueOnce({ user } as any);
+      await service.updateGuestByToken('tok', {
+        homeless: false,
+        address_line_1: '123 Main St',
+      } as any);
+      expect(user.address_line_1).toBe('123 Main St');
+      expect(user.address_line_2).toBeNull();
+    });
+
+    it('leaves the address alone when the flag is not sent', async () => {
+      const user: any = { id: 9, address_line_1: null, address_line_2: 'Homeless' };
+      authRepo.findOne.mockResolvedValueOnce({ user } as any);
+      await service.updateGuestByToken('tok', { first_name: 'Jane' } as any);
+      expect(user.address_line_2).toBe('Homeless');
+    });
+  });
 });

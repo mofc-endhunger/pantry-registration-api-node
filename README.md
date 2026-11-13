@@ -255,25 +255,23 @@ docker-compose logs -f app
 
 ## Testing
 
-- Start MySQL for e2e locally:
-
-```bash
-docker compose up -d mysql-test
-```
-
 - Run unit tests:
 
 ```bash
 npm test
 ```
 
-- Run e2e tests (ensure MySQL is running):
+- Run e2e tests against a throwaway local MySQL 8 (the suite creates its databases itself):
 
 ```bash
-npm run test:e2e
+docker run -d --name e2e-mysql -p 127.0.0.1:3317:3306 -e MYSQL_ROOT_PASSWORD=password mysql:8.0
 ```
 
-Set test env overrides in `.env.test` if needed.
+```bash
+DB_PORT=3317 npm run test:e2e
+```
+
+The e2e setup only runs against a local MySQL and always turns PantryTrak, SendGrid and Twilio off, whatever your `.env` says. See [docs/e2e-testing.md](docs/e2e-testing.md) for the details and the env overrides (`.env.test`).
 
 ## Environment Variables
 
