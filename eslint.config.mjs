@@ -6,7 +6,19 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs', 'data-source.js', 'dist/**', 'node_modules/**', '.husky/**', 'scripts/**'],
+    ignores: [
+      'eslint.config.mjs',
+      'data-source.js',
+      'dist/**',
+      'node_modules/**',
+      '.husky/**',
+      'scripts/**',
+      // The desktop app parks side-session worktrees under .claude/worktrees,
+      // inside the repo: a second copy of the tree with its own node_modules,
+      // which `node_modules/**` (top level only) does not cover. Linting it
+      // made `npm run lint` run for over 30 minutes (2026-11-13).
+      '.claude/**',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
