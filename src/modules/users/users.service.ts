@@ -382,6 +382,17 @@ export class UsersService {
     }
 
     // After household update, add placeholder members to reach desired counts (if provided).
+    //
+    // SUP-783: this reconciliation only runs when the caller described the
+    // household by SIZE alone. When the payload carries `members[]`, the
+    // caller has said who the members are and that list is the authority:
+    // `HouseholdsService.updateHousehold` has already upserted/deactivated
+    // them and recomputed the counts from the active members. Counts sent
+    // beside `members[]` (the legacy client still sends them, and counted
+    // seniors from 65 where the server counts from 60) are ignored rather
+    // than reconciled, because reconciling a disagreement by inventing
+    // "Adult N Adult" rows is the bug.
+    const membersAreAuthoritative = Array.isArray(dto.members);
     try {
       const wantsCounts =
         !!dto.counts ||
@@ -391,7 +402,7 @@ export class UsersService {
         (dto as { seniors?: number }).seniors != null ||
         (dto as { adults?: number }).adults != null ||
         (dto as { children?: number }).children != null;
-      if (householdId && wantsCounts) {
+      if (householdId && wantsCounts && !membersAreAuthoritative) {
         const toInt = (val: unknown): number => {
           if (val === undefined || val === null) return 0;
           const n = typeof val === 'string' ? Number(val) : (val as number);

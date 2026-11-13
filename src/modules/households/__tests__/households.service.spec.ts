@@ -321,4 +321,61 @@ describe('HouseholdsService', () => {
     membersRepo.findOne.mockResolvedValueOnce(null as any);
     expect(await service.findHouseholdIdByUserId(9)).toBeUndefined();
   });
+
+  /* SUP-783 — a household has exactly one head; nothing used to stop a payload
+     from flagging two. */
+  describe('updateHousehold head-of-household guard (SUP-783)', () => {
+    it('rejects members[] that flags two heads before writing anything', async () => {
+      const existing: any = {
+        id: 15,
+        added_by: 5,
+        members: [{ id: 100 }, { id: 200 }],
+        addresses: [],
+      };
+      householdsRepo.findOne.mockResolvedValue(existing);
+
+      await expect(
+        service.updateHousehold(15, 5, {
+          members: [
+            { id: 100, is_head_of_household: 1 },
+            { id: 200, is_head_of_household: 1 },
+          ],
+        } as any),
+      ).rejects.toMatchObject({ status: 422 });
+
+      expect(householdsRepo.save).not.toHaveBeenCalled();
+      expect(membersRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('accepts members[] with exactly one head flagged, as every client sends it', async () => {
+      const existing: any = {
+        id: 16,
+        added_by: 6,
+        members: [
+          { id: 100, is_head_of_household: true, is_active: true },
+          { id: 200, is_head_of_household: false, is_active: true },
+        ],
+        addresses: [],
+      };
+      householdsRepo.findOne.mockResolvedValue(existing);
+      householdsRepo.save.mockResolvedValue(existing);
+      membersRepo.save.mockImplementation(async (m: any) => m);
+
+      await expect(
+        service.updateHousehold(16, 6, {
+          members: [
+            { id: 100, is_head_of_household: 1, is_active: 1 },
+            { id: 200, is_head_of_household: 0, is_active: 1 },
+          ],
+        } as any),
+      ).resolves.toBeDefined();
+
+      expect(membersRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 100, is_head_of_household: true }),
+      );
+      expect(membersRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 200, is_head_of_household: false }),
+      );
+    });
+  });
 });
