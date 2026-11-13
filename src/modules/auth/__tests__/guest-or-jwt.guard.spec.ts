@@ -36,6 +36,14 @@ describe('GuestOrJwtAuthGuard', () => {
     expect(req.user).toEqual({ authType: 'guest', dbUserId: 10 });
   });
 
+  it('normalizes a BIGINT user_id returned as a string to a number', async () => {
+    jest.spyOn(parentProto, 'canActivate').mockResolvedValueOnce(false);
+    repo.findOne.mockResolvedValueOnce({ user_id: '42', expires_at: new Date(Date.now() + 10000) });
+    const req: any = { headers: { 'x-guest-token': 't1' } };
+    await guard.canActivate(createExecutionContext(req));
+    expect(req.user).toEqual({ authType: 'guest', dbUserId: 42 });
+  });
+
   it('returns false when no JWT and no guest token', async () => {
     jest.spyOn(parentProto, 'canActivate').mockRejectedValueOnce(new Error('no'));
     const req: any = { headers: {} };

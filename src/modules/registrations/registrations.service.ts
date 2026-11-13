@@ -669,7 +669,7 @@ export class RegistrationsService {
       const timeslot = await this.timesRepo.findOne({ where: { id: dto.timeslot_id } });
       capacity = timeslot?.capacity ?? null;
       confirmedCount = await this.regsRepo.count({
-        where: { timeslot_id: dto.event_slot_id, status: 'confirmed' } as any,
+        where: { timeslot_id: dto.timeslot_id, status: 'confirmed' } as any,
       });
     } else if (dto.event_date_id) {
       const date = await this.publicSchedule.getDate(dto.event_date_id);
@@ -1072,7 +1072,7 @@ export class RegistrationsService {
       const timeslot = await this.timesRepo.findOne({ where: { id: dto.timeslot_id } });
       capacity = timeslot?.capacity ?? null;
       confirmedCount = await this.regsRepo.count({
-        where: { timeslot_id: dto.event_slot_id, status: 'confirmed' } as any,
+        where: { timeslot_id: dto.timeslot_id, status: 'confirmed' } as any,
       });
     } else if (dto.event_date_id) {
       const date = await this.publicSchedule.getDate(dto.event_date_id);

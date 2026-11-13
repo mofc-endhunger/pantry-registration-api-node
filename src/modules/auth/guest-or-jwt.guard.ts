@@ -44,7 +44,9 @@ export class GuestOrJwtAuthGuard extends AuthGuard('jwt') implements CanActivate
 
     request.user = {
       authType: 'guest',
-      dbUserId: auth.user_id,
+      // `user_id` is BIGINT; the mysql driver returns it as a string (bigNumberStrings).
+      // Services check `typeof dbUserId === 'number'`, so normalize it here.
+      dbUserId: Number(auth.user_id),
     };
     return true;
   }
