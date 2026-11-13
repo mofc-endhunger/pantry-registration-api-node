@@ -1,7 +1,10 @@
 # E2E tests
 
 The e2e suite (`test/**/*.e2e-spec.ts`, config `test/jest-e2e.json`) boots the full Nest
-`AppModule` against a real MySQL and drives it over HTTP with supertest. It is not run in CI.
+`AppModule` against a real MySQL and drives it over HTTP with supertest.
+
+CI runs it on every push and pull request to `main` and `beta`
+(`.github/workflows/e2e.yml`, a `mysql:8.0` service container on port 3306).
 
 ## Quick start
 
