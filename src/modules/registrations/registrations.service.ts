@@ -39,7 +39,12 @@ import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-m
 import { isSurveyActionable } from '../../common/utils/survey-actionable';
 import { FEEDBACK_SURVEY_TYPE_ID } from '../../common/constants/survey.constants';
 import { PLACEHOLDER_EMAIL_SUFFIX } from '../../common/constants/notification.constants';
-import { SendgridService } from '../notifications/sendgrid.service';
+import { EmailAttachment, SendgridService } from '../notifications/sendgrid.service';
+import {
+  RESERVATION_QR_CID,
+  reservationQrPng,
+  reservationQrUrl,
+} from '../../common/utils/reservation-qr';
 import {
   compactTemplateData,
   formatAddress,
@@ -140,10 +145,57 @@ export class RegistrationsService {
       return;
     }
     const data = await this.buildReservationEmailData(registration, recipient);
-    const result = await this.sendgrid.sendTemplate(to, templateId, data);
+    const qr = await this.reservationQrAttachment(registration, recipient);
+    const result = qr
+      ? await this.sendgrid.sendTemplate(
+          to,
+          templateId,
+          { ...data, qr_cid: RESERVATION_QR_CID },
+          { attachments: [qr] },
+        )
+      : await this.sendgrid.sendTemplate(to, templateId, data);
     if (!result.success && result.error !== 'disabled') {
       // eslint-disable-next-line no-console
       console.warn(`[Email] reservation confirmation not sent for registration ${registration.id}`);
+    }
+  }
+
+  /**
+   * The check-in QR (SUP-1092) as an inline attachment, encoding the link the
+   * client's confirmation page encodes. Null when there is no confirmation
+   * code — the template then shows the reservation number, which no scanner
+   * resolves — or when drawing it fails: the email goes without the QR rather
+   * than not at all.
+   */
+  private async reservationQrAttachment(
+    registration: Registration,
+    recipient: ConfirmationRecipient,
+  ): Promise<EmailAttachment | null> {
+    const code = recipient.confirmationCode?.trim();
+    if (!code) return null;
+    try {
+      const png = await reservationQrPng(
+        reservationQrUrl(
+          code,
+          registration.public_event_date_id,
+          registration.public_event_slot_id,
+        ),
+      );
+      return {
+        content: png.toString('base64'),
+        filename: `${RESERVATION_QR_CID}.png`,
+        type: 'image/png',
+        disposition: 'inline',
+        content_id: RESERVATION_QR_CID,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[Email] reservation QR not drawn for registration ${registration.id}; sending without it`,
+        msg,
+      );
+      return null;
     }
   }
 
