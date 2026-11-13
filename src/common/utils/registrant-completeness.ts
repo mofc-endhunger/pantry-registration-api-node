@@ -1,4 +1,5 @@
 import { UnprocessableEntityException } from '@nestjs/common';
+import { isHomelessAddress } from './homeless-address';
 
 /**
  * The minimum PantryTrak needs to turn a FreshTrak registrant into a family
@@ -9,6 +10,9 @@ import { UnprocessableEntityException } from '@nestjs/common';
  *    the user from the matching queue, core/admin/freshtrak_sync/lib/matching.php:857)
  *  - a street line of 5+ characters (functions_fam.php:422-437)
  *  - a 5-digit ZIP, ZIP+4 accepted with or without the hyphen
+ *
+ * A homeless registrant needs only the names: PantryTrak records them at the
+ * event location's street and ZIP (see homeless-address.ts).
  */
 
 export const INCOMPLETE_REGISTRANT = 'INCOMPLETE_REGISTRANT';
@@ -23,7 +27,15 @@ export interface RegistrantIdentity {
   first_name?: string | null;
   last_name?: string | null;
   address_line_1?: string | null;
+  address_line_2?: string | null;
   zip_code?: string | null;
+  /** The case manager's `registrant.homeless`; a saved user carries the line 2 marker instead. */
+  homeless?: boolean | null;
+}
+
+/** Whether the registrant has no fixed address, by flag or by the saved marker. */
+export function isHomelessRegistrant(registrant: RegistrantIdentity): boolean {
+  return registrant.homeless === true || isHomelessAddress(registrant.address_line_2);
 }
 
 /**
@@ -67,6 +79,7 @@ export function missingRegistrantFields(registrant: RegistrantIdentity): Registr
   const placeholder = isPlaceholderName(registrant.first_name, registrant.last_name);
   if (placeholder || !trimmed(registrant.first_name)) missing.push('first_name');
   if (placeholder || !trimmed(registrant.last_name)) missing.push('last_name');
+  if (isHomelessRegistrant(registrant)) return missing;
   if (trimmed(registrant.address_line_1).length < MIN_ADDRESS_LENGTH) {
     missing.push('address_line_1');
   }

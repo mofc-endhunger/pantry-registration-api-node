@@ -530,6 +530,32 @@ describe('RegistrationsService', () => {
       expect(result).toEqual({ id: 500, status: 'confirmed' });
     });
 
+    it('creates the reservation for a homeless user with no street or ZIP', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        ...COMPLETE,
+        address_line_1: null,
+        address_line_2: 'Homeless',
+        zip_code: null,
+      });
+
+      const result = await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+      expect(result).toEqual({ id: 500, status: 'confirmed' });
+    });
+
+    it('still rejects a homeless user without a real name', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 10,
+        first_name: 'Guest',
+        last_name: 'User',
+        address_line_2: 'Homeless',
+      });
+
+      const body = await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+      expect(body.missing).toEqual(['first_name', 'last_name']);
+    });
+
     it('rejects before auto-creating a household, so no placeholder head is written', async () => {
       householdsService.findHouseholdIdByUserId.mockResolvedValue(undefined as any);
       (usersService.findById as jest.Mock).mockResolvedValue({ ...COMPLETE, last_name: null });
@@ -675,6 +701,34 @@ describe('RegistrationsService', () => {
 
         expect(userRepo.save).toHaveBeenCalled();
         expect(result).toEqual(expect.objectContaining({ id: 500 }));
+      });
+
+      it('registers a homeless registrant with no street or ZIP, saved with the Homeless marker', async () => {
+        const result = await service.registerForEvent(CASE_MANAGER, {
+          event_id: 1,
+          registrant: {
+            first_name: 'Rita',
+            last_name: 'Registrant',
+            address_line_1: '12 Typed St',
+            homeless: true,
+          },
+        } as any);
+
+        expect(userRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({ address_line_1: null, address_line_2: 'Homeless' }),
+        );
+        expect(result).toEqual(expect.objectContaining({ id: 500 }));
+      });
+
+      it('still rejects a homeless registrant without a last name', async () => {
+        const body = await rejection(
+          service.registerForEvent(CASE_MANAGER, {
+            event_id: 1,
+            registrant: { first_name: 'Rita', last_name: '', homeless: true },
+          } as any),
+        );
+
+        expect(body.missing).toEqual(['last_name']);
       });
 
       it('still answers 403, not 422, when a non-case-manager sends a registrant', async () => {

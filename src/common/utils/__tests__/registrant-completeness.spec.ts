@@ -86,6 +86,44 @@ describe('registrant-completeness (SUP-1141)', () => {
     });
   });
 
+  describe('homeless registrants', () => {
+    it('need no street or ZIP when the saved line 2 is the Homeless marker', () => {
+      expect(
+        missingRegistrantFields({
+          first_name: 'Ana',
+          last_name: 'Lopez',
+          address_line_1: null,
+          address_line_2: 'Homeless',
+          zip_code: null,
+        }),
+      ).toEqual([]);
+    });
+
+    it("need no street or ZIP when the case manager's registrant says homeless", () => {
+      expect(
+        missingRegistrantFields({ first_name: 'Ana', last_name: 'Lopez', homeless: true }),
+      ).toEqual([]);
+    });
+
+    it('still need both real names', () => {
+      expect(
+        missingRegistrantFields({ first_name: 'Guest', last_name: 'User', homeless: true }),
+      ).toEqual(['first_name', 'last_name']);
+      expect(
+        missingRegistrantFields({ first_name: 'Ana', last_name: '', address_line_2: 'homeless' }),
+      ).toEqual(['last_name']);
+    });
+
+    it('are not inferred from homeless: false or another line 2', () => {
+      expect(
+        missingRegistrantFields({ first_name: 'Ana', last_name: 'Lopez', homeless: false }),
+      ).toEqual(['address_line_1', 'zip_code']);
+      expect(
+        missingRegistrantFields({ first_name: 'Ana', last_name: 'Lopez', address_line_2: 'Apt 4' }),
+      ).toEqual(['address_line_1', 'zip_code']);
+    });
+  });
+
   describe('names', () => {
     it('recognises only the exact placeholder pairs', () => {
       expect(isPlaceholderName('Primary', 'Member')).toBe(true);

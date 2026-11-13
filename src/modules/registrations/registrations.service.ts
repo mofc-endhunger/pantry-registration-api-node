@@ -26,6 +26,7 @@ import {
   isRegistrantCheckEnabled,
   missingRegistrantFields,
 } from '../../common/utils/registrant-completeness';
+import { applyHomelessFlag } from '../../common/utils/homeless-address';
 type AuthUser = {
   authType?: string;
   dbUserId?: number;
@@ -1033,6 +1034,13 @@ export class RegistrationsService {
     if (!cmDbUserId) throw new ForbiddenException('Case manager user not found');
 
     // Create a new guest user for the registrant
+    const lines = applyHomelessFlag(
+      {
+        address_line_1: registrant.address_line_1 ?? null,
+        address_line_2: registrant.address_line_2 ?? null,
+      },
+      registrant.homeless,
+    );
     const registrantUser = this.userRepo.create({
       user_type: 'guest',
       identification_code: await this.generateUniqueIdentificationCode(),
@@ -1043,8 +1051,8 @@ export class RegistrationsService {
       email: registrant.email ?? null,
       date_of_birth: registrant.date_of_birth ?? null,
       phone: registrant.phone ?? null,
-      address_line_1: registrant.address_line_1 ?? null,
-      address_line_2: registrant.address_line_2 ?? null,
+      address_line_1: lines.address_line_1,
+      address_line_2: lines.address_line_2,
       city: registrant.city ?? null,
       state: registrant.state ?? null,
       zip_code: registrant.zip_code ?? null,

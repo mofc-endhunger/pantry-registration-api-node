@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import {
   IsArray,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -58,6 +59,11 @@ export class RegistrantDto {
   @IsOptional()
   @IsString()
   zip_code?: string;
+
+  /** No fixed address (SUP-1141): street and ZIP are not required, and the registrant is marked Homeless. */
+  @IsOptional()
+  @IsBoolean()
+  homeless?: boolean;
 
   @IsOptional()
   @IsInt()

@@ -100,4 +100,40 @@ describe('Registrations: incomplete registrant (E2E)', () => {
 
     expect(['confirmed', 'waitlisted']).toContain(res.body.status);
   });
+
+  it('registers a homeless guest who gave a name but no street or ZIP', async () => {
+    const eventId = await newEvent('Homeless Guest Event');
+    const guestToken = await getGuestToken(app, '5550005555');
+    await request(app.getHttpServer())
+      .patch('/guest-authentications')
+      .set('X-Guest-Token', guestToken)
+      .send({ first_name: 'Ana', last_name: 'Lopez', homeless: true })
+      .expect(200);
+
+    const res = await request(app.getHttpServer())
+      .post('/registrations')
+      .set('X-Guest-Token', guestToken)
+      .send({ event_id: eventId })
+      .expect(201);
+
+    expect(['confirmed', 'waitlisted']).toContain(res.body.status);
+  });
+
+  it('still asks a homeless guest for their name', async () => {
+    const eventId = await newEvent('Nameless Homeless Event');
+    const guestToken = await getGuestToken(app, '5550006666');
+    await request(app.getHttpServer())
+      .patch('/guest-authentications')
+      .set('X-Guest-Token', guestToken)
+      .send({ homeless: true })
+      .expect(200);
+
+    const res = await request(app.getHttpServer())
+      .post('/registrations')
+      .set('X-Guest-Token', guestToken)
+      .send({ event_id: eventId })
+      .expect(422);
+
+    expect(res.body.missing).toEqual(['first_name', 'last_name']);
+  });
 });

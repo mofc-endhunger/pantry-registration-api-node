@@ -139,6 +139,8 @@ PantryTrak cannot turn a registrant into a family, so the pantry cannot open the
 
 The API's placeholder name pairs `Primary` / `Member` and `Guest` / `User` count as both names missing.
 
+**No fixed address.** A registrant marked homeless needs only the two names. Clients send `homeless: true` on `PATCH /api/guest-authentications`, `PATCH /api/users/:id` or the case manager's `registrant`. The API then stores no street and `Homeless` on `address_line_2`, the marker legacy PantryTrak and freshtrak-service use, and ignores any street that was typed. `homeless: false` clears the marker. When PantryTrak creates the family for that user, it records them at the event location's street and ZIP with `Homeless` on line 2 (`pt_secure_2016` `nomatch_admin.php`).
+
 The API checks this before it creates anything, and answers:
 
 ```json
