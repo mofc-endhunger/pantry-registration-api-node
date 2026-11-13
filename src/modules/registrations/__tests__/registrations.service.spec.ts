@@ -440,6 +440,257 @@ describe('RegistrationsService', () => {
     );
   });
 
+  describe('incomplete registrant (SUP-1141)', () => {
+    const GUEST = { authType: 'guest', dbUserId: 10 } as any;
+    const CASE_MANAGER = { userId: 'cm-sub', roles: ['case_managers'] } as any;
+    const COMPLETE = {
+      id: 10,
+      first_name: 'Ana',
+      last_name: 'Lopez',
+      address_line_1: '123 Main St',
+      zip_code: '43215',
+    };
+    let previousFlag: string | undefined;
+
+    beforeEach(() => {
+      previousFlag = process.env.REQUIRE_COMPLETE_REGISTRANT;
+      process.env.REQUIRE_COMPLETE_REGISTRANT = 'true';
+      eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
+      householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
+      (householdsService.listMembers as jest.Mock).mockResolvedValue([]);
+      regsRepo.findOne.mockResolvedValue(null as any);
+      regsRepo.count.mockResolvedValue(0 as any);
+      regsRepo.create.mockImplementation((x: any) => x);
+      regsRepo.save.mockResolvedValue({ id: 500, status: 'confirmed' } as any);
+    });
+    afterEach(() => {
+      if (previousFlag === undefined) delete process.env.REQUIRE_COMPLETE_REGISTRANT;
+      else process.env.REQUIRE_COMPLETE_REGISTRANT = previousFlag;
+    });
+
+    /** The 422's body, as HttpExceptionFilter will pass it through. */
+    async function rejection(promise: Promise<unknown>) {
+      const err: any = await promise.then(
+        () => {
+          throw new Error('expected a 422');
+        },
+        (e: unknown) => e,
+      );
+      expect(err.getStatus()).toBe(422);
+      return err.getResponse();
+    }
+
+    it.each([
+      ['first_name', { first_name: null }],
+      ['first_name', { first_name: '   ' }],
+      ['last_name', { last_name: null }],
+      ['address_line_1', { address_line_1: null }],
+      ['address_line_1', { address_line_1: '1 Rd' }],
+      ['zip_code', { zip_code: null }],
+      ['zip_code', { zip_code: '4321' }],
+    ])('rejects a user with no usable %s with a 422 listing it', async (field, overrides) => {
+      (usersService.findById as jest.Mock).mockResolvedValue({ ...COMPLETE, ...overrides });
+
+      const body = await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+      expect(body).toEqual({
+        message: 'Registrant profile is incomplete',
+        code: 'INCOMPLETE_REGISTRANT',
+        missing: [field],
+      });
+      expect(regsRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('lists every missing field at once', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({ id: 10 });
+
+      const body = await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+      expect(body.missing).toEqual(['first_name', 'last_name', 'address_line_1', 'zip_code']);
+    });
+
+    it('creates the reservation for a complete user', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({ ...COMPLETE });
+
+      const result = await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+      expect(result).toEqual({ id: 500, status: 'confirmed' });
+    });
+
+    it('passes a guest whose profile PATCH set the fields (guest-token path)', async () => {
+      authRepo.findOne.mockResolvedValue({ user_id: 10 } as any);
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        ...COMPLETE,
+        address_line_1: '  1060 Hickory Ridge Ln ',
+        zip_code: '451401234', // ZIP+4 without the hyphen, as the web form allows
+      });
+
+      const result = await service.registerForEvent({} as any, { event_id: 1 } as any, 'tok');
+
+      expect(result).toEqual({ id: 500, status: 'confirmed' });
+    });
+
+    it('rejects before auto-creating a household, so no placeholder head is written', async () => {
+      householdsService.findHouseholdIdByUserId.mockResolvedValue(undefined as any);
+      (usersService.findById as jest.Mock).mockResolvedValue({ ...COMPLETE, last_name: null });
+
+      await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+      expect(householdsService.createHousehold).not.toHaveBeenCalled();
+    });
+
+    it('enforces nothing while REQUIRE_COMPLETE_REGISTRANT is off', async () => {
+      process.env.REQUIRE_COMPLETE_REGISTRANT = 'false';
+      (usersService.findById as jest.Mock).mockResolvedValue({ id: 10 });
+
+      const result = await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+      expect(result).toEqual({ id: 500, status: 'confirmed' });
+      expect(userRepo.update).not.toHaveBeenCalled();
+    });
+
+    describe('names copied from the head of household', () => {
+      const head = (overrides: Record<string, unknown> = {}) => ({
+        id: 77,
+        household_id: 20,
+        user_id: '10', // bigint column: MySQL returns it as a string
+        is_head_of_household: true,
+        first_name: 'Ana',
+        last_name: 'Lopez',
+        ...overrides,
+      });
+
+      it("copies the user's own head-of-household names when the users row has none, then registers", async () => {
+        (usersService.findById as jest.Mock).mockResolvedValue({
+          ...COMPLETE,
+          first_name: 'cognito-username',
+          last_name: null,
+        });
+        (householdsService.listMembers as jest.Mock).mockResolvedValue([head()]);
+
+        const result = await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+        expect(userRepo.update).toHaveBeenCalledWith(10, { first_name: 'Ana', last_name: 'Lopez' });
+        expect(result).toEqual({ id: 500, status: 'confirmed' });
+      });
+
+      it('replaces a placeholder pair on the users row', async () => {
+        (usersService.findById as jest.Mock).mockResolvedValue({
+          ...COMPLETE,
+          first_name: 'Primary',
+          last_name: 'Member',
+        });
+        (householdsService.listMembers as jest.Mock).mockResolvedValue([head()]);
+
+        await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+        expect(userRepo.update).toHaveBeenCalledWith(10, { first_name: 'Ana', last_name: 'Lopez' });
+      });
+
+      it.each([
+        ['Primary', 'Member'],
+        ['Guest', 'User'],
+      ])('never copies the API placeholder head "%s %s"', async (first, last) => {
+        (usersService.findById as jest.Mock).mockResolvedValue({
+          ...COMPLETE,
+          first_name: null,
+          last_name: null,
+        });
+        (householdsService.listMembers as jest.Mock).mockResolvedValue([
+          head({ first_name: first, last_name: last }),
+        ]);
+
+        const body = await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+        expect(body.missing).toEqual(['first_name', 'last_name']);
+        expect(userRepo.update).not.toHaveBeenCalled();
+      });
+
+      it("never copies a head of household that is someone else's member row", async () => {
+        (usersService.findById as jest.Mock).mockResolvedValue({ ...COMPLETE, last_name: null });
+        (householdsService.listMembers as jest.Mock).mockResolvedValue([head({ user_id: '99' })]);
+
+        await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+        expect(userRepo.update).not.toHaveBeenCalled();
+      });
+
+      it('leaves a users row that already has both names alone', async () => {
+        (usersService.findById as jest.Mock).mockResolvedValue({
+          ...COMPLETE,
+          first_name: 'Annie',
+        });
+        (householdsService.listMembers as jest.Mock).mockResolvedValue([head()]);
+
+        await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+        expect(householdsService.listMembers).not.toHaveBeenCalled();
+        expect(userRepo.update).not.toHaveBeenCalled();
+      });
+
+      it('still answers 422, not 500, when the household cannot be read', async () => {
+        (usersService.findById as jest.Mock).mockResolvedValue({ ...COMPLETE, last_name: null });
+        (householdsService.listMembers as jest.Mock).mockRejectedValue(new Error('Forbidden'));
+
+        const body = await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+        expect(body.missing).toEqual(['last_name']);
+      });
+    });
+
+    describe('case manager registrant', () => {
+      const REGISTRANT = {
+        first_name: 'Rita',
+        last_name: 'Registrant',
+        address_line_1: '55 Oak Ave',
+        zip_code: '43215-1234',
+      };
+
+      beforeEach(() => {
+        (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(5);
+        userRepo.findOne.mockResolvedValue(null as any); // identification code is unique
+        userRepo.create.mockImplementation((x: any) => ({ ...x, id: 900 }));
+        userRepo.save.mockImplementation(async (x: any) => x);
+        householdsService.findHouseholdIdByUserId.mockResolvedValue(30 as any);
+      });
+
+      it('rejects an incomplete registrant before creating their user', async () => {
+        const body = await rejection(
+          service.registerForEvent(CASE_MANAGER, {
+            event_id: 1,
+            registrant: { ...REGISTRANT, address_line_1: '', zip_code: undefined },
+          } as any),
+        );
+
+        expect(body.missing).toEqual(['address_line_1', 'zip_code']);
+        expect(userRepo.save).not.toHaveBeenCalled();
+        expect(householdsService.createHousehold).not.toHaveBeenCalled();
+      });
+
+      it('registers a complete registrant', async () => {
+        const result = await service.registerForEvent(CASE_MANAGER, {
+          event_id: 1,
+          registrant: REGISTRANT,
+        } as any);
+
+        expect(userRepo.save).toHaveBeenCalled();
+        expect(result).toEqual(expect.objectContaining({ id: 500 }));
+      });
+
+      it('still answers 403, not 422, when a non-case-manager sends a registrant', async () => {
+        await expect(
+          service.registerForEvent(
+            { userId: 'u', roles: [] } as any,
+            {
+              event_id: 1,
+              registrant: { first_name: '', last_name: '' },
+            } as any,
+          ),
+        ).rejects.toThrow('Only case managers may register on behalf of another person');
+      });
+    });
+  });
+
   describe('reservation confirmation email', () => {
     const GUEST = { authType: 'guest', dbUserId: 10 } as any;
     const TEMPLATE_ID = 'd-test-reservation-template';
@@ -922,6 +1173,7 @@ function createHouseholdsServiceMock(): jest.Mocked<HouseholdsService> {
     findHouseholdIdByUserId: jest.fn(),
     createHousehold: jest.fn(),
     getHouseholdById: jest.fn(),
+    listMembers: jest.fn(),
   } as any;
 }
 
