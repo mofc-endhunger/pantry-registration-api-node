@@ -26,7 +26,12 @@ import {
   isRegistrantCheckEnabled,
   missingRegistrantFields,
 } from '../../common/utils/registrant-completeness';
-import { applyHomelessFlag } from '../../common/utils/homeless-address';
+import {
+  applyHomelessFlag,
+  EventAddress,
+  needsEventAddress,
+  UserAddress,
+} from '../../common/utils/homeless-address';
 type AuthUser = {
   authType?: string;
   dbUserId?: number;
@@ -110,6 +115,31 @@ export class RegistrationsService {
    * persisted during an earlier session where the real email was unavailable.
    * Uses the email from the current JWT — no Cognito API call needed.
    */
+  /**
+   * The event's address, for a homeless user with no street of their own
+   * (SUP-1141): PantryTrak records them there, as its own staff screen does.
+   * Null for everyone else, and when the lookup fails, so it never stops a
+   * registration or its sync.
+   */
+  private async homelessEventAddress(
+    user: UserAddress | null | undefined,
+    eventId: number | null | undefined,
+  ): Promise<EventAddress | null> {
+    if (!eventId || !needsEventAddress(user)) return null;
+    try {
+      const details = await this.publicSchedule.getEventContactDetails(eventId);
+      if (!details) return null;
+      return {
+        address1: details.address1,
+        city: details.city,
+        state: details.state,
+        zip: details.zip,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   private async healEmailIfNeeded(dbUserId: number, jwtEmail: string | undefined): Promise<void> {
     if (!jwtEmail) return;
     try {
@@ -800,7 +830,8 @@ export class RegistrationsService {
       if (!this.pantryTrakClient) return;
       try {
         const userForSync = await this.usersService.findById(dbUserId);
-        const userResult = await this.pantryTrakClient.createUser(userForSync);
+        const eventAddress = await this.homelessEventAddress(userForSync, saved.event_id);
+        const userResult = await this.pantryTrakClient.createUser(userForSync, { eventAddress });
         if (!userResult.success) {
           // Skip createReservation entirely — every reservation in PT must be
           // attached to a user record. Creating a reservation with no matching
@@ -1069,7 +1100,8 @@ export class RegistrationsService {
     let ptUserCreated = false;
     try {
       if (this.pantryTrakClient) {
-        const r = await this.pantryTrakClient.createUser(registrantUser);
+        const eventAddress = await this.homelessEventAddress(registrantUser, dto.event_id);
+        const r = await this.pantryTrakClient.createUser(registrantUser, { eventAddress });
         ptUserCreated = !!r.success;
         if (!r.success) {
           // eslint-disable-next-line no-console

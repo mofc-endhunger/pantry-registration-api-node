@@ -1,4 +1,79 @@
-import { applyHomelessFlag, HOMELESS_LINE_TWO, isHomelessAddress } from '../homeless-address';
+import {
+  applyHomelessFlag,
+  HOMELESS_LINE_TWO,
+  isHomelessAddress,
+  needsEventAddress,
+  pantryTrakAddress,
+} from '../homeless-address';
+
+describe('PantryTrak address of a homeless user (SUP-1141)', () => {
+  const EVENT = { address1: '222 Gantz Rd', city: 'Grove City', state: 'OH', zip: '43123' };
+  const HOMELESS = {
+    id: 10,
+    first_name: 'Ana',
+    address_line_1: null,
+    address_line_2: 'Homeless',
+    city: 'Columbus',
+    state: 'OH',
+    zip_code: '43215',
+  };
+
+  it("sends the event's street, city, state and ZIP, with Homeless on line 2", () => {
+    expect(pantryTrakAddress(HOMELESS, { ...EVENT, address1: ' 222 Gantz Rd ' })).toEqual({
+      id: 10,
+      first_name: 'Ana',
+      address_line_1: '222 Gantz Rd',
+      address_line_2: 'Homeless',
+      city: 'Grove City',
+      state: 'OH',
+      zip_code: '43123',
+    });
+  });
+
+  it.each([
+    ['no event', null],
+    ['an event with no street', { ...EVENT, address1: '  ' }],
+  ])(
+    "with %s, sends no street, city, state or ZIP, so PantryTrak keeps the last event's",
+    (_, event) => {
+      expect(pantryTrakAddress(HOMELESS, event)).toEqual({
+        id: 10,
+        first_name: 'Ana',
+        address_line_1: null,
+        address_line_2: 'Homeless',
+        city: null,
+        state: null,
+        zip_code: null,
+      });
+    },
+  );
+
+  it('leaves a user with an address unchanged', () => {
+    const user = { address_line_1: '123 Main St', address_line_2: 'Apt 4', zip_code: '43215' };
+    expect(pantryTrakAddress(user, EVENT)).toBe(user);
+  });
+
+  it('leaves a street a homeless-marked user already has (older records)', () => {
+    const user = { ...HOMELESS, address_line_1: '50 Shelter Way' };
+    expect(pantryTrakAddress(user, EVENT)).toBe(user);
+  });
+
+  it('does not change the record it was given', () => {
+    const user = { ...HOMELESS };
+    pantryTrakAddress(user, EVENT);
+    expect(user).toEqual(HOMELESS);
+  });
+
+  it.each([
+    [{ address_line_2: 'Homeless' }, true],
+    [{ address_line_1: '', address_line_2: 'homeless' }, true],
+    [{ address_line_1: '1 Main St', address_line_2: 'Homeless' }, false],
+    [{ address_line_2: null }, false],
+    [null, false],
+  ])('needsEventAddress(%p) is %p', (user, expected) => {
+    expect(needsEventAddress(user)).toBe(expected);
+  });
+});
 
 describe('homeless address (SUP-1141)', () => {
   describe('isHomelessAddress', () => {

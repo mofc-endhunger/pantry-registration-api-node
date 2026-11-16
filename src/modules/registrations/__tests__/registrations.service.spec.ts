@@ -745,6 +745,116 @@ describe('RegistrationsService', () => {
     });
   });
 
+  describe('PantryTrak sync of a homeless registrant (SUP-1141)', () => {
+    const GUEST = { authType: 'guest', dbUserId: 10 } as any;
+    const CASE_MANAGER = { userId: 'cm-sub', roles: ['case_managers'] } as any;
+    const HOMELESS = {
+      id: 10,
+      first_name: 'Ana',
+      last_name: 'Lopez',
+      address_line_1: null,
+      address_line_2: 'Homeless',
+      city: 'Columbus',
+      zip_code: '43215',
+    };
+    const EVENT = {
+      eventName: 'Gantz Road Pantry',
+      address1: '222 Gantz Rd',
+      address2: 'Door 3',
+      city: 'Grove City',
+      state: 'OH',
+      zip: '43123',
+      instructions: null,
+      agencyName: null,
+      agencyPhone: null,
+    };
+    let pantryTrak: { createUser: jest.Mock; createReservation: jest.Mock };
+
+    beforeEach(() => {
+      pantryTrak = {
+        createUser: jest.fn().mockResolvedValue({ success: true }),
+        createReservation: jest.fn().mockResolvedValue({ success: true }),
+      };
+      (service as any).pantryTrakClient = pantryTrak;
+      eventsRepo.findOne.mockResolvedValue({ id: 77, is_active: true } as any);
+      householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
+      (householdsService.listMembers as jest.Mock).mockResolvedValue([]);
+      regsRepo.findOne.mockResolvedValue(null as any);
+      regsRepo.count.mockResolvedValue(0 as any);
+      regsRepo.create.mockImplementation((x: any) => x);
+      regsRepo.save.mockImplementation(async (x: any) => ({ ...x, id: 500 }));
+      publicSchedule.getEventContactDetails.mockResolvedValue(EVENT);
+    });
+
+    /** Lets the fire-and-forget sync run until `done`, for at most 50 turns. */
+    async function waitFor(done: () => boolean) {
+      for (let i = 0; i < 50 && !done(); i++) await flushBackgroundWork();
+      expect(done()).toBe(true);
+    }
+    const synced = () => waitFor(() => pantryTrak.createUser.mock.calls.length > 0);
+
+    it("sends the event's address for a homeless user, registering themself", async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({ ...HOMELESS });
+
+      await service.registerForEvent(GUEST, { event_id: 77 } as any);
+      await synced();
+
+      expect(publicSchedule.getEventContactDetails).toHaveBeenCalledWith(77);
+      expect(pantryTrak.createUser).toHaveBeenCalledWith(expect.objectContaining({ id: 10 }), {
+        eventAddress: { address1: '222 Gantz Rd', city: 'Grove City', state: 'OH', zip: '43123' },
+      });
+    });
+
+    it('looks nothing up for a user with an address of their own', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        ...HOMELESS,
+        address_line_1: '123 Main St',
+        address_line_2: null,
+      });
+
+      await service.registerForEvent(GUEST, { event_id: 77 } as any);
+      await synced();
+
+      expect(publicSchedule.getEventContactDetails).not.toHaveBeenCalled();
+      expect(pantryTrak.createUser).toHaveBeenCalledWith(expect.anything(), {
+        eventAddress: null,
+      });
+    });
+
+    it('still syncs, with no event address, when the lookup fails', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({ ...HOMELESS });
+      publicSchedule.getEventContactDetails.mockRejectedValue(new Error('db down'));
+
+      await service.registerForEvent(GUEST, { event_id: 77 } as any);
+      await synced();
+
+      expect(pantryTrak.createUser).toHaveBeenCalledWith(expect.anything(), {
+        eventAddress: null,
+      });
+      await waitFor(() => pantryTrak.createReservation.mock.calls.length > 0);
+    });
+
+    it("sends the event's address for a homeless registrant a case manager registers", async () => {
+      (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(5);
+      userRepo.findOne.mockResolvedValue(null as any);
+      userRepo.create.mockImplementation((x: any) => ({ ...x, id: 900 }));
+      userRepo.save.mockImplementation(async (x: any) => x);
+
+      await service.registerForEvent(CASE_MANAGER, {
+        event_id: 77,
+        registrant: { first_name: 'Rita', last_name: 'Registrant', homeless: true },
+      } as any);
+
+      expect(publicSchedule.getEventContactDetails).toHaveBeenCalledWith(77);
+      expect(pantryTrak.createUser).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 900, address_line_1: null, address_line_2: 'Homeless' }),
+        {
+          eventAddress: { address1: '222 Gantz Rd', city: 'Grove City', state: 'OH', zip: '43123' },
+        },
+      );
+    });
+  });
+
   describe('reservation confirmation email', () => {
     const GUEST = { authType: 'guest', dbUserId: 10 } as any;
     const TEMPLATE_ID = 'd-test-reservation-template';
