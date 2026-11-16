@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { cognitoJwt } from './helpers/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Event } from '../src/entities/event.entity';
@@ -39,16 +40,7 @@ describe('Registrations timeslot flow (E2E)', () => {
     );
 
     // Prepare a JWT user
-    const email = `ts+${Date.now()}@example.com`;
-    await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({ email, password: 'Pw!23456' })
-      .expect(201);
-    const login = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email, password: 'Pw!23456' })
-      .expect(201);
-    const jwt = login.body.access_token as string;
+    const { token: jwt } = cognitoJwt({ email: `ts+${Date.now()}@example.com` });
 
     // First registration for timeslot is confirmed
     const reg1 = await request(app.getHttpServer())
@@ -56,7 +48,7 @@ describe('Registrations timeslot flow (E2E)', () => {
       .set('Authorization', `Bearer ${jwt}`)
       .send({ event_id: (event as any).id, timeslot_id: (slot as any).id })
       .expect(201);
-    expect(['confirmed', 'waitlisted']).toContain(reg1.body.status);
+    expect(reg1.body.status).toBe('confirmed');
 
     // Second guest registration should be waitlisted due to timeslot capacity
     const guest = await request(app.getHttpServer())

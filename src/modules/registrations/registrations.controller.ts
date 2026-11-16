@@ -26,6 +26,7 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiSecurity,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -59,6 +60,22 @@ export class RegistrationsController {
   @ApiCreatedResponse({ description: 'Registration created (confirmed or waitlisted)' })
   @ApiForbiddenResponse({
     description: 'Non-case-manager sent registrant payload, or user not resolved',
+  })
+  @ApiUnprocessableEntityResponse({
+    description:
+      'INCOMPLETE_REGISTRANT (SUP-1141, while REQUIRE_COMPLETE_REGISTRANT=true): the registrant ' +
+      "(the user, or the case manager's `registrant` payload) lacks what PantryTrak needs — first " +
+      'and last name, a street line of 5+ characters, a 5-digit ZIP. `missing` lists the failing ' +
+      'fields. See docs/prd-reservations.md §12a.',
+    schema: {
+      example: {
+        message: 'Registrant profile is incomplete',
+        error: 'UnprocessableEntityException',
+        status: 422,
+        code: 'INCOMPLETE_REGISTRANT',
+        missing: ['last_name', 'address_line_1'],
+      },
+    },
   })
   @Post()
   async register(@Body() dto: RegisterDto, @Req() req: Request) {

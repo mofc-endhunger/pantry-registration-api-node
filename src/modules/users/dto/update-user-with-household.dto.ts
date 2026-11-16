@@ -22,6 +22,11 @@ export class UpdateUserWithHouseholdDto extends UpdateHouseholdDto {
   @IsString()
   declare zip_code?: string;
 
+  /** No fixed address (SUP-1141): the street is not used, and the user is marked Homeless. */
+  @IsOptional()
+  @IsBoolean()
+  homeless?: boolean;
+
   @IsOptional()
   @IsString()
   phone?: string;
