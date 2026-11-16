@@ -12,6 +12,7 @@ import { SafeRandom } from '../../common/utils/safe-random';
 import { mapIdToSuffix, mapSuffixToId } from '../../common/utils/suffix-mapping';
 import { mapGenderToId, mapIdToGender } from '../../common/utils/gender-mapping';
 import { PantryTrakClient } from '../integrations/pantrytrak.client';
+import { applyHomelessFlag } from '../../common/utils/homeless-address';
 
 // Minimal shape needed from HouseholdsService.getHouseholdById
 type HouseholdWithCounts = {
@@ -288,6 +289,18 @@ export class UsersService {
     const hohMember =
       dto.members?.find((m) => m.user_id != null && m.user_id == id?.toString()) ??
       dto.members?.find((m) => !!m.is_head_of_household);
+    // No fixed address (SUP-1141): the users row and the household address
+    // both get the Homeless marker instead of a street. Un-ticking the box
+    // needs the saved line 2 to know whether the marker is there to clear.
+    const storedLine2 =
+      dto.homeless === false && dto.address_line_2 === undefined
+        ? (await this.userRepository.findOneBy({ id }))?.address_line_2
+        : undefined;
+    const lines = applyHomelessFlag(
+      { address_line_1: dto.address_line_1, address_line_2: dto.address_line_2 },
+      dto.homeless,
+      storedLine2,
+    );
     // Update user fields (only those that exist on the user entity). The
     // users row stores gender and suffix as strings where the member row
     // stores ids; an id outside the known set leaves the user's value alone.
@@ -298,8 +311,8 @@ export class UsersService {
       date_of_birth: hohMember?.date_of_birth ?? undefined,
       gender: mapIdToGender(hohMember?.gender_id),
       suffix: mapIdToSuffix(hohMember?.suffix_id),
-      address_line_1: dto.address_line_1,
-      address_line_2: dto.address_line_2,
+      address_line_1: lines.address_line_1,
+      address_line_2: lines.address_line_2,
       city: dto.city,
       state: dto.state,
       zip_code: dto.zip_code,
@@ -324,7 +337,8 @@ export class UsersService {
     const householdId = (dto.household_id ?? dto.id) as number;
     // Delegate to household PATCH logic first (handles member deactivation when members array present).
     // Map user address fields to household address fields if present.
-    const householdPatch: Record<string, unknown> = { ...dto };
+    const householdPatch: Record<string, unknown> = { ...dto, ...lines };
+    delete householdPatch['homeless'];
     // Map user-facing address fields to household address fields when needed
     if (
       householdPatch['address_line_1'] !== undefined &&
@@ -382,6 +396,17 @@ export class UsersService {
     }
 
     // After household update, add placeholder members to reach desired counts (if provided).
+    //
+    // SUP-783: this reconciliation only runs when the caller described the
+    // household by SIZE alone. When the payload carries `members[]`, the
+    // caller has said who the members are and that list is the authority:
+    // `HouseholdsService.updateHousehold` has already upserted/deactivated
+    // them and recomputed the counts from the active members. Counts sent
+    // beside `members[]` (the legacy client still sends them, and counted
+    // seniors from 65 where the server counts from 60) are ignored rather
+    // than reconciled, because reconciling a disagreement by inventing
+    // "Adult N Adult" rows is the bug.
+    const membersAreAuthoritative = Array.isArray(dto.members);
     try {
       const wantsCounts =
         !!dto.counts ||
@@ -391,7 +416,7 @@ export class UsersService {
         (dto as { seniors?: number }).seniors != null ||
         (dto as { adults?: number }).adults != null ||
         (dto as { children?: number }).children != null;
-      if (householdId && wantsCounts) {
+      if (householdId && wantsCounts && !membersAreAuthoritative) {
         const toInt = (val: unknown): number => {
           if (val === undefined || val === null) return 0;
           const n = typeof val === 'string' ? Number(val) : (val as number);

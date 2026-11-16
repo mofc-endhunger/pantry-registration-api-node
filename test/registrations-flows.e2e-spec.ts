@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { cognitoJwt } from './helpers/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Event } from '../src/entities/event.entity';
@@ -39,17 +40,13 @@ describe('Registrations flows (E2E)', () => {
       .expect(201);
 
     expect(regRes.body).toHaveProperty('id');
-    expect(['confirmed', 'waitlisted']).toContain(regRes.body.status);
+    expect(regRes.body.status).toBe('confirmed');
 
-    // Cancel may 404 if household auto-provisioning doesn't resolve; allow 200|404 for now
     const cancel = await request(app.getHttpServer())
       .patch(`/registrations/${regRes.body.id}/cancel`)
-      .set('X-Guest-Token', guestToken);
-    if (cancel.status === 200) {
-      expect(cancel.body.status).toBe('cancelled');
-    } else {
-      expect([404, 403]).toContain(cancel.status);
-    }
+      .set('X-Guest-Token', guestToken)
+      .expect(200);
+    expect(cancel.body.status).toBe('cancelled');
   });
 
   it('jwt user can register and check-in', async () => {
@@ -57,17 +54,7 @@ describe('Registrations flows (E2E)', () => {
       eventsRepo.create({ name: 'JWT Flow Event', is_active: true, capacity: null } as any),
     );
 
-    const regEmail = `regflow+${Date.now()}@example.com`;
-    await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({ email: regEmail, password: 'TestPassword123' })
-      .expect(201);
-
-    const login = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email: regEmail, password: 'TestPassword123' })
-      .expect(201);
-    const jwt = login.body.access_token as string;
+    const { token: jwt } = cognitoJwt({ email: `regflow+${Date.now()}@example.com` });
 
     const regRes = await request(app.getHttpServer())
       .post('/registrations')

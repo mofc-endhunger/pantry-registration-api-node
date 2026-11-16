@@ -20,6 +20,13 @@ import { User } from '../../entities/user.entity';
 import { SafeRandom } from '../../common/utils/safe-random';
 import { RegistrantDto } from './dto/register.dto';
 import { mapSuffixToId } from '../../common/utils/suffix-mapping';
+import {
+  hasRealName,
+  incompleteRegistrantException,
+  isRegistrantCheckEnabled,
+  missingRegistrantFields,
+} from '../../common/utils/registrant-completeness';
+import { applyHomelessFlag } from '../../common/utils/homeless-address';
 type AuthUser = {
   authType?: string;
   dbUserId?: number;
@@ -39,7 +46,12 @@ import { PublicSurveyQuestionMap } from '../../entities-public/survey-question-m
 import { isSurveyActionable } from '../../common/utils/survey-actionable';
 import { FEEDBACK_SURVEY_TYPE_ID } from '../../common/constants/survey.constants';
 import { PLACEHOLDER_EMAIL_SUFFIX } from '../../common/constants/notification.constants';
-import { SendgridService } from '../notifications/sendgrid.service';
+import { EmailAttachment, SendgridService } from '../notifications/sendgrid.service';
+import {
+  RESERVATION_QR_CID,
+  reservationQrPng,
+  reservationQrUrl,
+} from '../../common/utils/reservation-qr';
 import {
   compactTemplateData,
   formatAddress,
@@ -140,10 +152,57 @@ export class RegistrationsService {
       return;
     }
     const data = await this.buildReservationEmailData(registration, recipient);
-    const result = await this.sendgrid.sendTemplate(to, templateId, data);
+    const qr = await this.reservationQrAttachment(registration, recipient);
+    const result = qr
+      ? await this.sendgrid.sendTemplate(
+          to,
+          templateId,
+          { ...data, qr_cid: RESERVATION_QR_CID },
+          { attachments: [qr] },
+        )
+      : await this.sendgrid.sendTemplate(to, templateId, data);
     if (!result.success && result.error !== 'disabled') {
       // eslint-disable-next-line no-console
       console.warn(`[Email] reservation confirmation not sent for registration ${registration.id}`);
+    }
+  }
+
+  /**
+   * The check-in QR (SUP-1092) as an inline attachment, encoding the link the
+   * client's confirmation page encodes. Null when there is no confirmation
+   * code — the template then shows the reservation number, which no scanner
+   * resolves — or when drawing it fails: the email goes without the QR rather
+   * than not at all.
+   */
+  private async reservationQrAttachment(
+    registration: Registration,
+    recipient: ConfirmationRecipient,
+  ): Promise<EmailAttachment | null> {
+    const code = recipient.confirmationCode?.trim();
+    if (!code) return null;
+    try {
+      const png = await reservationQrPng(
+        reservationQrUrl(
+          code,
+          registration.public_event_date_id,
+          registration.public_event_slot_id,
+        ),
+      );
+      return {
+        content: png.toString('base64'),
+        filename: `${RESERVATION_QR_CID}.png`,
+        type: 'image/png',
+        disposition: 'inline',
+        content_id: RESERVATION_QR_CID,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[Email] reservation QR not drawn for registration ${registration.id}; sending without it`,
+        msg,
+      );
+      return null;
     }
   }
 
@@ -325,6 +384,64 @@ export class RegistrationsService {
     return withSurvey;
   }
 
+  /**
+   * SUP-1141: reject a registrant PantryTrak could not turn into a family.
+   *
+   * A user whose names never reached the users row (set up before SUP-1001,
+   * or auto-created with only the Cognito username) first gets them from
+   * their own head-of-household member, the names the client shows them.
+   * API placeholder heads ('Primary Member', 'Guest User') are never copied.
+   * The copy is saved, not just checked, because the PantryTrak sync after
+   * the reservation re-reads the users row.
+   */
+  private async assertRegistrantComplete(dbUserId: number): Promise<void> {
+    const user = await this.usersService.findById(dbUserId);
+    if (!hasRealName(user.first_name, user.last_name)) {
+      const head = await this.findOwnHeadOfHousehold(dbUserId);
+      if (head && hasRealName(head.first_name, head.last_name)) {
+        const names = {
+          first_name: head.first_name.trim(),
+          last_name: (head.last_name ?? '').trim(),
+        };
+        await this.userRepo.update(dbUserId, names);
+        Object.assign(user, names);
+        console.info(
+          `[Registrations] copied head-of-household names to users row for userId=${dbUserId} (SUP-1141)`,
+        );
+      }
+    }
+    const missing = missingRegistrantFields(user);
+    if (missing.length > 0) throw incompleteRegistrantException(missing);
+  }
+
+  /**
+   * The head-of-household member that IS this user (linked by user_id), or
+   * null when there is none or it can't be read. Never another person's row.
+   */
+  private async findOwnHeadOfHousehold(
+    dbUserId: number,
+  ): Promise<{ first_name: string; last_name?: string | null } | null> {
+    try {
+      const householdId = await this.householdsService.findHouseholdIdByUserId(dbUserId);
+      if (!householdId) return null;
+      const members = (await this.householdsService.listMembers(householdId, dbUserId)) as Array<{
+        user_id?: number | string | null;
+        is_head_of_household?: boolean | number;
+        first_name: string;
+        last_name?: string | null;
+      }>;
+      return (
+        members.find(
+          (m) =>
+            !!m.is_head_of_household && m.user_id != null && String(m.user_id) === String(dbUserId),
+        ) ?? null
+      );
+    } catch {
+      // Unreadable household (e.g. added_by is someone else): nothing to copy.
+      return null;
+    }
+  }
+
   async registerForEvent(
     user: AuthUser,
     dto: {
@@ -367,6 +484,12 @@ export class RegistrationsService {
       if (!roles.includes('case_managers')) {
         throw new ForbiddenException('Only case managers may register on behalf of another person');
       }
+      // Checked before registerOnBehalfOf creates the registrant's user and
+      // syncs it to PantryTrak, so a rejected request leaves nothing behind.
+      if (isRegistrantCheckEnabled()) {
+        const missing = missingRegistrantFields(dto.registrant);
+        if (missing.length > 0) throw incompleteRegistrantException(missing);
+      }
       return this.registerOnBehalfOf(user, dto, dto.registrant);
     }
 
@@ -403,6 +526,9 @@ export class RegistrationsService {
       }
     }
     if (!dbUserId) throw new ForbiddenException('User not found');
+    // Before the household auto-create below, which would otherwise give an
+    // incomplete user a placeholder head (SUP-1141).
+    if (isRegistrantCheckEnabled()) await this.assertRegistrantComplete(dbUserId);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     let household_id = await this.householdsService.findHouseholdIdByUserId(dbUserId);
     if (!household_id) {
@@ -617,7 +743,7 @@ export class RegistrationsService {
       const timeslot = await this.timesRepo.findOne({ where: { id: dto.timeslot_id } });
       capacity = timeslot?.capacity ?? null;
       confirmedCount = await this.regsRepo.count({
-        where: { timeslot_id: dto.event_slot_id, status: 'confirmed' } as any,
+        where: { timeslot_id: dto.timeslot_id, status: 'confirmed' } as any,
       });
     } else if (dto.event_date_id) {
       const date = await this.publicSchedule.getDate(dto.event_date_id);
@@ -908,6 +1034,13 @@ export class RegistrationsService {
     if (!cmDbUserId) throw new ForbiddenException('Case manager user not found');
 
     // Create a new guest user for the registrant
+    const lines = applyHomelessFlag(
+      {
+        address_line_1: registrant.address_line_1 ?? null,
+        address_line_2: registrant.address_line_2 ?? null,
+      },
+      registrant.homeless,
+    );
     const registrantUser = this.userRepo.create({
       user_type: 'guest',
       identification_code: await this.generateUniqueIdentificationCode(),
@@ -918,8 +1051,8 @@ export class RegistrationsService {
       email: registrant.email ?? null,
       date_of_birth: registrant.date_of_birth ?? null,
       phone: registrant.phone ?? null,
-      address_line_1: registrant.address_line_1 ?? null,
-      address_line_2: registrant.address_line_2 ?? null,
+      address_line_1: lines.address_line_1,
+      address_line_2: lines.address_line_2,
       city: registrant.city ?? null,
       state: registrant.state ?? null,
       zip_code: registrant.zip_code ?? null,
@@ -1020,7 +1153,7 @@ export class RegistrationsService {
       const timeslot = await this.timesRepo.findOne({ where: { id: dto.timeslot_id } });
       capacity = timeslot?.capacity ?? null;
       confirmedCount = await this.regsRepo.count({
-        where: { timeslot_id: dto.event_slot_id, status: 'confirmed' } as any,
+        where: { timeslot_id: dto.timeslot_id, status: 'confirmed' } as any,
       });
     } else if (dto.event_date_id) {
       const date = await this.publicSchedule.getDate(dto.event_date_id);

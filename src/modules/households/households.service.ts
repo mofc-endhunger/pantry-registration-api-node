@@ -1,4 +1,10 @@
-import { Injectable, ForbiddenException, NotFoundException, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+  Optional,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, DataSource } from 'typeorm';
 import { Household } from '../../entities/household.entity';
@@ -100,6 +106,20 @@ export class HouseholdsService {
     requesterUserId: number,
     dto: UpdateHouseholdDto,
   ): Promise<HouseholdWithCounts> {
+    // SUP-783: a household has exactly one head. Every consumer picks the head
+    // with `.find(...)`, so two flagged members would make the winner depend
+    // on row order; refuse the payload before anything is written. A payload
+    // that flags no head is left alone (head re-assignment is out of scope,
+    // SUP-773): an omitted head keeps its flag through the exemption below.
+    if (Array.isArray(dto.members)) {
+      const flaggedHeads = dto.members.filter((m) => !!m.is_head_of_household).length;
+      if (flaggedHeads > 1) {
+        throw new UnprocessableEntityException(
+          `members[] flags ${flaggedHeads} heads of household; exactly one is allowed`,
+        );
+      }
+    }
+
     const household = await this.householdsRepo.findOne({
       where: { id: householdId },
       relations: { members: true, addresses: true },

@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { cognitoJwt } from './helpers/jwt';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Event } from '../src/entities/event.entity';
@@ -31,16 +32,7 @@ describe('GET /registrations/me (JWT E2E)', () => {
     const event = await eventsRepo.save(
       eventsRepo.create({ name: 'JWT ME Event', is_active: true, capacity: null } as any),
     );
-    const email = `jwtme+${Date.now()}@example.com`;
-    await request(app.getHttpServer())
-      .post('/auth/register')
-      .send({ email, password: 'Pw123!!' })
-      .expect(201);
-    const login = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email, password: 'Pw123!!' })
-      .expect(201);
-    const jwt = login.body.access_token as string;
+    const { token: jwt } = cognitoJwt({ email: `jwtme+${Date.now()}@example.com` });
 
     await request(app.getHttpServer())
       .post('/registrations')

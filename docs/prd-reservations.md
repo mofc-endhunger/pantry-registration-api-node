@@ -126,6 +126,42 @@
 - `401` on auth failures, `403` on ownership/role failures, `404` unknown ids, `400` for rule violations.
 - Ownership: resolve `household_id` via JWT or `X-Guest-Token` (same as existing registration flows).
 
+#### 12a) `422 INCOMPLETE_REGISTRANT` on `POST /api/registrations` (SUP-1141)
+
+PantryTrak cannot turn a registrant into a family, so the pantry cannot open the visit, without:
+
+| Field            | Rule (values are trimmed first)                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------- |
+| `first_name`     | at least 1 character                                                                     |
+| `last_name`      | at least 1 character                                                                     |
+| `address_line_1` | at least 5 characters                                                                    |
+| `zip_code`       | 5 digits; ZIP+4 accepted with or without the hyphen (`43215`, `43215-1234`, `432151234`) |
+
+The API's placeholder name pairs `Primary` / `Member` and `Guest` / `User` count as both names missing.
+
+**No fixed address.** A registrant marked homeless needs only the two names. Clients send `homeless: true` on `PATCH /api/guest-authentications`, `PATCH /api/users/:id` or the case manager's `registrant`. The API then stores no street and `Homeless` on `address_line_2`, the marker legacy PantryTrak and freshtrak-service use, and ignores any street that was typed. `homeless: false` clears the marker. When PantryTrak creates the family for that user, it records them at the event location's street and ZIP with `Homeless` on line 2 (`pt_secure_2016` `nomatch_admin.php`).
+
+The API checks this before it creates anything, and answers:
+
+```json
+{
+  "message": "Registrant profile is incomplete",
+  "error": "UnprocessableEntityException",
+  "status": 422,
+  "code": "INCOMPLETE_REGISTRANT",
+  "missing": ["last_name", "address_line_1"]
+}
+```
+
+`missing` lists only the failing fields, always in the order above. Clients should branch on `code` and send the user to the profile form with those fields marked.
+
+What is checked depends on the caller:
+
+- **Guest (`X-Guest-Token`) and Cognito user:** the user's `users` row, so the guest's `PATCH /api/guest-authentications` or the Cognito user's `PATCH /api/users/:id` must come first. If the row has no real name, the API first copies the names of the user's own head-of-household member (never a placeholder pair, never another person's member row), so accounts set up before SUP-1001 are not turned away. The 422 comes before a missing household is auto-created.
+- **Case manager:** the `registrant` payload. A request from a non-case-manager that carries `registrant` still gets `403`.
+
+Enforced only while `REQUIRE_COMPLETE_REGISTRANT=true`; off by default so the API can deploy before the clients handle the 422. The flag is temporary and is retired once the rollout is confirmed.
+
 ### 13) Performance & Pagination
 
 - Default `limit=50`, `offset` based pagination; cap max limit to 200.

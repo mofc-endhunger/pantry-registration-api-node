@@ -16,6 +16,7 @@ import { SurveyFamily } from '../../../entities/survey-families.entity';
 import { PublicSurvey } from '../../../entities-public/survey.public.entity';
 import { PublicSurveyQuestionMap } from '../../../entities-public/survey-question-map.public.entity';
 import { SendgridService } from '../../notifications/sendgrid.service';
+import * as reservationQr from '../../../common/utils/reservation-qr';
 
 /** Let fire-and-forget work (the confirmation email) settle before asserting. */
 const flushBackgroundWork = () => new Promise((resolve) => setImmediate(resolve));
@@ -439,18 +440,343 @@ describe('RegistrationsService', () => {
     );
   });
 
+  describe('incomplete registrant (SUP-1141)', () => {
+    const GUEST = { authType: 'guest', dbUserId: 10 } as any;
+    const CASE_MANAGER = { userId: 'cm-sub', roles: ['case_managers'] } as any;
+    const COMPLETE = {
+      id: 10,
+      first_name: 'Ana',
+      last_name: 'Lopez',
+      address_line_1: '123 Main St',
+      zip_code: '43215',
+    };
+    let previousFlag: string | undefined;
+
+    beforeEach(() => {
+      previousFlag = process.env.REQUIRE_COMPLETE_REGISTRANT;
+      process.env.REQUIRE_COMPLETE_REGISTRANT = 'true';
+      eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
+      householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
+      (householdsService.listMembers as jest.Mock).mockResolvedValue([]);
+      regsRepo.findOne.mockResolvedValue(null as any);
+      regsRepo.count.mockResolvedValue(0 as any);
+      regsRepo.create.mockImplementation((x: any) => x);
+      regsRepo.save.mockResolvedValue({ id: 500, status: 'confirmed' } as any);
+    });
+    afterEach(() => {
+      if (previousFlag === undefined) delete process.env.REQUIRE_COMPLETE_REGISTRANT;
+      else process.env.REQUIRE_COMPLETE_REGISTRANT = previousFlag;
+    });
+
+    /** The 422's body, as HttpExceptionFilter will pass it through. */
+    async function rejection(promise: Promise<unknown>) {
+      const err: any = await promise.then(
+        () => {
+          throw new Error('expected a 422');
+        },
+        (e: unknown) => e,
+      );
+      expect(err.getStatus()).toBe(422);
+      return err.getResponse();
+    }
+
+    it.each([
+      ['first_name', { first_name: null }],
+      ['first_name', { first_name: '   ' }],
+      ['last_name', { last_name: null }],
+      ['address_line_1', { address_line_1: null }],
+      ['address_line_1', { address_line_1: '1 Rd' }],
+      ['zip_code', { zip_code: null }],
+      ['zip_code', { zip_code: '4321' }],
+    ])('rejects a user with no usable %s with a 422 listing it', async (field, overrides) => {
+      (usersService.findById as jest.Mock).mockResolvedValue({ ...COMPLETE, ...overrides });
+
+      const body = await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+      expect(body).toEqual({
+        message: 'Registrant profile is incomplete',
+        code: 'INCOMPLETE_REGISTRANT',
+        missing: [field],
+      });
+      expect(regsRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('lists every missing field at once', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({ id: 10 });
+
+      const body = await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+      expect(body.missing).toEqual(['first_name', 'last_name', 'address_line_1', 'zip_code']);
+    });
+
+    it('creates the reservation for a complete user', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({ ...COMPLETE });
+
+      const result = await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+      expect(result).toEqual({ id: 500, status: 'confirmed' });
+    });
+
+    it('passes a guest whose profile PATCH set the fields (guest-token path)', async () => {
+      authRepo.findOne.mockResolvedValue({ user_id: 10 } as any);
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        ...COMPLETE,
+        address_line_1: '  1060 Hickory Ridge Ln ',
+        zip_code: '451401234', // ZIP+4 without the hyphen, as the web form allows
+      });
+
+      const result = await service.registerForEvent({} as any, { event_id: 1 } as any, 'tok');
+
+      expect(result).toEqual({ id: 500, status: 'confirmed' });
+    });
+
+    it('creates the reservation for a homeless user with no street or ZIP', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        ...COMPLETE,
+        address_line_1: null,
+        address_line_2: 'Homeless',
+        zip_code: null,
+      });
+
+      const result = await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+      expect(result).toEqual({ id: 500, status: 'confirmed' });
+    });
+
+    it('still rejects a homeless user without a real name', async () => {
+      (usersService.findById as jest.Mock).mockResolvedValue({
+        id: 10,
+        first_name: 'Guest',
+        last_name: 'User',
+        address_line_2: 'Homeless',
+      });
+
+      const body = await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+      expect(body.missing).toEqual(['first_name', 'last_name']);
+    });
+
+    it('rejects before auto-creating a household, so no placeholder head is written', async () => {
+      householdsService.findHouseholdIdByUserId.mockResolvedValue(undefined as any);
+      (usersService.findById as jest.Mock).mockResolvedValue({ ...COMPLETE, last_name: null });
+
+      await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+      expect(householdsService.createHousehold).not.toHaveBeenCalled();
+    });
+
+    it('enforces nothing while REQUIRE_COMPLETE_REGISTRANT is off', async () => {
+      process.env.REQUIRE_COMPLETE_REGISTRANT = 'false';
+      (usersService.findById as jest.Mock).mockResolvedValue({ id: 10 });
+
+      const result = await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+      expect(result).toEqual({ id: 500, status: 'confirmed' });
+      expect(userRepo.update).not.toHaveBeenCalled();
+    });
+
+    describe('names copied from the head of household', () => {
+      const head = (overrides: Record<string, unknown> = {}) => ({
+        id: 77,
+        household_id: 20,
+        user_id: '10', // bigint column: MySQL returns it as a string
+        is_head_of_household: true,
+        first_name: 'Ana',
+        last_name: 'Lopez',
+        ...overrides,
+      });
+
+      it("copies the user's own head-of-household names when the users row has none, then registers", async () => {
+        (usersService.findById as jest.Mock).mockResolvedValue({
+          ...COMPLETE,
+          first_name: 'cognito-username',
+          last_name: null,
+        });
+        (householdsService.listMembers as jest.Mock).mockResolvedValue([head()]);
+
+        const result = await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+        expect(userRepo.update).toHaveBeenCalledWith(10, { first_name: 'Ana', last_name: 'Lopez' });
+        expect(result).toEqual({ id: 500, status: 'confirmed' });
+      });
+
+      it('replaces a placeholder pair on the users row', async () => {
+        (usersService.findById as jest.Mock).mockResolvedValue({
+          ...COMPLETE,
+          first_name: 'Primary',
+          last_name: 'Member',
+        });
+        (householdsService.listMembers as jest.Mock).mockResolvedValue([head()]);
+
+        await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+        expect(userRepo.update).toHaveBeenCalledWith(10, { first_name: 'Ana', last_name: 'Lopez' });
+      });
+
+      it.each([
+        ['Primary', 'Member'],
+        ['Guest', 'User'],
+      ])('never copies the API placeholder head "%s %s"', async (first, last) => {
+        (usersService.findById as jest.Mock).mockResolvedValue({
+          ...COMPLETE,
+          first_name: null,
+          last_name: null,
+        });
+        (householdsService.listMembers as jest.Mock).mockResolvedValue([
+          head({ first_name: first, last_name: last }),
+        ]);
+
+        const body = await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+        expect(body.missing).toEqual(['first_name', 'last_name']);
+        expect(userRepo.update).not.toHaveBeenCalled();
+      });
+
+      it("never copies a head of household that is someone else's member row", async () => {
+        (usersService.findById as jest.Mock).mockResolvedValue({ ...COMPLETE, last_name: null });
+        (householdsService.listMembers as jest.Mock).mockResolvedValue([head({ user_id: '99' })]);
+
+        await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+        expect(userRepo.update).not.toHaveBeenCalled();
+      });
+
+      it('leaves a users row that already has both names alone', async () => {
+        (usersService.findById as jest.Mock).mockResolvedValue({
+          ...COMPLETE,
+          first_name: 'Annie',
+        });
+        (householdsService.listMembers as jest.Mock).mockResolvedValue([head()]);
+
+        await service.registerForEvent(GUEST, { event_id: 1 } as any);
+
+        expect(householdsService.listMembers).not.toHaveBeenCalled();
+        expect(userRepo.update).not.toHaveBeenCalled();
+      });
+
+      it('still answers 422, not 500, when the household cannot be read', async () => {
+        (usersService.findById as jest.Mock).mockResolvedValue({ ...COMPLETE, last_name: null });
+        (householdsService.listMembers as jest.Mock).mockRejectedValue(new Error('Forbidden'));
+
+        const body = await rejection(service.registerForEvent(GUEST, { event_id: 1 } as any));
+
+        expect(body.missing).toEqual(['last_name']);
+      });
+    });
+
+    describe('case manager registrant', () => {
+      const REGISTRANT = {
+        first_name: 'Rita',
+        last_name: 'Registrant',
+        address_line_1: '55 Oak Ave',
+        zip_code: '43215-1234',
+      };
+
+      beforeEach(() => {
+        (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(5);
+        userRepo.findOne.mockResolvedValue(null as any); // identification code is unique
+        userRepo.create.mockImplementation((x: any) => ({ ...x, id: 900 }));
+        userRepo.save.mockImplementation(async (x: any) => x);
+        householdsService.findHouseholdIdByUserId.mockResolvedValue(30 as any);
+      });
+
+      it('rejects an incomplete registrant before creating their user', async () => {
+        const body = await rejection(
+          service.registerForEvent(CASE_MANAGER, {
+            event_id: 1,
+            registrant: { ...REGISTRANT, address_line_1: '', zip_code: undefined },
+          } as any),
+        );
+
+        expect(body.missing).toEqual(['address_line_1', 'zip_code']);
+        expect(userRepo.save).not.toHaveBeenCalled();
+        expect(householdsService.createHousehold).not.toHaveBeenCalled();
+      });
+
+      it('registers a complete registrant', async () => {
+        const result = await service.registerForEvent(CASE_MANAGER, {
+          event_id: 1,
+          registrant: REGISTRANT,
+        } as any);
+
+        expect(userRepo.save).toHaveBeenCalled();
+        expect(result).toEqual(expect.objectContaining({ id: 500 }));
+      });
+
+      it('registers a homeless registrant with no street or ZIP, saved with the Homeless marker', async () => {
+        const result = await service.registerForEvent(CASE_MANAGER, {
+          event_id: 1,
+          registrant: {
+            first_name: 'Rita',
+            last_name: 'Registrant',
+            address_line_1: '12 Typed St',
+            homeless: true,
+          },
+        } as any);
+
+        expect(userRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({ address_line_1: null, address_line_2: 'Homeless' }),
+        );
+        expect(result).toEqual(expect.objectContaining({ id: 500 }));
+      });
+
+      it('still rejects a homeless registrant without a last name', async () => {
+        const body = await rejection(
+          service.registerForEvent(CASE_MANAGER, {
+            event_id: 1,
+            registrant: { first_name: 'Rita', last_name: '', homeless: true },
+          } as any),
+        );
+
+        expect(body.missing).toEqual(['last_name']);
+      });
+
+      it('still answers 403, not 422, when a non-case-manager sends a registrant', async () => {
+        await expect(
+          service.registerForEvent(
+            { userId: 'u', roles: [] } as any,
+            {
+              event_id: 1,
+              registrant: { first_name: '', last_name: '' },
+            } as any,
+          ),
+        ).rejects.toThrow('Only case managers may register on behalf of another person');
+      });
+    });
+  });
+
   describe('reservation confirmation email', () => {
     const GUEST = { authType: 'guest', dbUserId: 10 } as any;
     const TEMPLATE_ID = 'd-test-reservation-template';
+    /** What an email with a confirmation code carries besides its data: the check-in QR (SUP-1092). */
+    const WITH_QR = {
+      attachments: [
+        expect.objectContaining({
+          filename: 'reservation-qr.png',
+          type: 'image/png',
+          disposition: 'inline',
+          content_id: 'reservation-qr',
+        }),
+      ],
+    };
     let previousTemplateId: string | undefined;
+    /**
+     * The QR drawing, stubbed: a real PNG settles after flushBackgroundWork,
+     * and reservation-qr.spec.ts draws real ones.
+     */
+    let drawQr: jest.SpyInstance;
 
     beforeEach(() => {
       previousTemplateId = process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
       process.env.SENDGRID_RESERVATION_TEMPLATE_ID = TEMPLATE_ID;
+      drawQr = jest
+        .spyOn(reservationQr, 'reservationQrPng')
+        .mockResolvedValue(Buffer.from('png-bytes'));
     });
     afterEach(() => {
       if (previousTemplateId === undefined) delete process.env.SENDGRID_RESERVATION_TEMPLATE_ID;
       else process.env.SENDGRID_RESERVATION_TEMPLATE_ID = previousTemplateId;
+      drawQr.mockRestore();
     });
 
     /** A guest self-registration with no slot, so capacity is unbounded. */
@@ -566,10 +892,86 @@ describe('RegistrationsService', () => {
       const registrantCode = (userRepo.create.mock.calls[0][0] as any)
         .identification_code as string;
       expect(sendgrid.sendTemplate).toHaveBeenCalledTimes(1);
-      expect(sendgrid.sendTemplate).toHaveBeenCalledWith('rita@example.com', TEMPLATE_ID, {
-        trans_num: '700',
-        confirmation_code: registrantCode.toUpperCase(),
-        first_name: 'Rita',
+      expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+        'rita@example.com',
+        TEMPLATE_ID,
+        {
+          trans_num: '700',
+          confirmation_code: registrantCode.toUpperCase(),
+          first_name: 'Rita',
+          qr_cid: 'reservation-qr',
+        },
+        WITH_QR,
+      );
+    });
+
+    describe('check-in QR (SUP-1092)', () => {
+      it("encodes the client's link — code, event date and slot — and attaches it inline", async () => {
+        arrangeGuestRegistration(
+          { id: 410, status: 'confirmed', public_event_date_id: 4, public_event_slot_id: 9 } as any,
+          { email: 'guest@example.com', identification_code: 'abc123' },
+        );
+
+        await service.registerForEvent(GUEST, {
+          event_id: 1,
+          event_date_id: 4,
+          event_slot_id: 9,
+        } as any);
+        await flushBackgroundWork();
+
+        expect(drawQr).toHaveBeenCalledWith(
+          'https://secure.pantrytrak.com/mobile/qr_code_processing.php?code=ABC123&event_date_id=4&event_slot_id=9',
+        );
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+          'guest@example.com',
+          TEMPLATE_ID,
+          expect.objectContaining({ confirmation_code: 'ABC123', qr_cid: 'reservation-qr' }),
+          {
+            attachments: [
+              {
+                content: Buffer.from('png-bytes').toString('base64'),
+                filename: 'reservation-qr.png',
+                type: 'image/png',
+                disposition: 'inline',
+                content_id: 'reservation-qr',
+              },
+            ],
+          },
+        );
+      });
+
+      it('draws no QR without a confirmation code — the reservation number is not scannable', async () => {
+        arrangeGuestRegistration({ id: 411, status: 'confirmed' }, { email: 'guest@example.com' });
+
+        await service.registerForEvent(GUEST, { event_id: 1 } as any);
+        await flushBackgroundWork();
+
+        expect(drawQr).not.toHaveBeenCalled();
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('guest@example.com', TEMPLATE_ID, {
+          trans_num: '411',
+        });
+      });
+
+      it('still sends the email, without the QR, when drawing it fails', async () => {
+        drawQr.mockRejectedValue(new Error('qr failed'));
+        const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+        arrangeGuestRegistration(
+          { id: 412, status: 'confirmed' },
+          { email: 'guest@example.com', identification_code: 'abc123' },
+        );
+
+        await service.registerForEvent(GUEST, { event_id: 1 } as any);
+        await flushBackgroundWork();
+
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('guest@example.com', TEMPLATE_ID, {
+          trans_num: '412',
+          confirmation_code: 'ABC123',
+        });
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('reservation QR not drawn for registration 412'),
+          'qr failed',
+        );
+        warn.mockRestore();
       });
     });
 
@@ -585,10 +987,12 @@ describe('RegistrationsService', () => {
         await service.registerForEvent(GUEST, { event_id: 1 } as any);
         await flushBackgroundWork();
 
-        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('person@example.com', TEMPLATE_ID, {
-          trans_num: '401',
-          confirmation_code: 'USRCOD',
-        });
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+          'person@example.com',
+          TEMPLATE_ID,
+          { trans_num: '401', confirmation_code: 'USRCOD', qr_cid: 'reservation-qr' },
+          WITH_QR,
+        );
         expect(householdsService.getHouseholdById).not.toHaveBeenCalled();
       });
 
@@ -607,10 +1011,12 @@ describe('RegistrationsService', () => {
 
         // Same lookup GET /users/me uses, so the email and the app agree.
         expect(householdsService.getHouseholdById).toHaveBeenCalledWith(20, 10);
-        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('person@example.com', TEMPLATE_ID, {
-          trans_num: '402',
-          confirmation_code: 'HHCODE',
-        });
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+          'person@example.com',
+          TEMPLATE_ID,
+          { trans_num: '402', confirmation_code: 'HHCODE', qr_cid: 'reservation-qr' },
+          WITH_QR,
+        );
       });
 
       it('falls back to the reservation number when the household lookup fails', async () => {
@@ -680,23 +1086,29 @@ describe('RegistrationsService', () => {
         await flushBackgroundWork();
 
         expect(publicSchedule.getEventContactDetails).toHaveBeenCalledWith(77);
-        expect(sendgrid.sendTemplate).toHaveBeenCalledWith('maria@example.com', TEMPLATE_ID, {
-          trans_num: '501',
-          confirmation_code: 'QTBFNP',
-          first_name: 'Maria',
-          event_name: 'Food Pantry',
-          agency_name: 'Bread of Life Choice Pantry',
-          event_date: 'Wed, Oct 28, 2026',
-          event_time: '5 PM – 5:29 PM',
-          address_line_1: '1234 Broad St',
-          address_line_2: 'Columbus, OH 43215',
-          maps_url:
-            'https://www.google.com/maps/search/?api=1&query=1234%20Broad%20St%2C%20Columbus%2C%20OH%2043215',
-          agency_phone: '(614) 555-0142',
-          agency_phone_tel: '+16145550142',
-          event_details: 'Use the side door.\nBring bags.',
-          reservations_url: 'https://dev.freshtrak.com/account/reservations',
-        });
+        expect(sendgrid.sendTemplate).toHaveBeenCalledWith(
+          'maria@example.com',
+          TEMPLATE_ID,
+          {
+            trans_num: '501',
+            confirmation_code: 'QTBFNP',
+            first_name: 'Maria',
+            event_name: 'Food Pantry',
+            agency_name: 'Bread of Life Choice Pantry',
+            event_date: 'Wed, Oct 28, 2026',
+            event_time: '5 PM – 5:29 PM',
+            address_line_1: '1234 Broad St',
+            address_line_2: 'Columbus, OH 43215',
+            maps_url:
+              'https://www.google.com/maps/search/?api=1&query=1234%20Broad%20St%2C%20Columbus%2C%20OH%2043215',
+            agency_phone: '(614) 555-0142',
+            agency_phone_tel: '+16145550142',
+            event_details: 'Use the side door.\nBring bags.',
+            reservations_url: 'https://dev.freshtrak.com/account/reservations',
+            qr_cid: 'reservation-qr',
+          },
+          WITH_QR,
+        );
       });
 
       it('uses the event date and its hours when no slot was booked', async () => {
@@ -815,6 +1227,7 @@ function createHouseholdsServiceMock(): jest.Mocked<HouseholdsService> {
     findHouseholdIdByUserId: jest.fn(),
     createHousehold: jest.fn(),
     getHouseholdById: jest.fn(),
+    listMembers: jest.fn(),
   } as any;
 }
 
