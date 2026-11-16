@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { EventAddress, pantryTrakAddress, UserAddress } from '../../common/utils/homeless-address';
 
 const logger = new Logger('PantryTrakClient');
 
@@ -62,7 +63,8 @@ export class PantryTrakClient {
       if (k === 'email' && typeof v === 'string') {
         const at = v.lastIndexOf('@');
         const domain = at >= 0 ? v.slice(at + 1) : '';
-        out[k] = `<redacted ${PantryTrakClient.describeWafShape(v)}${domain ? ' domain=' + domain : ''}>`;
+        out[k] =
+          `<redacted ${PantryTrakClient.describeWafShape(v)}${domain ? ' domain=' + domain : ''}>`;
         continue;
       }
       if (PantryTrakClient.PII_FIELDS.has(k) && typeof v === 'string') {
@@ -87,8 +89,14 @@ export class PantryTrakClient {
     return `${this.baseUrl.replace(/\/+$/, '')}/${path}`;
   }
 
+  /**
+   * `eventAddress` is the address of the event being registered for, when
+   * there is one. A homeless user with no street is sent with it instead of
+   * their own (see `pantryTrakAddress`); everyone else ignores it.
+   */
   async createUser(
     user: unknown,
+    options: { eventAddress?: EventAddress | null } = {},
   ): Promise<{ success: boolean; status?: number; body?: unknown; error?: string }> {
     if (!this.enabled) {
       logger.log('[createUser] PantryTrak disabled, skipping');
@@ -103,8 +111,11 @@ export class PantryTrakClient {
     // All string columns in the PT users table are nullable, so null values are fine.
     const sanitized: Record<string, unknown> =
       user && typeof user === 'object'
-        ? Object.fromEntries(
-            Object.entries(user as Record<string, unknown>).filter(([k]) => k !== 'cognito_uuid'),
+        ? pantryTrakAddress(
+            Object.fromEntries(
+              Object.entries(user as Record<string, unknown>).filter(([k]) => k !== 'cognito_uuid'),
+            ) as Record<string, unknown> & UserAddress,
+            options.eventAddress,
           )
         : {};
     const payload = JSON.stringify(sanitized);
