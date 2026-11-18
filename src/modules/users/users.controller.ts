@@ -33,9 +33,15 @@ interface JwtUser {
 }
 
 /**
- * Routes that act on ANY user by id or code (SUP-1168). None of the public
- * apps call them; a signed-in member of the public must not be able to read,
- * delete or restore another person's account by guessing an integer.
+ * Routes that act on ANY user by id or code (SUP-1168). None of the apps call
+ * them; a signed-in member of the public must not be able to read, delete or
+ * restore another person's account by guessing an integer.
+ *
+ * The Cognito pool has no `staff` or `admin` group today (its only group is
+ * `case_managers`), so these routes are closed to EVERY caller, deliberately.
+ * Creating one of those groups opens them to its members with no code change.
+ * Do not add `case_managers` here: nothing in that flow needs to read an
+ * arbitrary person's full record.
  */
 const StaffOnly = () => applyDecorators(UseGuards(RolesGuard), Roles('staff', 'admin'));
 

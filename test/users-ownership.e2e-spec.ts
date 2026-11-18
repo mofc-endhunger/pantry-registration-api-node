@@ -99,23 +99,29 @@ describe('Users can only change themselves (SUP-1168, E2E)', () => {
     expect((await meOf(other)).city).toBe('Columbus');
   });
 
-  it('keeps lookups by id or code and soft delete away from members of the public', async () => {
+  it('closes lookups by id or code and soft delete to the public and to case managers', async () => {
     const a = await signUp('nosy');
     const b = await signUp('target');
-    const asA = (r: request.Test) => r.set('Authorization', `Bearer ${a.token}`);
-    await asA(request(server()).get(`/users/${b.userId}`)).expect(403);
-    await asA(
-      request(server()).get(
-        `/users?identification_code=${encodeURIComponent(b.identificationCode)}`,
-      ),
-    ).expect(403);
-    await asA(request(server()).patch(`/users/${b.userId}/delete`)).expect(403);
-    await asA(request(server()).patch(`/users/${b.userId}/restore`)).expect(403);
+    // `case_managers` is the only group the Cognito pool actually has.
+    const caseManager = cognitoJwt({ groups: ['case_managers'] });
+    for (const token of [a.token, caseManager.token]) {
+      const as = (r: request.Test) => r.set('Authorization', `Bearer ${token}`);
+      await as(request(server()).get(`/users/${b.userId}`)).expect(403);
+      await as(
+        request(server()).get(
+          `/users?identification_code=${encodeURIComponent(b.identificationCode)}`,
+        ),
+      ).expect(403);
+      await as(request(server()).patch(`/users/${b.userId}/delete`)).expect(403);
+      await as(request(server()).patch(`/users/${b.userId}/restore`)).expect(403);
+    }
     // B was not soft-deleted: their own session still works.
     await meOf(b);
   });
 
-  it('still lets staff look a user up by id', async () => {
+  // No `staff` group exists in Cognito today, so no real token reaches this. It
+  // pins that the lock is a role check, not a blanket 403, should one be created.
+  it('would open a lookup by id to a staff group, if one is created', async () => {
     const b = await signUp('lookedup');
     const staff = cognitoJwt({ groups: ['staff'] });
     const res = await request(server())

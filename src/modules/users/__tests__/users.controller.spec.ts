@@ -88,7 +88,8 @@ describe('UsersController', () => {
     });
   });
 
-  describe('lookups by id and soft delete are staff-only (SUP-1168)', () => {
+  // No staff or admin group exists in Cognito yet, so in practice these are closed to everyone.
+  describe('lookups by id and soft delete need a staff or admin group (SUP-1168)', () => {
     const staffOnly = ['softDelete', 'restore', 'findById', 'findByIdentificationCode'] as const;
 
     it.each(staffOnly)('%s requires the staff or admin role', (method) => {
