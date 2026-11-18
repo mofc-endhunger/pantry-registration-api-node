@@ -8,8 +8,11 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Registration } from '../../entities/registration.entity';
+
+/** The statuses of a booking that holds a place (SUP-1171). */
+const PLACE_HOLDING_STATUSES: Registration['status'][] = ['confirmed', 'checked_in'];
 import { RegistrationAttendee } from '../../entities/registration-attendee.entity';
 import { Event } from '../../entities/event.entity';
 import { EventTimeslot } from '../../entities/event-timeslot.entity';
@@ -442,6 +445,29 @@ export class RegistrationsService {
     }
   }
 
+  /**
+   * "Already registered" (400) when the household already holds a place at this
+   * event, on this date when one is given. Only confirmed and checked-in
+   * bookings hold a place. A `waitlisted` row is not a booking: there is no
+   * waitlist (SUP-1170), and counting one kept that household from ever booking
+   * a real place on that date (SUP-1171). Cancelled bookings never counted.
+   */
+  private async assertNotAlreadyBooked(
+    eventId: number,
+    dateId: number | undefined,
+    householdId: number,
+  ): Promise<void> {
+    const existing = await this.regsRepo.findOne({
+      where: {
+        event_id: eventId,
+        household_id: householdId,
+        status: In(PLACE_HOLDING_STATUSES),
+        ...(dateId ? { public_event_date_id: dateId } : {}),
+      } as any,
+    });
+    if (existing) throw new BadRequestException('Already registered');
+  }
+
   async registerForEvent(
     user: AuthUser,
     dto: {
@@ -696,38 +722,7 @@ export class RegistrationsService {
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const whereConditions = dto.event_date_id
-      ? [
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'confirmed',
-          } as any,
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'waitlisted',
-          } as any,
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'checked_in',
-          } as any,
-        ]
-      : [
-          { event_id: dto.event_id, household_id, status: 'confirmed' } as any,
-          { event_id: dto.event_id, household_id, status: 'waitlisted' } as any,
-          { event_id: dto.event_id, household_id, status: 'checked_in' } as any,
-        ];
-
-    const existing = await this.regsRepo.findOne({
-      where: whereConditions,
-    });
-    if (existing) throw new BadRequestException('Already registered');
+    await this.assertNotAlreadyBooked(dto.event_id, dto.event_date_id, household_id);
 
     // Capacity check
     let capacity: number | null = null;
@@ -1110,35 +1105,7 @@ export class RegistrationsService {
     }
 
     // Duplicate check (same event + household)
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const whereConditions = dto.event_date_id
-      ? [
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'confirmed',
-          } as any,
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'waitlisted',
-          } as any,
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'checked_in',
-          } as any,
-        ]
-      : [
-          { event_id: dto.event_id, household_id, status: 'confirmed' } as any,
-          { event_id: dto.event_id, household_id, status: 'waitlisted' } as any,
-          { event_id: dto.event_id, household_id, status: 'checked_in' } as any,
-        ];
-    const existing = await this.regsRepo.findOne({ where: whereConditions });
-    if (existing) throw new BadRequestException('Already registered');
+    await this.assertNotAlreadyBooked(dto.event_id, dto.event_date_id, household_id);
 
     // Capacity check
     let capacity: number | null = null;
