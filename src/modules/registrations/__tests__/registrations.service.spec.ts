@@ -215,6 +215,47 @@ describe('RegistrationsService', () => {
     ).rejects.toThrow('Already registered');
   });
 
+  describe('only a booking that holds a place counts as already registered (SUP-1171)', () => {
+    const arrange = () => {
+      eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
+      authRepo.findOne.mockResolvedValue({ user_id: 10 } as any);
+      householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
+      regsRepo.findOne.mockResolvedValue({ id: 999, status: 'confirmed' } as any);
+    };
+    const asGuest = { authType: 'guest', dbUserId: 10 } as any;
+    /** The `where` sent to findOne, with its In() operator read back as plain values. */
+    const lookedUp = () => {
+      const [{ where }] = regsRepo.findOne.mock.calls[0] as any;
+      const { status, ...rest } = where;
+      return { ...rest, status: { type: status.type, value: status.value } };
+    };
+
+    it('looks for confirmed or checked-in bookings on the same date, never waitlisted', async () => {
+      arrange();
+      await expect(
+        service.registerForEvent(asGuest, { event_id: 1, event_date_id: 9 } as any),
+      ).rejects.toThrow('Already registered');
+      expect(lookedUp()).toEqual({
+        event_id: 1,
+        household_id: 20,
+        public_event_date_id: 9,
+        status: { type: 'in', value: ['confirmed', 'checked_in'] },
+      });
+    });
+
+    it('looks across the whole event when no date is given', async () => {
+      arrange();
+      await expect(service.registerForEvent(asGuest, { event_id: 1 } as any)).rejects.toThrow(
+        'Already registered',
+      );
+      expect(lookedUp()).toEqual({
+        event_id: 1,
+        household_id: 20,
+        status: { type: 'in', value: ['confirmed', 'checked_in'] },
+      });
+    });
+  });
+
   it('auto-provisions user and household when Cognito user not found', async () => {
     eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true, capacity: null } as any);
     // No guest token path; simulate JWT path with missing user in DB
