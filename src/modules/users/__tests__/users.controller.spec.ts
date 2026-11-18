@@ -1,5 +1,10 @@
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { UsersController } from '../users.controller';
 import { UsersService } from '../users.service';
+import type { UpdateUserWithHouseholdDto } from '../dto/update-user-with-household.dto';
+import { ROLES_KEY } from '../../auth/roles.decorator';
+import { RolesGuard } from '../../auth/roles.guard';
 import type { Request } from 'express';
 
 class UsersServiceMock {
@@ -53,12 +58,51 @@ describe('UsersController', () => {
     expect(res).toEqual({ id: 55 });
   });
 
-  it('update delegates to service with id and body', async () => {
-    service.updateUserWithHousehold.mockResolvedValueOnce({ ok: true });
-    const body: any = { household_id: 9, city: 'Columbus' };
-    const res = await controller.update(22, body, {} as Request);
-    expect(service.updateUserWithHousehold).toHaveBeenCalledWith(22, body);
-    expect(res).toEqual({ success: true });
+  describe('update only lets a user change their own profile (SUP-1168)', () => {
+    const body = { household_id: 9, city: 'Columbus' } as unknown as UpdateUserWithHouseholdDto;
+    const asCaller = (sub: string) => ({ user: { userId: sub } }) as unknown as Request;
+
+    it('delegates when the path id is the caller', async () => {
+      service.findDbUserIdByCognitoUuid.mockResolvedValueOnce(22);
+      service.updateUserWithHousehold.mockResolvedValueOnce({ ok: true });
+      const res = await controller.update(22, body, asCaller('sub-22'));
+      expect(service.findDbUserIdByCognitoUuid).toHaveBeenCalledWith('sub-22');
+      expect(service.updateUserWithHousehold).toHaveBeenCalledWith(22, body);
+      expect(res).toEqual({ success: true });
+    });
+
+    it("refuses another user's id with 403 and writes nothing", async () => {
+      service.findDbUserIdByCognitoUuid.mockResolvedValueOnce(22);
+      await expect(controller.update(23, body, asCaller('sub-22'))).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(service.updateUserWithHousehold).not.toHaveBeenCalled();
+    });
+
+    it('answers 404 when the token has no users row, and writes nothing', async () => {
+      service.findDbUserIdByCognitoUuid.mockResolvedValueOnce(null);
+      await expect(controller.update(22, body, asCaller('sub-none'))).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(service.updateUserWithHousehold).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('lookups by id and soft delete are staff-only (SUP-1168)', () => {
+    const staffOnly = ['softDelete', 'restore', 'findById', 'findByIdentificationCode'] as const;
+
+    it.each(staffOnly)('%s requires the staff or admin role', (method) => {
+      const handler = UsersController.prototype[method];
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual(['staff', 'admin']);
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(RolesGuard);
+    });
+
+    it.each(['getCurrentUser', 'create', 'update'] as const)(
+      '%s stays open to any signed-in user',
+      (method) => {
+        expect(Reflect.getMetadata(ROLES_KEY, UsersController.prototype[method])).toBeUndefined();
+      },
+    );
   });
 
   it('create builds dto from JWT and delegates to service', async () => {
