@@ -27,6 +27,8 @@ import {
   ApiForbiddenResponse,
   ApiSecurity,
   ApiUnprocessableEntityResponse,
+  ApiConflictResponse,
+  ApiNotFoundResponse,
 } from '@nestjs/swagger';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -57,7 +59,13 @@ export class RegistrationsController {
   @UseGuards(GuestOrJwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiSecurity('Guest-Token')
-  @ApiCreatedResponse({ description: 'Registration created (confirmed or waitlisted)' })
+  @ApiCreatedResponse({ description: 'Registration created, always confirmed' })
+  @ApiConflictResponse({
+    description:
+      'SLOT_FULL (SUP-1169): the slot, or its date, has no place left. Nothing is saved; there ' +
+      'is no waitlist. Body: { message: "This time slot is at capacity", code: "SLOT_FULL" }',
+  })
+  @ApiNotFoundResponse({ description: 'Event, time slot or event date not found' })
   @ApiForbiddenResponse({
     description: 'Non-case-manager sent registrant payload, or user not resolved',
   })
@@ -97,7 +105,9 @@ export class RegistrationsController {
   @UseGuards(GuestOrJwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @ApiSecurity('Guest-Token')
-  @ApiOkResponse({ description: 'Registration cancelled; waitlist promotion attempted' })
+  @ApiOkResponse({
+    description: 'Registration cancelled; its place is given back once, if it held one',
+  })
   @Patch(':id/cancel')
   async cancel(@Param('id', ParseIntPipe) id: number, @Req() req: Request) {
     const user = req.user as AuthUser;

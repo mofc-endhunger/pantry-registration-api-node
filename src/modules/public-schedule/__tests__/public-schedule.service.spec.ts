@@ -1,4 +1,6 @@
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { SLOT_FULL } from '../../../common/utils/slot-full';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository, ObjectLiteral } from 'typeorm';
 import { PublicScheduleService } from '../public-schedule.service';
@@ -65,46 +67,117 @@ describe('PublicScheduleService', () => {
     _eventsRepo = moduleRef.get(getRepositoryToken(PublicEvent, 'public'));
   });
 
-  it('incrementSlotAndDate increments both when available', async () => {
-    slotsRepo.findOne.mockResolvedValue({
-      event_slot_id: 10,
-      event_hour_id: 5,
-      reserved: 1,
-    } as any);
-    hoursRepo.findOne.mockResolvedValue({ event_hour_id: 5, event_date_id: 7 } as any);
-    datesRepo.findOne.mockResolvedValue({ event_date_id: 7, reserved: 2 } as any);
+  describe('holding and releasing places (SUP-1169)', () => {
+    /** The UPDATE statements a repo was sent, whitespace collapsed. */
+    const sqlSentTo = (repo: jest.Mocked<Repository<any>>) =>
+      repo.query.mock.calls.map(([sql, params]) => ({
+        sql: String(sql).replace(/\s+/g, ' ').trim(),
+        params,
+      }));
+    const changed = (n: number) => ({ affectedRows: n });
 
-    await service.incrementSlotAndDate(10);
+    beforeEach(() => {
+      (slotsRepo as any).metadata = { tablePath: 'freshtrak_public.event_slots' };
+      (datesRepo as any).metadata = { tablePath: 'freshtrak_public.event_dates' };
+      slotsRepo.findOne.mockResolvedValue({ event_slot_id: 10, event_hour_id: 5 } as any);
+      hoursRepo.findOne.mockResolvedValue({ event_hour_id: 5, event_date_id: 7 } as any);
+      datesRepo.findOne.mockResolvedValue({ event_date_id: 7 } as any);
+    });
 
-    expect(slotsRepo.update).toHaveBeenCalledWith({ event_slot_id: 10 }, { reserved: 2 });
-    expect(datesRepo.update).toHaveBeenCalledWith({ event_date_id: 7 }, { reserved: 3 });
-  });
+    it('claims the slot and its date, each in one conditional UPDATE', async () => {
+      slotsRepo.query.mockResolvedValueOnce(changed(1));
+      datesRepo.query.mockResolvedValueOnce(changed(1));
 
-  it('decrementSlotAndDate decrements and does not go below zero', async () => {
-    slotsRepo.findOne.mockResolvedValue({
-      event_slot_id: 11,
-      event_hour_id: 6,
-      reserved: 0,
-    } as any);
-    hoursRepo.findOne.mockResolvedValue({ event_hour_id: 6, event_date_id: 8 } as any);
-    datesRepo.findOne.mockResolvedValue({ event_date_id: 8, reserved: 0 } as any);
+      await expect(service.holdPlace({ slotId: 10 })).resolves.toEqual({ slotId: 10, dateId: 7 });
 
-    await service.decrementSlotAndDate(11);
+      expect(sqlSentTo(slotsRepo)).toEqual([
+        {
+          sql:
+            'UPDATE freshtrak_public.event_slots SET reserved = COALESCE(reserved, 0) + 1 ' +
+            'WHERE event_slot_id = ? AND capacity > 0 AND COALESCE(reserved, 0) < capacity',
+          params: [10],
+        },
+      ]);
+      expect(sqlSentTo(datesRepo)).toEqual([
+        {
+          sql:
+            'UPDATE freshtrak_public.event_dates SET reserved = COALESCE(reserved, 0) + 1 ' +
+            'WHERE event_date_id = ? AND (capacity IS NULL OR capacity <= 0 OR COALESCE(reserved, 0) < capacity)',
+          params: [7],
+        },
+      ]);
+      // Never read-then-write: no TypeORM update() with a value computed in JS.
+      expect(slotsRepo.update).not.toHaveBeenCalled();
+      expect(datesRepo.update).not.toHaveBeenCalled();
+    });
 
-    expect(slotsRepo.update).toHaveBeenCalledWith({ event_slot_id: 11 }, { reserved: 0 });
-    expect(datesRepo.update).toHaveBeenCalledWith({ event_date_id: 8 }, { reserved: 0 });
-  });
+    it('throws 409 SLOT_FULL when the slot has no place, and touches nothing else', async () => {
+      slotsRepo.query.mockResolvedValueOnce(changed(0));
+      const err = await service.holdPlace({ slotId: 10 }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).getResponse()).toEqual(
+        expect.objectContaining({ code: SLOT_FULL }),
+      );
+      expect(datesRepo.query).not.toHaveBeenCalled();
+    });
 
-  it('incrementDate increments when date exists', async () => {
-    datesRepo.findOne.mockResolvedValue({ event_date_id: 12, reserved: 4 } as any);
-    await service.incrementDate(12);
-    expect(datesRepo.update).toHaveBeenCalledWith({ event_date_id: 12 }, { reserved: 5 });
-  });
+    it("gives the slot's place back when its date is full", async () => {
+      slotsRepo.query.mockResolvedValueOnce(changed(1)).mockResolvedValueOnce(changed(1));
+      datesRepo.query.mockResolvedValueOnce(changed(0));
 
-  it('decrementDate decrements and clamps to zero', async () => {
-    datesRepo.findOne.mockResolvedValue({ event_date_id: 13, reserved: 0 } as any);
-    await service.decrementDate(13);
-    expect(datesRepo.update).toHaveBeenCalledWith({ event_date_id: 13 }, { reserved: 0 });
+      await expect(service.holdPlace({ slotId: 10 })).rejects.toBeInstanceOf(ConflictException);
+
+      const [, release] = sqlSentTo(slotsRepo);
+      expect(release).toEqual({
+        sql:
+          'UPDATE freshtrak_public.event_slots SET reserved = GREATEST(COALESCE(reserved, 0) - 1, 0) ' +
+          'WHERE event_slot_id = ?',
+        params: [10],
+      });
+    });
+
+    it('answers 404 for an unknown slot or date', async () => {
+      slotsRepo.findOne.mockResolvedValueOnce(null as any);
+      await expect(service.holdPlace({ slotId: 999 })).rejects.toBeInstanceOf(NotFoundException);
+      datesRepo.findOne.mockResolvedValueOnce(null as any);
+      await expect(service.holdPlace({ dateId: 999 })).rejects.toBeInstanceOf(NotFoundException);
+      expect(slotsRepo.query).not.toHaveBeenCalled();
+      expect(datesRepo.query).not.toHaveBeenCalled();
+    });
+
+    it('holds a date-only booking on the date alone', async () => {
+      datesRepo.query.mockResolvedValueOnce(changed(1));
+      await expect(service.holdPlace({ dateId: 7 })).resolves.toEqual({ slotId: null, dateId: 7 });
+      expect(slotsRepo.query).not.toHaveBeenCalled();
+    });
+
+    it('holds nothing for a booking with neither slot nor date', async () => {
+      await expect(service.holdPlace({})).resolves.toEqual({ slotId: null, dateId: null });
+      expect(slotsRepo.query).not.toHaveBeenCalled();
+      expect(datesRepo.query).not.toHaveBeenCalled();
+    });
+
+    it('releases what was held, never below 0', async () => {
+      slotsRepo.query.mockResolvedValue(changed(1));
+      datesRepo.query.mockResolvedValue(changed(1));
+      await service.releasePlace({ slotId: 10, dateId: 7 });
+      expect(sqlSentTo(slotsRepo)[0].sql).toContain('GREATEST(COALESCE(reserved, 0) - 1, 0)');
+      expect(sqlSentTo(datesRepo)[0]).toEqual({
+        sql:
+          'UPDATE freshtrak_public.event_dates SET reserved = GREATEST(COALESCE(reserved, 0) - 1, 0) ' +
+          'WHERE event_date_id = ?',
+        params: [7],
+      });
+    });
+
+    it("works out what a stored booking holds from its slot's date", async () => {
+      await expect(
+        service.placeHeldBy({ public_event_slot_id: 10, public_event_date_id: 99 }),
+      ).resolves.toEqual({ slotId: 10, dateId: 7 });
+      await expect(
+        service.placeHeldBy({ public_event_slot_id: null, public_event_date_id: 99 }),
+      ).resolves.toEqual({ slotId: null, dateId: 99 });
+    });
   });
 
   it('getEventDateIdForDate returns id when found via raw query', async () => {
@@ -129,18 +202,6 @@ describe('PublicScheduleService', () => {
       .mockResolvedValueOnce([] as any); // recent not used
     const id = await service.getEventDateIdDefault(1);
     expect(id).toBe(123);
-  });
-
-  it('incrementSlotAndDate returns early when slot not found', async () => {
-    slotsRepo.findOne.mockResolvedValue(null as any);
-    await service.incrementSlotAndDate(999);
-    expect(slotsRepo.update).not.toHaveBeenCalled();
-  });
-
-  it('decrementSlotAndDate returns early when slot not found', async () => {
-    slotsRepo.findOne.mockResolvedValue(null as any);
-    await service.decrementSlotAndDate(999);
-    expect(slotsRepo.update).not.toHaveBeenCalled();
   });
 
   it('buildEventDateStructure returns {event_date:null} when not found', async () => {

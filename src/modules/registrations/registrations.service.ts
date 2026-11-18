@@ -8,8 +8,11 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Registration } from '../../entities/registration.entity';
+
+/** The statuses of a booking that holds a place (SUP-1171). */
+const PLACE_HOLDING_STATUSES: Registration['status'][] = ['confirmed', 'checked_in'];
 import { RegistrationAttendee } from '../../entities/registration-attendee.entity';
 import { Event } from '../../entities/event.entity';
 import { EventTimeslot } from '../../entities/event-timeslot.entity';
@@ -27,6 +30,7 @@ import {
   missingRegistrantFields,
 } from '../../common/utils/registrant-completeness';
 import { applyHomelessFlag } from '../../common/utils/homeless-address';
+import { slotFullException } from '../../common/utils/slot-full';
 type AuthUser = {
   authType?: string;
   dbUserId?: number;
@@ -442,6 +446,29 @@ export class RegistrationsService {
     }
   }
 
+  /**
+   * "Already registered" (400) when the household already holds a place at this
+   * event, on this date when one is given. Only confirmed and checked-in
+   * bookings hold a place. A `waitlisted` row is not a booking: there is no
+   * waitlist (SUP-1170), and counting one kept that household from ever booking
+   * a real place on that date (SUP-1171). Cancelled bookings never counted.
+   */
+  private async assertNotAlreadyBooked(
+    eventId: number,
+    dateId: number | undefined,
+    householdId: number,
+  ): Promise<void> {
+    const existing = await this.regsRepo.findOne({
+      where: {
+        event_id: eventId,
+        household_id: householdId,
+        status: In(PLACE_HOLDING_STATUSES),
+        ...(dateId ? { public_event_date_id: dateId } : {}),
+      } as any,
+    });
+    if (existing) throw new BadRequestException('Already registered');
+  }
+
   async registerForEvent(
     user: AuthUser,
     dto: {
@@ -696,103 +723,11 @@ export class RegistrationsService {
       );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const whereConditions = dto.event_date_id
-      ? [
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'confirmed',
-          } as any,
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'waitlisted',
-          } as any,
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'checked_in',
-          } as any,
-        ]
-      : [
-          { event_id: dto.event_id, household_id, status: 'confirmed' } as any,
-          { event_id: dto.event_id, household_id, status: 'waitlisted' } as any,
-          { event_id: dto.event_id, household_id, status: 'checked_in' } as any,
-        ];
+    await this.assertNotAlreadyBooked(dto.event_id, dto.event_date_id, household_id);
 
-    const existing = await this.regsRepo.findOne({
-      where: whereConditions,
-    });
-    if (existing) throw new BadRequestException('Already registered');
-
-    // Capacity check
-    let capacity: number | null = null;
-    let confirmedCount = 0;
-    if (dto.event_slot_id) {
-      const slot = await this.publicSchedule.getSlot(dto.event_slot_id);
-      capacity = slot?.capacity ?? null;
-      if (slot && slot.capacity !== null && (slot.reserved ?? 0) >= (slot.capacity ?? 0)) {
-        // Mark as full → will create waitlisted registration (no counters incremented)
-        confirmedCount = slot.capacity ?? 0;
-      }
-    } else if (dto.timeslot_id) {
-      const timeslot = await this.timesRepo.findOne({ where: { id: dto.timeslot_id } });
-      capacity = timeslot?.capacity ?? null;
-      confirmedCount = await this.regsRepo.count({
-        where: { timeslot_id: dto.timeslot_id, status: 'confirmed' } as any,
-      });
-    } else if (dto.event_date_id) {
-      const date = await this.publicSchedule.getDate(dto.event_date_id);
-      capacity = date?.capacity ?? null;
-      if (date && date.capacity !== null && (date.reserved ?? 0) >= (date.capacity ?? 0)) {
-        // Mark as full → will create waitlisted registration
-        confirmedCount = date.capacity ?? 0;
-      }
-    } else {
-      // No public slot/date or local timeslot provided — treat capacity as unbounded
-      capacity = null;
-      confirmedCount = await this.regsRepo.count({
-        where: { event_id: dto.event_id, status: 'confirmed', timeslot_id: null } as any,
-      });
-    }
-    const hasCapacity = capacity == null || confirmedCount < capacity;
-
-    const reg = this.regsRepo.create({
-      event_id: dto.event_id,
-      household_id,
-      timeslot_id: dto.timeslot_id ?? null,
-      status: hasCapacity ? 'confirmed' : 'waitlisted',
-      created_by: dbUserId,
-      public_event_slot_id: dto.event_slot_id ?? null,
-      public_event_date_id: dto.event_date_id ?? null,
-    } as any);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const savedOrArray = await this.regsRepo.save(reg);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const saved: Registration = Array.isArray(savedOrArray)
-      ? savedOrArray[0]
-      : (savedOrArray as Registration);
-    if (Array.isArray(dto.attendees) && dto.attendees.length) {
-      for (const memberId of dto.attendees) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const attendee = this.attendeesRepo.create({
-          registration_id: saved.id,
-          household_member_id: memberId,
-        } as any);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        await this.attendeesRepo.save(attendee);
-      }
-    }
-    // Update public counters after success
-    if (hasCapacity) {
-      if (dto.event_slot_id) await this.publicSchedule.incrementSlotAndDate(dto.event_slot_id);
-      else if (dto.event_date_id) await this.publicSchedule.incrementDate(dto.event_date_id);
-    }
+    // Take a place and save (SUP-1169). A full slot or date throws 409 here,
+    // before anything is saved or sent to PantryTrak.
+    const saved = await this.saveWithPlace(dto, household_id, dbUserId);
     // Sync to PantryTrak: ensure user exists in PT before creating the reservation.
     // Fire-and-forget but sequential — createReservation is skipped if createUser fails
     // so we never end up with an orphaned reservation that has no associated PT user.
@@ -1110,98 +1045,10 @@ export class RegistrationsService {
     }
 
     // Duplicate check (same event + household)
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const whereConditions = dto.event_date_id
-      ? [
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'confirmed',
-          } as any,
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'waitlisted',
-          } as any,
-          {
-            event_id: dto.event_id,
-            public_event_date_id: dto.event_date_id,
-            household_id,
-            status: 'checked_in',
-          } as any,
-        ]
-      : [
-          { event_id: dto.event_id, household_id, status: 'confirmed' } as any,
-          { event_id: dto.event_id, household_id, status: 'waitlisted' } as any,
-          { event_id: dto.event_id, household_id, status: 'checked_in' } as any,
-        ];
-    const existing = await this.regsRepo.findOne({ where: whereConditions });
-    if (existing) throw new BadRequestException('Already registered');
+    await this.assertNotAlreadyBooked(dto.event_id, dto.event_date_id, household_id);
 
-    // Capacity check
-    let capacity: number | null = null;
-    let confirmedCount = 0;
-    if (dto.event_slot_id) {
-      const slot = await this.publicSchedule.getSlot(dto.event_slot_id);
-      capacity = slot?.capacity ?? null;
-      if (slot && slot.capacity !== null && (slot.reserved ?? 0) >= (slot.capacity ?? 0)) {
-        confirmedCount = slot.capacity ?? 0;
-      }
-    } else if (dto.timeslot_id) {
-      const timeslot = await this.timesRepo.findOne({ where: { id: dto.timeslot_id } });
-      capacity = timeslot?.capacity ?? null;
-      confirmedCount = await this.regsRepo.count({
-        where: { timeslot_id: dto.timeslot_id, status: 'confirmed' } as any,
-      });
-    } else if (dto.event_date_id) {
-      const date = await this.publicSchedule.getDate(dto.event_date_id);
-      capacity = date?.capacity ?? null;
-      if (date && date.capacity !== null && (date.reserved ?? 0) >= (date.capacity ?? 0)) {
-        confirmedCount = date.capacity ?? 0;
-      }
-    } else {
-      capacity = null;
-      confirmedCount = await this.regsRepo.count({
-        where: { event_id: dto.event_id, status: 'confirmed', timeslot_id: null } as any,
-      });
-    }
-    const hasCapacity = capacity == null || confirmedCount < capacity;
-
-    // Create registration with created_by = case manager
-    const reg = this.regsRepo.create({
-      event_id: dto.event_id,
-      household_id,
-      timeslot_id: dto.timeslot_id ?? null,
-      status: hasCapacity ? 'confirmed' : 'waitlisted',
-      created_by: cmDbUserId,
-      public_event_slot_id: dto.event_slot_id ?? null,
-      public_event_date_id: dto.event_date_id ?? null,
-    } as any);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const savedOrArray = await this.regsRepo.save(reg);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const saved: Registration = Array.isArray(savedOrArray)
-      ? savedOrArray[0]
-      : (savedOrArray as Registration);
-
-    if (Array.isArray(dto.attendees) && dto.attendees.length) {
-      for (const memberId of dto.attendees) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const attendee = this.attendeesRepo.create({
-          registration_id: saved.id,
-          household_member_id: memberId,
-        } as any);
-        await this.attendeesRepo.save(attendee);
-      }
-    }
-
-    // Update public counters
-    if (hasCapacity) {
-      if (dto.event_slot_id) await this.publicSchedule.incrementSlotAndDate(dto.event_slot_id);
-      else if (dto.event_date_id) await this.publicSchedule.incrementDate(dto.event_date_id);
-    }
+    // Take a place and save, created_by = the case manager (SUP-1169).
+    const saved = await this.saveWithPlace(dto, household_id, cmDbUserId);
 
     // Best-effort PantryTrak sync — use the registrant's user ID, not the case manager's.
     // Only proceed if the earlier createUser succeeded; otherwise we'd create an orphan
@@ -1277,17 +1124,20 @@ export class RegistrationsService {
     if (!household_id) throw new ForbiddenException('Household not resolved');
     if (String(reg.household_id) !== String(household_id)) throw new ForbiddenException();
     if (reg.status === 'cancelled') return reg;
+    // Only the request that actually flips the status gives the place back,
+    // so a double submit cannot release it twice (SUP-1169). No app offers
+    // cancelling today; it happens in PantryTrak, which never calls this.
+    const heldAPlace = reg.status === 'confirmed' || reg.status === 'checked_in';
+    const flipped = await this.regsRepo.update(
+      { id: reg.id, status: reg.status } as any,
+      {
+        status: 'cancelled',
+      } as any,
+    );
     reg.status = 'cancelled';
-    await this.regsRepo.save(reg);
-
-    // Promote next waitlisted registration if any
-    await this.promoteFromWaitlist(reg.event_id, reg.timeslot_id ?? null);
-
-    // Decrement public counters if present
-    if (reg.public_event_slot_id)
-      await this.publicSchedule.decrementSlotAndDate(reg.public_event_slot_id);
-    else if (reg.public_event_date_id)
-      await this.publicSchedule.decrementDate(reg.public_event_date_id);
+    if (flipped.affected === 1 && heldAPlace) {
+      await this.publicSchedule.releasePlace(await this.publicSchedule.placeHeldBy(reg));
+    }
     return reg;
   }
 
@@ -1419,36 +1269,74 @@ export class RegistrationsService {
     return reg;
   }
 
-  private async promoteFromWaitlist(eventId: number, timeslotId: number | null) {
-    const where: any = timeslotId
-      ? { event_id: eventId, timeslot_id: timeslotId, status: 'waitlisted' }
-      : { event_id: eventId, timeslot_id: null, status: 'waitlisted' };
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const next = await this.regsRepo.find({ where, order: { created_at: 'ASC' }, take: 1 } as any);
-    if (!next.length) return;
-    const toPromote = next[0];
-    toPromote.status = 'confirmed';
-    await this.regsRepo.save(toPromote);
-    // Best-effort: notify PantryTrak for newly-confirmed reservation promoted from waitlist
+  /**
+   * Take a place, then save the booking as confirmed (SUP-1169, SUP-1170).
+   *
+   * There is no waitlist (owner, 2026-11-18): a full slot or date throws 409
+   * SLOT_FULL before anything is saved. The place is taken first, atomically,
+   * and given back if the save fails; the counters and the registration live
+   * in different databases, so they cannot share a transaction.
+   */
+  private async saveWithPlace(
+    dto: {
+      event_id: number;
+      timeslot_id?: number;
+      attendees?: number[];
+      event_slot_id?: number;
+      event_date_id?: number;
+    },
+    household_id: number,
+    createdBy: number,
+  ): Promise<Registration> {
+    if (dto.timeslot_id) await this.assertLocalTimeslotHasRoom(dto.timeslot_id);
+    const held = await this.publicSchedule.holdPlace({
+      slotId: dto.event_slot_id,
+      dateId: dto.event_date_id,
+    });
+
+    let saved: Registration;
     try {
-      if (this.pantryTrakClient) {
-        this.pantryTrakClient
-          .createReservation({
-            id: toPromote.id,
-            user_id: toPromote.created_by as unknown as number,
-            event_date_id: toPromote.public_event_date_id ?? toPromote.event_id,
-            event_slot_id: toPromote.public_event_slot_id ?? null,
-          })
-          .catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            // eslint-disable-next-line no-console
-            console.warn('[PantryTrak] createReservation failed (promote)', msg);
-          });
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      // eslint-disable-next-line no-console
-      console.warn('[PantryTrak] client not available (promote)', msg);
+      const savedOrArray = await this.regsRepo.save(
+        this.regsRepo.create({
+          event_id: dto.event_id,
+          household_id,
+          timeslot_id: dto.timeslot_id ?? null,
+          status: 'confirmed',
+          created_by: createdBy,
+          public_event_slot_id: dto.event_slot_id ?? null,
+          public_event_date_id: dto.event_date_id ?? null,
+        } as any),
+      );
+      saved = Array.isArray(savedOrArray) ? savedOrArray[0] : (savedOrArray as Registration);
+    } catch (err) {
+      await this.publicSchedule.releasePlace(held);
+      throw err;
     }
+
+    if (Array.isArray(dto.attendees) && dto.attendees.length) {
+      for (const memberId of dto.attendees) {
+        const attendee = this.attendeesRepo.create({
+          registration_id: saved.id,
+          household_member_id: memberId,
+        } as any);
+        await this.attendeesRepo.save(attendee);
+      }
+    }
+    return saved;
+  }
+
+  /**
+   * The local `event_timeslots` path. No app books through it (they all use
+   * public slots), so it keeps its count-then-insert check; a full timeslot
+   * is refused like a full slot, since there is no waitlist.
+   */
+  private async assertLocalTimeslotHasRoom(timeslotId: number): Promise<void> {
+    const timeslot = await this.timesRepo.findOne({ where: { id: timeslotId } });
+    const capacity = timeslot?.capacity ?? null;
+    if (capacity == null) return;
+    const confirmed = await this.regsRepo.count({
+      where: { timeslot_id: timeslotId, status: 'confirmed' } as any,
+    });
+    if (confirmed >= capacity) throw slotFullException();
   }
 }
