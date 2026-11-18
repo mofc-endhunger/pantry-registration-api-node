@@ -1,12 +1,19 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-base-to-string, @typescript-eslint/no-unsafe-call */
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ObjectLiteral } from 'typeorm';
+import { slotFullException } from '../../common/utils/slot-full';
 import { PublicEventSlot } from '../../entities-public/event-slot.public.entity';
 import { PublicEventDate } from '../../entities-public/event-date.public.entity';
 import { PublicEvent } from '../../entities-public/event.public.entity';
 import { PublicDimTime } from '../../entities-public/dim-time.public.entity';
 import { PublicEventHour } from '../../entities-public/event-hour.public.entity';
+
+/** The counters a booking holds a place on; null where it holds none. */
+export interface HeldPlace {
+  slotId: number | null;
+  dateId: number | null;
+}
 
 @Injectable()
 export class PublicScheduleService {
@@ -31,58 +38,124 @@ export class PublicScheduleService {
     return this.datesRepo.findOne({ where: { event_date_id: dateId } });
   }
 
-  async incrementSlotAndDate(slotId: number) {
-    const slot = await this.getSlot(slotId);
-    if (!slot) return;
-    await this.slotsRepo.update({ event_slot_id: slotId }, {
-      reserved: (slot.reserved ?? 0) + 1,
-    } as any);
-    const hour = await this.hoursRepo.findOne({
-      where: { event_hour_id: (slot as any).event_hour_id },
-    });
-    if (!hour?.event_date_id) return;
-    const date = await this.datesRepo.findOne({
-      where: { event_date_id: (hour as any).event_date_id },
-    });
-    if (date)
-      await this.datesRepo.update({ event_date_id: date.event_date_id }, {
-        reserved: (date.reserved ?? 0) + 1,
-      } as any);
+  /**
+   * Take one place for a booking (SUP-1169): on a slot and the date it belongs
+   * to, or on a date alone. Throws 404 for an unknown slot or date, and 409
+   * SLOT_FULL when there is no place; nothing is held in either case.
+   *
+   * Each counter moves in ONE conditional UPDATE, so the database decides who
+   * gets the last place. The old code read `reserved`, decided, then wrote
+   * `reserved + 1` from that read: 20 parallel bookings all fitted into a slot
+   * of 5, and their writes overwrote each other.
+   *
+   * The counters live in freshtrak_public and the registration in
+   * freshtrak_private, so this cannot share a transaction with the insert.
+   * The caller saves after this and calls `releasePlace` if the save fails.
+   */
+  async holdPlace(target: { slotId?: number | null; dateId?: number | null }): Promise<HeldPlace> {
+    if (target.slotId) {
+      const slotId = target.slotId;
+      const slot = await this.getSlot(slotId);
+      if (!slot) throw new NotFoundException('Time slot not found');
+      const dateId = await this.dateIdForSlot(slot);
+      if (!(await this.claimSlotPlace(slotId))) throw slotFullException();
+      if (dateId !== null && !(await this.claimDatePlace(dateId))) {
+        await this.releaseSlotPlace(slotId);
+        throw slotFullException();
+      }
+      return { slotId, dateId };
+    }
+    if (target.dateId) {
+      const dateId = target.dateId;
+      if (!(await this.getDate(dateId))) throw new NotFoundException('Event date not found');
+      if (!(await this.claimDatePlace(dateId))) throw slotFullException();
+      return { slotId: null, dateId };
+    }
+    return { slotId: null, dateId: null };
   }
 
-  async decrementSlotAndDate(slotId: number) {
-    const slot = await this.getSlot(slotId);
-    if (!slot) return;
-    await this.slotsRepo.update({ event_slot_id: slotId }, {
-      reserved: Math.max(0, (slot.reserved ?? 0) - 1),
-    } as any);
-    const hour = await this.hoursRepo.findOne({
-      where: { event_hour_id: (slot as any).event_hour_id },
-    });
-    if (!hour?.event_date_id) return;
-    const date = await this.datesRepo.findOne({
-      where: { event_date_id: (hour as any).event_date_id },
-    });
-    if (date)
-      await this.datesRepo.update({ event_date_id: date.event_date_id }, {
-        reserved: Math.max(0, (date.reserved ?? 0) - 1),
-      } as any);
+  /** Give back what `holdPlace` took. Counters never go below 0. */
+  async releasePlace(held: HeldPlace): Promise<void> {
+    if (held.slotId !== null) await this.releaseSlotPlace(held.slotId);
+    if (held.dateId !== null) await this.releaseDatePlace(held.dateId);
   }
 
-  async incrementDate(dateId: number) {
-    const date = await this.getDate(dateId);
-    if (!date) return;
-    await this.datesRepo.update({ event_date_id: dateId }, {
-      reserved: (date.reserved ?? 0) + 1,
-    } as any);
+  /** What a stored registration holds, so cancelling it can give it back. */
+  async placeHeldBy(reg: {
+    public_event_slot_id?: number | null;
+    public_event_date_id?: number | null;
+  }): Promise<HeldPlace> {
+    if (reg.public_event_slot_id) {
+      const slot = await this.getSlot(reg.public_event_slot_id);
+      return {
+        slotId: reg.public_event_slot_id,
+        dateId: slot ? await this.dateIdForSlot(slot) : null,
+      };
+    }
+    return { slotId: null, dateId: reg.public_event_date_id ?? null };
   }
 
-  async decrementDate(dateId: number) {
-    const date = await this.getDate(dateId);
-    if (!date) return;
-    await this.datesRepo.update({ event_date_id: dateId }, {
-      reserved: Math.max(0, (date.reserved ?? 0) - 1),
-    } as any);
+  private async dateIdForSlot(slot: PublicEventSlot): Promise<number | null> {
+    const hour = await this.hoursRepo.findOne({ where: { event_hour_id: slot.event_hour_id } });
+    return hour?.event_date_id ?? null;
+  }
+
+  /**
+   * A slot with no capacity set (null or 0) has no places. That is what
+   * pantry-finder reports as `open_slots`, and the apps never offer it.
+   */
+  private claimSlotPlace(slotId: number): Promise<boolean> {
+    return this.changedOneRow(
+      this.slotsRepo,
+      `SET reserved = COALESCE(reserved, 0) + 1
+        WHERE event_slot_id = ? AND capacity > 0 AND COALESCE(reserved, 0) < capacity`,
+      slotId,
+    );
+  }
+
+  /**
+   * A date's own counter limits it only when its capacity is set (> 0); a date
+   * without one is governed by its slots. The same rule decides whether
+   * pantry-finder search shows the date (SUP-1198).
+   */
+  private claimDatePlace(dateId: number): Promise<boolean> {
+    return this.changedOneRow(
+      this.datesRepo,
+      `SET reserved = COALESCE(reserved, 0) + 1
+        WHERE event_date_id = ? AND (capacity IS NULL OR capacity <= 0 OR COALESCE(reserved, 0) < capacity)`,
+      dateId,
+    );
+  }
+
+  private async releaseSlotPlace(slotId: number): Promise<void> {
+    await this.changedOneRow(
+      this.slotsRepo,
+      'SET reserved = GREATEST(COALESCE(reserved, 0) - 1, 0) WHERE event_slot_id = ?',
+      slotId,
+    );
+  }
+
+  private async releaseDatePlace(dateId: number): Promise<void> {
+    await this.changedOneRow(
+      this.datesRepo,
+      'SET reserved = GREATEST(COALESCE(reserved, 0) - 1, 0) WHERE event_date_id = ?',
+      dateId,
+    );
+  }
+
+  /** Run `UPDATE <table> <rest>` and report whether it changed exactly one row. */
+  private async changedOneRow<T extends ObjectLiteral>(
+    repo: Repository<T>,
+    rest: string,
+    id: number,
+  ): Promise<boolean> {
+    // tablePath carries the entity's hardcoded database (freshtrak_public.*),
+    // which is where TypeORM itself reads these rows from.
+    const result: { affectedRows?: number } = await repo.query(
+      `UPDATE ${repo.metadata.tablePath} ${rest}`,
+      [id],
+    );
+    return result?.affectedRows === 1;
   }
 
   async getEventDateIdForDate(eventId: number, dateIso: string): Promise<number | null> {

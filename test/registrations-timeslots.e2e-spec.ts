@@ -50,7 +50,7 @@ describe('Registrations timeslot flow (E2E)', () => {
       .expect(201);
     expect(reg1.body.status).toBe('confirmed');
 
-    // Second guest registration should be waitlisted due to timeslot capacity
+    // A second guest is refused: the timeslot is full and there is no waitlist (SUP-1170)
     const guest = await request(app.getHttpServer())
       .post('/guest-authentications')
       .send({ phone: '5552000000' })
@@ -61,8 +61,8 @@ describe('Registrations timeslot flow (E2E)', () => {
       .post('/registrations')
       .set('X-Guest-Token', guestToken)
       .send({ event_id: (event as any).id, timeslot_id: (slot as any).id })
-      .expect(201);
-    expect(reg2.body.status).toBe('waitlisted');
+      .expect(409);
+    expect(reg2.body.code).toBe('SLOT_FULL');
 
     // Check-in for first registration should work
     await request(app.getHttpServer())

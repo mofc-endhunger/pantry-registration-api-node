@@ -1,5 +1,7 @@
+import { ConflictException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { SLOT_FULL, slotFullException } from '../../../common/utils/slot-full';
 import { Repository, ObjectLiteral } from 'typeorm';
 import { RegistrationsService } from '../registrations.service';
 import { Registration } from '../../../entities/registration.entity';
@@ -84,80 +86,98 @@ describe('RegistrationsService', () => {
     );
   });
 
-  it('creates waitlisted registration when slot capacity is full', async () => {
-    eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
-    authRepo.findOne.mockResolvedValue({ user_id: 10 } as any);
-    householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
-    publicSchedule.getSlot.mockResolvedValue({ capacity: 1, reserved: 1 } as any);
-    regsRepo.findOne.mockResolvedValue(null as any);
-    regsRepo.create.mockImplementation((x: any) => x);
-    regsRepo.save.mockResolvedValue({ id: 123, status: 'waitlisted' } as any);
+  describe('a place is taken before the booking is saved (SUP-1169, no waitlist)', () => {
+    const arrangeGuest = () => {
+      eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
+      authRepo.findOne.mockResolvedValue({ user_id: 10 } as any);
+      householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
+      regsRepo.findOne.mockResolvedValue(null as any);
+      regsRepo.create.mockImplementation((x: any) => x);
+    };
+    const asGuest = { authType: 'guest', dbUserId: 10 } as any;
 
-    const result = await service.registerForEvent(
-      { authType: 'guest', dbUserId: 10 } as any,
-      {
+    it('holds the slot first, then saves the booking as confirmed', async () => {
+      arrangeGuest();
+      publicSchedule.holdPlace.mockResolvedValueOnce({ slotId: 111, dateId: 9 });
+      regsRepo.save.mockResolvedValue({ id: 123, status: 'confirmed' } as any);
+
+      const result = await service.registerForEvent(asGuest, {
         event_id: 1,
         event_slot_id: 111,
-      } as any,
-    );
+        event_date_id: 9,
+      } as any);
 
-    expect(result.status).toBe('waitlisted');
-    expect(publicSchedule.incrementSlotAndDate).not.toHaveBeenCalled();
-  });
+      expect(result.status).toBe('confirmed');
+      expect(publicSchedule.holdPlace).toHaveBeenCalledWith({ slotId: 111, dateId: 9 });
+      expect(regsRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 'confirmed' }));
+      expect(publicSchedule.holdPlace.mock.invocationCallOrder[0]).toBeLessThan(
+        regsRepo.save.mock.invocationCallOrder[0],
+      );
+    });
 
-  it('creates confirmed registration for timeslot_id with available capacity', async () => {
-    eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
-    authRepo.findOne.mockResolvedValue({ user_id: 10 } as any);
-    householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
-    timesRepo.findOne.mockResolvedValue({ id: 5, capacity: 3 } as any);
-    regsRepo.count.mockResolvedValue(1 as any);
-    regsRepo.findOne.mockResolvedValue(null as any);
-    regsRepo.create.mockImplementation((x: any) => x);
-    regsRepo.save.mockResolvedValue({ id: 300, status: 'confirmed' } as any);
+    it('refuses a full slot with 409 SLOT_FULL and saves nothing', async () => {
+      arrangeGuest();
+      publicSchedule.holdPlace.mockRejectedValueOnce(slotFullException());
 
-    const result = await service.registerForEvent(
-      { authType: 'guest', dbUserId: 10 } as any,
-      { event_id: 1, timeslot_id: 5 } as any,
-    );
+      const err = await service
+        .registerForEvent(asGuest, { event_id: 1, event_slot_id: 111 } as any)
+        .catch((e: unknown) => e);
 
-    expect(result.status).toBe('confirmed');
-    // No public counters updated for timeslot branch
-    expect(publicSchedule.incrementSlotAndDate).not.toHaveBeenCalled();
-    expect(publicSchedule.incrementDate).not.toHaveBeenCalled();
-  });
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).getResponse()).toEqual(
+        expect.objectContaining({
+          code: SLOT_FULL,
+          message: expect.stringContaining('at capacity'),
+        }),
+      );
+      expect(regsRepo.save).not.toHaveBeenCalled();
+      expect(publicSchedule.releasePlace).not.toHaveBeenCalled();
+    });
 
-  it('creates waitlisted registration for timeslot_id when full', async () => {
-    eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
-    authRepo.findOne.mockResolvedValue({ user_id: 10 } as any);
-    householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
-    timesRepo.findOne.mockResolvedValue({ id: 5, capacity: 1 } as any);
-    regsRepo.count.mockResolvedValue(1 as any);
-    regsRepo.findOne.mockResolvedValue(null as any);
-    regsRepo.create.mockImplementation((x: any) => x);
-    regsRepo.save.mockResolvedValue({ id: 301, status: 'waitlisted' } as any);
+    it('gives the place back when saving the booking fails', async () => {
+      arrangeGuest();
+      const held = { slotId: 111, dateId: 9 };
+      publicSchedule.holdPlace.mockResolvedValueOnce(held);
+      regsRepo.save.mockRejectedValueOnce(new Error('insert failed'));
 
-    const result = await service.registerForEvent(
-      { authType: 'guest', dbUserId: 10 } as any,
-      { event_id: 1, timeslot_id: 5 } as any,
-    );
-    expect(result.status).toBe('waitlisted');
-  });
+      await expect(
+        service.registerForEvent(asGuest, { event_id: 1, event_slot_id: 111 } as any),
+      ).rejects.toThrow('insert failed');
+      expect(publicSchedule.releasePlace).toHaveBeenCalledWith(held);
+    });
 
-  it('event_date_id branch increments date counter on confirm', async () => {
-    eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
-    authRepo.findOne.mockResolvedValue({ user_id: 10 } as any);
-    householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
-    publicSchedule.getDate.mockResolvedValue({ event_date_id: 9, capacity: 2, reserved: 1 } as any);
-    regsRepo.findOne.mockResolvedValue(null as any);
-    regsRepo.create.mockImplementation((x: any) => x);
-    regsRepo.save.mockResolvedValue({ id: 400, status: 'confirmed' } as any);
+    it('holds a date-only booking on its date', async () => {
+      arrangeGuest();
+      regsRepo.save.mockResolvedValue({ id: 400, status: 'confirmed' } as any);
 
-    const result = await service.registerForEvent(
-      { authType: 'guest', dbUserId: 10 } as any,
-      { event_id: 1, event_date_id: 9 } as any,
-    );
-    expect(result.status).toBe('confirmed');
-    expect(publicSchedule.incrementDate).toHaveBeenCalledWith(9);
+      await service.registerForEvent(asGuest, { event_id: 1, event_date_id: 9 } as any);
+
+      expect(publicSchedule.holdPlace).toHaveBeenCalledWith({ slotId: undefined, dateId: 9 });
+    });
+
+    it('confirms a local timeslot booking that has room', async () => {
+      arrangeGuest();
+      timesRepo.findOne.mockResolvedValue({ id: 5, capacity: 3 } as any);
+      regsRepo.count.mockResolvedValue(1 as any);
+      regsRepo.save.mockResolvedValue({ id: 300, status: 'confirmed' } as any);
+
+      const result = await service.registerForEvent(asGuest, {
+        event_id: 1,
+        timeslot_id: 5,
+      } as any);
+      expect(result.status).toBe('confirmed');
+    });
+
+    it('refuses a full local timeslot with 409 rather than waitlisting it', async () => {
+      arrangeGuest();
+      timesRepo.findOne.mockResolvedValue({ id: 5, capacity: 1 } as any);
+      regsRepo.count.mockResolvedValue(1 as any);
+
+      await expect(
+        service.registerForEvent(asGuest, { event_id: 1, timeslot_id: 5 } as any),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(regsRepo.save).not.toHaveBeenCalled();
+    });
   });
 
   it('persists attendees when provided', async () => {
@@ -227,53 +247,56 @@ describe('RegistrationsService', () => {
     expect(householdsService.createHousehold).toHaveBeenCalledWith(77, expect.any(Object));
   });
 
-  it('cancelRegistration sets cancelled, promotes waitlisted, decrements counters', async () => {
-    const reg: any = {
+  describe('cancelRegistration gives a place back once (SUP-1169)', () => {
+    const arrangeOwn = (reg: any, affected: number) => {
+      regsRepo.findOne.mockResolvedValue(reg);
+      (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10 as any);
+      (householdsService.findHouseholdIdByUserId as jest.Mock).mockResolvedValue(20 as any);
+      regsRepo.update.mockResolvedValue({ affected } as any);
+    };
+    const booking = (extra: Record<string, unknown>) => ({
       id: 1,
       event_id: 1,
       timeslot_id: null,
       household_id: 20,
       status: 'confirmed',
-      public_event_slot_id: 222,
-    };
-    regsRepo.findOne.mockResolvedValue(reg);
-    (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10 as any);
-    (householdsService.findHouseholdIdByUserId as jest.Mock).mockResolvedValue(20 as any);
-    regsRepo.save.mockImplementation(async (x: any) => x);
-    // Next waitlisted to promote
-    regsRepo.find.mockResolvedValue([{ id: 2, status: 'waitlisted' } as any] as any);
-
-    const result = await service.cancelRegistration({ userId: 'jwt' } as any, 1);
-
-    expect(result.status).toBe('cancelled');
-    expect(publicSchedule.decrementSlotAndDate).toHaveBeenCalledWith(222);
-    // Promotion saved
-    expect(regsRepo.save).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 2, status: 'confirmed' }),
-    );
-  });
-
-  it('cancelRegistration decrements date when public_event_date_id is set', async () => {
-    const reg: any = {
-      id: 9,
-      event_id: 1,
-      timeslot_id: null,
-      household_id: 20,
-      status: 'confirmed',
       public_event_slot_id: null,
-      public_event_date_id: 123,
-    };
-    regsRepo.findOne.mockResolvedValue(reg);
-    (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10 as any);
-    (householdsService.findHouseholdIdByUserId as jest.Mock).mockResolvedValue(20 as any);
-    regsRepo.save.mockImplementation(async (x: any) => x);
-    // ensure promoteFromWaitlist early returns
-    regsRepo.find.mockResolvedValueOnce([] as any);
+      public_event_date_id: null,
+      ...extra,
+    });
 
-    const result = await service.cancelRegistration({ userId: 'jwt' } as any, 9);
+    it('cancels only if the status is unchanged, then gives back its slot', async () => {
+      arrangeOwn(booking({ public_event_slot_id: 222 }), 1);
 
-    expect(result.status).toBe('cancelled');
-    expect(publicSchedule.decrementDate).toHaveBeenCalledWith(123);
+      const result = await service.cancelRegistration({ userId: 'jwt' } as any, 1);
+
+      expect(result.status).toBe('cancelled');
+      expect(regsRepo.update).toHaveBeenCalledWith(
+        { id: 1, status: 'confirmed' },
+        { status: 'cancelled' },
+      );
+      expect(publicSchedule.releasePlace).toHaveBeenCalledWith({ slotId: 222, dateId: null });
+      // No waitlist: nobody is promoted.
+      expect(regsRepo.find).not.toHaveBeenCalled();
+    });
+
+    it('gives back a date-only booking on its date', async () => {
+      arrangeOwn(booking({ public_event_date_id: 123 }), 1);
+      await service.cancelRegistration({ userId: 'jwt' } as any, 1);
+      expect(publicSchedule.releasePlace).toHaveBeenCalledWith({ slotId: null, dateId: 123 });
+    });
+
+    it('gives nothing back when another request cancelled it first', async () => {
+      arrangeOwn(booking({ public_event_slot_id: 222 }), 0);
+      await service.cancelRegistration({ userId: 'jwt' } as any, 1);
+      expect(publicSchedule.releasePlace).not.toHaveBeenCalled();
+    });
+
+    it('gives nothing back for an old waitlisted booking, which never held a place', async () => {
+      arrangeOwn(booking({ status: 'waitlisted', public_event_slot_id: 222 }), 1);
+      await service.cancelRegistration({ userId: 'jwt' } as any, 1);
+      expect(publicSchedule.releasePlace).not.toHaveBeenCalled();
+    });
   });
 
   it('checkIn throws Forbidden when household mismatch', async () => {
@@ -314,71 +337,6 @@ describe('RegistrationsService', () => {
     ).rejects.toThrow('Timeslot not found');
   });
 
-  it('event_date_id branch waitlists when date is full and does not increment', async () => {
-    eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
-    authRepo.findOne.mockResolvedValue({ user_id: 10 } as any);
-    householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
-    publicSchedule.getDate.mockResolvedValue({ event_date_id: 9, capacity: 1, reserved: 1 } as any);
-    regsRepo.findOne.mockResolvedValue(null as any);
-    regsRepo.create.mockImplementation((x: any) => x);
-    regsRepo.save.mockResolvedValue({ id: 401, status: 'waitlisted' } as any);
-
-    const result = await service.registerForEvent(
-      { authType: 'guest', dbUserId: 10 } as any,
-      { event_id: 1, event_date_id: 9 } as any,
-    );
-    expect(result.status).toBe('waitlisted');
-    expect(publicSchedule.incrementDate).not.toHaveBeenCalled();
-  });
-
-  it('cancelRegistration decrements slot and date when public_event_slot_id is set', async () => {
-    const reg: any = {
-      id: 11,
-      event_id: 1,
-      timeslot_id: null,
-      household_id: 20,
-      status: 'confirmed',
-      public_event_slot_id: 777,
-      public_event_date_id: null,
-    };
-    regsRepo.findOne.mockResolvedValue(reg);
-    (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10 as any);
-    (householdsService.findHouseholdIdByUserId as jest.Mock).mockResolvedValue(20 as any);
-    regsRepo.save.mockImplementation(async (x: any) => x);
-    // avoid promotion path
-    regsRepo.find.mockResolvedValueOnce([] as any);
-
-    const result = await service.cancelRegistration({ userId: 'jwt' } as any, 11);
-
-    expect(result.status).toBe('cancelled');
-    expect(publicSchedule.decrementSlotAndDate).toHaveBeenCalledWith(777);
-  });
-
-  it('cancelRegistration promotes next waitlisted for same timeslot', async () => {
-    const reg: any = {
-      id: 21,
-      event_id: 1,
-      timeslot_id: 5,
-      household_id: 20,
-      status: 'confirmed',
-      public_event_slot_id: null,
-      public_event_date_id: null,
-    };
-    regsRepo.findOne.mockResolvedValueOnce(reg);
-    (usersService.findDbUserIdByCognitoUuid as jest.Mock).mockResolvedValue(10 as any);
-    (householdsService.findHouseholdIdByUserId as jest.Mock).mockResolvedValue(20 as any);
-    // A waitlisted registration exists to promote
-    regsRepo.find.mockResolvedValueOnce([{ id: 22, status: 'waitlisted' } as any] as any);
-    regsRepo.save.mockImplementation(async (x: any) => x);
-
-    const result = await service.cancelRegistration({ userId: 'jwt' } as any, 21);
-
-    expect(result.status).toBe('cancelled');
-    expect(regsRepo.save).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 22, status: 'confirmed' }),
-    );
-  });
-
   it('cancelRegistration returns early when already cancelled', async () => {
     const reg: any = {
       id: 31,
@@ -394,8 +352,8 @@ describe('RegistrationsService', () => {
     const result = await service.cancelRegistration({ userId: 'jwt' } as any, 31);
 
     expect(result.status).toBe('cancelled');
-    expect(publicSchedule.decrementDate).not.toHaveBeenCalled();
-    expect(publicSchedule.decrementSlotAndDate).not.toHaveBeenCalled();
+    expect(regsRepo.update).not.toHaveBeenCalled();
+    expect(publicSchedule.releasePlace).not.toHaveBeenCalled();
   });
 
   it('cancelRegistration throws Forbidden when household mismatch', async () => {
@@ -1235,10 +1193,12 @@ function createPublicScheduleMock(): jest.Mocked<PublicScheduleService> {
   return {
     getSlot: jest.fn(),
     getDate: jest.fn(),
-    incrementSlotAndDate: jest.fn(),
-    decrementSlotAndDate: jest.fn(),
-    incrementDate: jest.fn(),
-    decrementDate: jest.fn(),
+    holdPlace: jest.fn().mockResolvedValue({ slotId: null, dateId: null }),
+    releasePlace: jest.fn().mockResolvedValue(undefined),
+    placeHeldBy: jest.fn().mockImplementation(async (reg: any) => ({
+      slotId: reg.public_event_slot_id ?? null,
+      dateId: reg.public_event_date_id ?? null,
+    })),
     getEventDateIdForDate: jest.fn(),
     getEventDateIdForToday: jest.fn(),
     getEventDateIdDefault: jest.fn(),

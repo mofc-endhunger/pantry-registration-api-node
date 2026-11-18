@@ -27,7 +27,10 @@ describe('Registrations capacity/waitlist (E2E)', () => {
     await app.close();
   });
 
-  it('enforces capacity, waitlists overflow, and promotes on cancel', async () => {
+  // There is no waitlist (owner, 2026-11-18; SUP-1170): overflow is refused with
+  // 409 SLOT_FULL and nothing is saved. Public-slot concurrency is covered in
+  // registrations-slot-capacity.e2e-spec.ts.
+  it('enforces capacity on a local timeslot, and refuses overflow with 409', async () => {
     // Capacity is enforced per slot/date/timeslot. Event-level `capacity` is ignored when
     // none is given (unbounded since f3d2ed81), so use a local timeslot with capacity 1.
     const event = await eventsRepo.save(
@@ -80,20 +83,29 @@ describe('Registrations capacity/waitlist (E2E)', () => {
       .expect(201);
     expect(regA.body.status).toBe('confirmed');
 
-    // Second registration (B) gets waitlisted
+    // Second registration (B) is refused: the timeslot is full, and nothing is saved
     const regB = await request(app.getHttpServer())
       .post('/registrations')
       .set('X-Guest-Token', tokenB)
       .send({ event_id: (event as any).id, timeslot_id: (slot as any).id })
-      .expect(201);
-    expect(regB.body.status).toBe('waitlisted');
+      .expect(409);
+    expect(regB.body.code).toBe('SLOT_FULL');
+    expect(
+      await regsRepo.count({
+        where: { timeslot_id: (slot as any).id, status: 'waitlisted' } as any,
+      }),
+    ).toBe(0);
 
-    // Cancel A -> B should be promoted to confirmed
+    // Once A cancels, B can book the freed place
     await request(app.getHttpServer())
       .patch(`/registrations/${regA.body.id}/cancel`)
       .set('X-Guest-Token', tokenA)
       .expect(200);
-    const refreshedB = await regsRepo.findOne({ where: { id: regB.body.id } });
-    expect(refreshedB?.status).toBe('confirmed');
+    const retryB = await request(app.getHttpServer())
+      .post('/registrations')
+      .set('X-Guest-Token', tokenB)
+      .send({ event_id: (event as any).id, timeslot_id: (slot as any).id })
+      .expect(201);
+    expect(retryB.body.status).toBe('confirmed');
   });
 });
