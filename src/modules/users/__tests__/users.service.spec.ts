@@ -1,3 +1,4 @@
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository, ObjectLiteral } from 'typeorm';
@@ -61,6 +62,12 @@ describe('UsersService', () => {
     usersRepo.findOne.mockResolvedValueOnce({ id: 5 } as any);
     const id = await service.findDbUserIdByCognitoUuid(uuid);
     expect(id).toBe(5);
+  });
+
+  it('findDbUserIdByCognitoUuid answers a number for the BIGINT id the driver returns as a string (SUP-1168)', async () => {
+    usersRepo.findOne.mockResolvedValueOnce({ id: '1130520' } as any);
+    const id = await service.findDbUserIdByCognitoUuid('123e4567-e89b-12d3-a456-426614174000');
+    expect(id).toBe(1130520);
   });
 
   it('create creates user and household with minimal info', async () => {
@@ -141,6 +148,37 @@ describe('UsersService', () => {
     const dto: any = { id: 99, city: 'Columbus', members: [] };
     await service.updateUserWithHousehold(10, dto);
     expect(householdsService.updateHousehold).toHaveBeenCalledWith(99, 10, dto);
+  });
+
+  describe('updateUserWithHousehold checks the household before writing (SUP-1168)', () => {
+    const dto = { household_id: 88, city: 'Columbus', members: [] } as any;
+
+    it('checks ownership before it writes the users row', async () => {
+      usersRepo.findOneBy.mockResolvedValue({ id: 10 } as any);
+      await service.updateUserWithHousehold(10, dto);
+      const checked = householdsService.getHouseholdById.mock.invocationCallOrder[0];
+      const written = usersRepo.update.mock.invocationCallOrder[0];
+      expect(householdsService.getHouseholdById).toHaveBeenNthCalledWith(1, 88, 10);
+      expect(checked).toBeLessThan(written);
+    });
+
+    it("writes nothing when the household is someone else's", async () => {
+      householdsService.getHouseholdById.mockRejectedValueOnce(new ForbiddenException());
+      await expect(service.updateUserWithHousehold(10, dto)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(usersRepo.update).not.toHaveBeenCalled();
+      expect(householdsService.updateHousehold).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing when the payload names no household', async () => {
+      await expect(
+        service.updateUserWithHousehold(10, { city: 'Columbus', members: [] } as any),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(householdsService.getHouseholdById).not.toHaveBeenCalled();
+      expect(usersRepo.update).not.toHaveBeenCalled();
+      expect(householdsService.updateHousehold).not.toHaveBeenCalled();
+    });
   });
 
   it('findById throws NotFound when missing', async () => {

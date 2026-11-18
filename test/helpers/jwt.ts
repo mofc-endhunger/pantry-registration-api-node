@@ -9,7 +9,7 @@ import jwt from 'jsonwebtoken';
  * DB user id as `sub`, which never resolves, so every request would provision a new
  * user and household. Use this helper for any spec that acts as a signed-in user.
  */
-export function cognitoJwt(opts: { email?: string; sub?: string } = {}): {
+export function cognitoJwt(opts: { email?: string; sub?: string; groups?: string[] } = {}): {
   token: string;
   sub: string;
   email: string;
@@ -17,7 +17,10 @@ export function cognitoJwt(opts: { email?: string; sub?: string } = {}): {
   const sub = opts.sub ?? randomUUID();
   const email = opts.email ?? `e2e+${sub.slice(0, 8)}@example.com`;
   const secret = process.env.JWT_SECRET || 'test-secret';
-  const token = jwt.sign({ sub, email, username: email.split('@')[0] }, secret, {
+  const claims: Record<string, unknown> = { sub, email, username: email.split('@')[0] };
+  // Cognito puts a user's groups here; JwtStrategy maps them to `roles`.
+  if (opts.groups) claims['cognito:groups'] = opts.groups;
+  const token = jwt.sign(claims, secret, {
     algorithm: 'HS256',
     expiresIn: '1h',
   });

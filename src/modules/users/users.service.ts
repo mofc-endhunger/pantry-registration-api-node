@@ -1,6 +1,13 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 
-import { Injectable, NotFoundException, Inject, forwardRef, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Inject,
+  forwardRef,
+  Optional,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../../entities/user.entity';
@@ -84,7 +91,10 @@ export class UsersService {
     const user = await this.userRepository.findOne({
       where: { cognito_uuid: Buffer.from(normalized, 'hex') },
     });
-    return user ? user.id : null;
+    // `users.id` is BIGINT, which the mysql driver hands back as a string
+    // whatever the entity says. Callers compare it with numeric route ids
+    // (SUP-1168), so normalise it here, once.
+    return user ? Number(user.id) : null;
   }
 
   constructor(
@@ -282,6 +292,18 @@ export class UsersService {
     id: number,
     dto: UpdateUserWithHouseholdDto,
   ): Promise<{ user: User; household: HouseholdWithCounts }> {
+    // SUP-1168: prove the household is this user's BEFORE writing anything.
+    // The ownership check used to run only inside updateHousehold, after the
+    // users row below had already been written, so a request that was then
+    // refused with 403 had still changed somebody's profile. A payload that
+    // names no household used to reach that check as `undefined`, which
+    // TypeORM reads as "any row"; refuse it outright instead.
+    const householdId = Number(dto.household_id ?? dto.id);
+    if (!Number.isInteger(householdId) || householdId <= 0) {
+      throw new BadRequestException('household_id is required');
+    }
+    await this.householdsService.getHouseholdById(householdId, id);
+
     // The member who IS this user: matched by user_id when the client sends
     // it, otherwise the head of household. The public client's setup wizard
     // and account page send the head without a user_id, which used to mean
@@ -333,8 +355,6 @@ export class UsersService {
     if (Object.keys(cleanUserUpdate).length > 0) {
       await this.userRepository.update(id, cleanUserUpdate);
     }
-    // Find household for this user
-    const householdId = (dto.household_id ?? dto.id) as number;
     // Delegate to household PATCH logic first (handles member deactivation when members array present).
     // Map user address fields to household address fields if present.
     const householdPatch: Record<string, unknown> = { ...dto, ...lines };
