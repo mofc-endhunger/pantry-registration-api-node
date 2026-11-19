@@ -1,4 +1,5 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
+import { ALREADY_REGISTERED } from '../../../common/utils/already-registered';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { SLOT_FULL, slotFullException } from '../../../common/utils/slot-full';
@@ -36,6 +37,8 @@ describe('RegistrationsService', () => {
   let publicSchedule: jest.Mocked<PublicScheduleService>;
   let userRepo: jest.Mocked<Repository<User>>;
   let sendgrid: { sendTemplate: jest.Mock };
+  let em: { query: jest.Mock; getRepository: jest.Mock };
+  let transaction: jest.Mock;
 
   beforeEach(async () => {
     sendgrid = { sendTemplate: jest.fn().mockResolvedValue({ success: true }) };
@@ -77,6 +80,20 @@ describe('RegistrationsService', () => {
     householdsService = moduleRef.get(HouseholdsService);
     publicSchedule = moduleRef.get(PublicScheduleService);
     userRepo = moduleRef.get(getRepositoryToken(User));
+
+    // bookPlace works inside a transaction (SUP-1171); its manager hands back
+    // the same repository mocks, so every test arranges them as before.
+    em = {
+      query: jest.fn().mockResolvedValue([]),
+      getRepository: jest.fn((entity: unknown) => {
+        if (entity === Registration) return regsRepo;
+        if (entity === RegistrationAttendee) return attendeesRepo;
+        if (entity === EventTimeslot) return timesRepo;
+        throw new Error('No repository mock for this entity');
+      }),
+    };
+    transaction = jest.fn((work: (manager: typeof em) => Promise<unknown>) => work(em));
+    Object.assign(regsRepo, { manager: { transaction } });
   });
 
   it('throws NotFound when event does not exist', async () => {
@@ -253,6 +270,120 @@ describe('RegistrationsService', () => {
         household_id: 20,
         status: { type: 'in', value: ['confirmed', 'checked_in'] },
       });
+    });
+  });
+
+  describe('a household books once, even when its requests arrive together (SUP-1171)', () => {
+    const asGuest = { authType: 'guest', dbUserId: 10 } as any;
+    const existing = {
+      id: '999',
+      event_id: '1',
+      household_id: 20,
+      public_event_date_id: 9,
+      public_event_slot_id: 111,
+      status: 'confirmed',
+      created_at: new Date(),
+    };
+    const arrange = () => {
+      eventsRepo.findOne.mockResolvedValue({ id: 1, is_active: true } as any);
+      authRepo.findOne.mockResolvedValue({ user_id: 10 } as any);
+      householdsService.findHouseholdIdByUserId.mockResolvedValue(20 as any);
+      regsRepo.findOne.mockResolvedValue(null as any);
+      regsRepo.create.mockImplementation((x: any) => x);
+      regsRepo.save.mockResolvedValue({ id: 123, status: 'confirmed' } as any);
+    };
+    const book = () =>
+      service.registerForEvent(asGuest, {
+        event_id: 1,
+        event_date_id: 9,
+        event_slot_id: 111,
+      } as any);
+
+    it("locks the household's row first, then checks, takes a place and saves", async () => {
+      arrange();
+
+      await book();
+
+      expect(transaction).toHaveBeenCalledTimes(1);
+      expect(em.query).toHaveBeenCalledWith('SELECT id FROM households WHERE id = ? FOR UPDATE', [
+        20,
+      ]);
+      // Two checks: the early one, and the one under the lock that decides.
+      expect(regsRepo.findOne).toHaveBeenCalledTimes(2);
+      const lockedAt = em.query.mock.invocationCallOrder[0];
+      expect(lockedAt).toBeLessThan(regsRepo.findOne.mock.invocationCallOrder[1]);
+      expect(regsRepo.findOne.mock.invocationCallOrder[1]).toBeLessThan(
+        publicSchedule.holdPlace.mock.invocationCallOrder[0],
+      );
+      expect(publicSchedule.holdPlace.mock.invocationCallOrder[0]).toBeLessThan(
+        regsRepo.save.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('answers "Already registered" with the booking the household already has', async () => {
+      arrange();
+      regsRepo.findOne.mockResolvedValue(existing as any);
+
+      const err = await book().catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).getResponse()).toEqual({
+        message: 'Already registered',
+        code: ALREADY_REGISTERED,
+        registration: {
+          id: '999',
+          event_id: '1',
+          public_event_date_id: 9,
+          public_event_slot_id: 111,
+          status: 'confirmed',
+        },
+      });
+    });
+
+    it('stops a resubmit before it changes the household or takes a place', async () => {
+      arrange();
+      regsRepo.findOne.mockResolvedValue(existing as any);
+      const updateUserWithHousehold = jest.fn();
+      Object.assign(usersService, { updateUserWithHousehold });
+
+      await expect(
+        service.registerForEvent(asGuest, { event_id: 1, event_date_id: 9, adults: 2 } as any),
+      ).rejects.toThrow('Already registered');
+
+      expect(updateUserWithHousehold).not.toHaveBeenCalled();
+      expect(transaction).not.toHaveBeenCalled();
+      expect(publicSchedule.holdPlace).not.toHaveBeenCalled();
+    });
+
+    it('takes no place when the check under the lock finds the booking that won', async () => {
+      arrange();
+      // Not there for the early check; committed by the time the lock is ours.
+      regsRepo.findOne.mockResolvedValueOnce(null as any).mockResolvedValueOnce(existing as any);
+
+      await expect(book()).rejects.toThrow('Already registered');
+
+      expect(publicSchedule.holdPlace).not.toHaveBeenCalled();
+      expect(publicSchedule.releasePlace).not.toHaveBeenCalled();
+      expect(regsRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('gives the place back when an attendee cannot be saved', async () => {
+      arrange();
+      const held = { slotId: 111, dateId: 9 };
+      publicSchedule.holdPlace.mockResolvedValueOnce(held);
+      attendeesRepo.create.mockImplementation((x: any) => x);
+      attendeesRepo.save.mockRejectedValueOnce(new Error('attendee insert failed'));
+
+      await expect(
+        service.registerForEvent(asGuest, {
+          event_id: 1,
+          event_date_id: 9,
+          event_slot_id: 111,
+          attendees: [3],
+        } as any),
+      ).rejects.toThrow('attendee insert failed');
+
+      expect(publicSchedule.releasePlace).toHaveBeenCalledWith(held);
     });
   });
 
