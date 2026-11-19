@@ -27,6 +27,7 @@ import {
   ApiForbiddenResponse,
   ApiSecurity,
   ApiUnprocessableEntityResponse,
+  ApiBadRequestResponse,
   ApiConflictResponse,
   ApiNotFoundResponse,
 } from '@nestjs/swagger';
@@ -64,6 +65,28 @@ export class RegistrationsController {
     description:
       'SLOT_FULL (SUP-1169): the slot, or its date, has no place left. Nothing is saved; there ' +
       'is no waitlist. Body: { message: "This time slot is at capacity", code: "SLOT_FULL" }',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'ALREADY_REGISTERED (SUP-1171): the household already holds a place on this date (or ' +
+      'this event, when no date is sent). Simultaneous requests from one household save one ' +
+      'booking; the rest get this. `registration` is the booking that already exists. Also ' +
+      'returned for validation failures, without a `code`.',
+    schema: {
+      example: {
+        message: 'Already registered',
+        error: 'BadRequestException',
+        status: 400,
+        code: 'ALREADY_REGISTERED',
+        registration: {
+          id: '1234',
+          event_id: '56',
+          public_event_date_id: 789,
+          public_event_slot_id: 1011,
+          status: 'confirmed',
+        },
+      },
+    },
   })
   @ApiNotFoundResponse({ description: 'Event, time slot or event date not found' })
   @ApiForbiddenResponse({

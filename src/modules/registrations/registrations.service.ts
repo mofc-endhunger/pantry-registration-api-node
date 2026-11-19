@@ -8,7 +8,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { Registration } from '../../entities/registration.entity';
 
 /** The statuses of a booking that holds a place (SUP-1171). */
@@ -31,6 +31,7 @@ import {
 } from '../../common/utils/registrant-completeness';
 import { applyHomelessFlag } from '../../common/utils/homeless-address';
 import { slotFullException } from '../../common/utils/slot-full';
+import { alreadyRegisteredException } from '../../common/utils/already-registered';
 type AuthUser = {
   authType?: string;
   dbUserId?: number;
@@ -42,7 +43,7 @@ type AuthUser = {
 };
 import { CheckInDto } from './dto/check-in.dto';
 import { CheckInAudit } from '../../entities/checkin-audit.entity';
-import { PublicScheduleService } from '../public-schedule/public-schedule.service';
+import { HeldPlace, PublicScheduleService } from '../public-schedule/public-schedule.service';
 import { Authentication } from '../../entities/authentication.entity';
 import { SurveyFamily } from '../../entities/survey-families.entity';
 import { PublicSurvey } from '../../entities-public/survey.public.entity';
@@ -452,13 +453,18 @@ export class RegistrationsService {
    * bookings hold a place. A `waitlisted` row is not a booking: there is no
    * waitlist (SUP-1170), and counting one kept that household from ever booking
    * a real place on that date (SUP-1171). Cancelled bookings never counted.
+   *
+   * The 400 carries the existing booking, so a client retrying after a
+   * timeout can show its confirmation. `regs` is the transaction's repository
+   * when called from bookPlace, where the answer is final.
    */
   private async assertNotAlreadyBooked(
+    regs: Repository<Registration>,
     eventId: number,
     dateId: number | undefined,
     householdId: number,
   ): Promise<void> {
-    const existing = await this.regsRepo.findOne({
+    const existing = await regs.findOne({
       where: {
         event_id: eventId,
         household_id: householdId,
@@ -466,7 +472,7 @@ export class RegistrationsService {
         ...(dateId ? { public_event_date_id: dateId } : {}),
       } as any,
     });
-    if (existing) throw new BadRequestException('Already registered');
+    if (existing) throw alreadyRegisteredException(existing);
   }
 
   async registerForEvent(
@@ -620,6 +626,11 @@ export class RegistrationsService {
     }
     if (!household_id) throw new ForbiddenException('Household not resolved');
 
+    // A resubmit stops here, before it changes the household or reaches
+    // PantryTrak (SUP-1171). bookPlace checks again under a lock, which is the
+    // check that stops simultaneous requests.
+    await this.assertNotAlreadyBooked(this.regsRepo, dto.event_id, dto.event_date_id, household_id);
+
     // If household counts were provided as part of registration (common for first-time Cognito users),
     // materialize additional household members to match the requested counts and update snapshot counts.
     try {
@@ -723,11 +734,10 @@ export class RegistrationsService {
       );
     }
 
-    await this.assertNotAlreadyBooked(dto.event_id, dto.event_date_id, household_id);
-
-    // Take a place and save (SUP-1169). A full slot or date throws 409 here,
-    // before anything is saved or sent to PantryTrak.
-    const saved = await this.saveWithPlace(dto, household_id, dbUserId);
+    // Take a place and save (SUP-1169), once per household (SUP-1171). A full
+    // slot or date throws 409 and a duplicate 400 here, before anything is
+    // saved or sent to PantryTrak.
+    const saved = await this.bookPlace(dto, household_id, dbUserId);
     // Sync to PantryTrak: ensure user exists in PT before creating the reservation.
     // Fire-and-forget but sequential — createReservation is skipped if createUser fails
     // so we never end up with an orphaned reservation that has no associated PT user.
@@ -1044,11 +1054,8 @@ export class RegistrationsService {
       }
     }
 
-    // Duplicate check (same event + household)
-    await this.assertNotAlreadyBooked(dto.event_id, dto.event_date_id, household_id);
-
-    // Take a place and save, created_by = the case manager (SUP-1169).
-    const saved = await this.saveWithPlace(dto, household_id, cmDbUserId);
+    // Take a place and save, created_by = the case manager (SUP-1169, SUP-1171).
+    const saved = await this.bookPlace(dto, household_id, cmDbUserId);
 
     // Best-effort PantryTrak sync — use the registrant's user ID, not the case manager's.
     // Only proceed if the earlier createUser succeeded; otherwise we'd create an orphan
@@ -1270,14 +1277,31 @@ export class RegistrationsService {
   }
 
   /**
-   * Take a place, then save the booking as confirmed (SUP-1169, SUP-1170).
+   * Book one place for a household, at most once (SUP-1169, SUP-1170,
+   * SUP-1171).
+   *
+   * The household's own row is locked first, so two requests from one
+   * household (a double tap, a retry while the first is still running) take
+   * turns: the second waits, then sees the first one's booking and gets
+   * "Already registered". Requests from different households lock different
+   * rows and never wait on each other. The lock goes with the transaction, so
+   * a crash or error can never leave it held. No schema change is needed.
+   *
+   * The lock must stay the transaction's FIRST statement. Under REPEATABLE
+   * READ a transaction reads from a snapshot taken at its first plain read;
+   * the duplicate check has to be that first read, after the wait, or it would
+   * not see the booking it waited for.
    *
    * There is no waitlist (owner, 2026-11-18): a full slot or date throws 409
-   * SLOT_FULL before anything is saved. The place is taken first, atomically,
-   * and given back if the save fails; the counters and the registration live
-   * in different databases, so they cannot share a transaction.
+   * SLOT_FULL before anything is saved. The place is taken atomically and
+   * given back if the booking does not commit; the counters live in the
+   * public database, so they cannot share this transaction.
+   *
+   * Everything here runs on the transaction's own connection: a second
+   * connection from the same pool, taken while this one is held, could wait
+   * forever once every pooled connection is a held one.
    */
-  private async saveWithPlace(
+  private async bookPlace(
     dto: {
       event_id: number;
       timeslot_id?: number;
@@ -1288,41 +1312,45 @@ export class RegistrationsService {
     household_id: number,
     createdBy: number,
   ): Promise<Registration> {
-    if (dto.timeslot_id) await this.assertLocalTimeslotHasRoom(dto.timeslot_id);
-    const held = await this.publicSchedule.holdPlace({
-      slotId: dto.event_slot_id,
-      dateId: dto.event_date_id,
-    });
-
-    let saved: Registration;
+    const taken: { place?: HeldPlace } = {};
     try {
-      const savedOrArray = await this.regsRepo.save(
-        this.regsRepo.create({
-          event_id: dto.event_id,
-          household_id,
-          timeslot_id: dto.timeslot_id ?? null,
-          status: 'confirmed',
-          created_by: createdBy,
-          public_event_slot_id: dto.event_slot_id ?? null,
-          public_event_date_id: dto.event_date_id ?? null,
-        } as any),
-      );
-      saved = Array.isArray(savedOrArray) ? savedOrArray[0] : (savedOrArray as Registration);
+      return await this.regsRepo.manager.transaction(async (em) => {
+        await em.query('SELECT id FROM households WHERE id = ? FOR UPDATE', [household_id]);
+        const regs = em.getRepository(Registration);
+        await this.assertNotAlreadyBooked(regs, dto.event_id, dto.event_date_id, household_id);
+        if (dto.timeslot_id) await this.assertLocalTimeslotHasRoom(em, dto.timeslot_id);
+
+        taken.place = await this.publicSchedule.holdPlace({
+          slotId: dto.event_slot_id,
+          dateId: dto.event_date_id,
+        });
+        const savedOrArray = await regs.save(
+          regs.create({
+            event_id: dto.event_id,
+            household_id,
+            timeslot_id: dto.timeslot_id ?? null,
+            status: 'confirmed',
+            created_by: createdBy,
+            public_event_slot_id: dto.event_slot_id ?? null,
+            public_event_date_id: dto.event_date_id ?? null,
+          } as any),
+        );
+        const saved = Array.isArray(savedOrArray)
+          ? savedOrArray[0]
+          : (savedOrArray as Registration);
+
+        const attendees = em.getRepository(RegistrationAttendee);
+        for (const memberId of Array.isArray(dto.attendees) ? dto.attendees : []) {
+          await attendees.save(
+            attendees.create({ registration_id: saved.id, household_member_id: memberId } as any),
+          );
+        }
+        return saved;
+      });
     } catch (err) {
-      await this.publicSchedule.releasePlace(held);
+      if (taken.place) await this.publicSchedule.releasePlace(taken.place);
       throw err;
     }
-
-    if (Array.isArray(dto.attendees) && dto.attendees.length) {
-      for (const memberId of dto.attendees) {
-        const attendee = this.attendeesRepo.create({
-          registration_id: saved.id,
-          household_member_id: memberId,
-        } as any);
-        await this.attendeesRepo.save(attendee);
-      }
-    }
-    return saved;
   }
 
   /**
@@ -1330,11 +1358,11 @@ export class RegistrationsService {
    * public slots), so it keeps its count-then-insert check; a full timeslot
    * is refused like a full slot, since there is no waitlist.
    */
-  private async assertLocalTimeslotHasRoom(timeslotId: number): Promise<void> {
-    const timeslot = await this.timesRepo.findOne({ where: { id: timeslotId } });
+  private async assertLocalTimeslotHasRoom(em: EntityManager, timeslotId: number): Promise<void> {
+    const timeslot = await em.getRepository(EventTimeslot).findOne({ where: { id: timeslotId } });
     const capacity = timeslot?.capacity ?? null;
     if (capacity == null) return;
-    const confirmed = await this.regsRepo.count({
+    const confirmed = await em.getRepository(Registration).count({
       where: { timeslot_id: timeslotId, status: 'confirmed' } as any,
     });
     if (confirmed >= capacity) throw slotFullException();
