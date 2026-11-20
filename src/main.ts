@@ -4,6 +4,8 @@ import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { applyKeepAliveTimeout } from './common/utils/keep-alive';
+import type { Server } from 'node:http';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -86,5 +88,9 @@ async function bootstrap() {
   // Get port from environment or use default
   const port = configService.get<number>('PORT') || 3000;
   await app.listen(port, '0.0.0.0');
+
+  // SUP-1182: outlast the load balancer's idle timeout, or it reuses
+  // connections Node has already closed and answers with a 502.
+  applyKeepAliveTimeout(app.getHttpServer() as Server);
 }
 void bootstrap();
